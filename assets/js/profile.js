@@ -833,7 +833,7 @@ function renderSetAdmin(panel) {
   panel.appendChild(el(`
     <div class="in-set-section">
       <h3>Admin</h3>
-      <div class="in-set-placeholder">You have admin access. A full admin dashboard — to search users, manage roles, and review content — will live here. For now, admin actions (deleting any post, editing any profile) are available directly in the feed and on user profiles.</div>
+      <div class="in-set-placeholder">You have admin access. Manage users, roles, and view platform stats from the <a href="#admin" style="color:var(--in-accent);font-weight:600">Admin dashboard</a>.</div>
     </div>`));
 }
 

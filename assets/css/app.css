@@ -388,6 +388,30 @@ body { margin:0; font-family:var(--in-font); background:var(--in-bg); color:var(
 .cert-name { font-size:16px; font-weight:700; color:var(--in-ink); margin-top:2px; }
 .cert-issuer { font-size:13px; color:var(--in-muted); margin-top:1px; }
 
+/* ---------- admin dashboard ---------- */
+.in-admin { max-width:980px; margin:0 auto; }
+.in-admin-statgrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:14px; }
+.in-admin-stat { background:var(--in-bg); border:1px solid var(--in-line); border-radius:10px; padding:14px; text-align:center; }
+.in-admin-stat-num { font-size:24px; font-weight:700; color:var(--in-ink); }
+.in-admin-stat-label { font-size:12px; color:var(--in-muted); margin-top:4px; }
+.in-admin-toolbar { display:flex; gap:10px; margin-bottom:14px; }
+.in-admin-toolbar input { flex:1; padding:10px 12px; font-size:14px; font-family:inherit; border:1px solid var(--in-line); border-radius:8px; background:var(--in-bg); color:var(--in-ink); }
+.in-admin-toolbar input:focus { outline:none; background:#fff; border-color:var(--in-accent); box-shadow:0 0 0 3px rgba(13,148,136,.14); }
+.in-admin-toolbar select { padding:10px 12px; font-size:14px; font-family:inherit; border:1px solid var(--in-line); border-radius:8px; background:var(--in-bg); color:var(--in-ink); }
+.in-admin-table { width:100%; border-collapse:collapse; font-size:13.5px; }
+.in-admin-table th { text-align:left; font-size:11.5px; text-transform:uppercase; letter-spacing:.5px; color:var(--in-muted); padding:8px 10px; border-bottom:1px solid var(--in-line); }
+.in-admin-table td { padding:10px; border-bottom:1px solid var(--in-line); vertical-align:middle; }
+.in-admin-user { display:flex; flex-direction:column; }
+.in-admin-username { font-weight:600; color:var(--in-ink); }
+.in-admin-name { font-size:12px; color:var(--in-muted); }
+.in-admin-role-select { padding:6px 8px; font-size:13px; font-family:inherit; border:1px solid var(--in-line); border-radius:6px; background:var(--in-bg); color:var(--in-ink); }
+.in-admin-role-select:disabled { opacity:.5; cursor:not-allowed; }
+.in-admin-badge { display:inline-block; padding:3px 9px; border-radius:20px; font-size:11.5px; font-weight:600; }
+.in-admin-badge.ok { background:#e6f7ef; color:var(--in-success); }
+.in-admin-badge.off { background:#fdecea; color:var(--in-error); }
+.in-admin-pager { display:flex; align-items:center; gap:14px; justify-content:center; margin-top:16px; }
+.in-admin-pageinfo { font-size:12.5px; color:var(--in-muted); }
+
 /* ---------- responsive ---------- */
 @media (max-width:760px) {
   .in-profile-grid { grid-template-columns:1fr; }

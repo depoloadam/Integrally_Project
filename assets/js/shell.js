@@ -54,6 +54,8 @@ async function boot() {
     $("profile-menu").style.display = "";
     $("auth-menu").style.display = "none";
     document.querySelectorAll("[data-nav]").forEach(b => b.style.display = "");
+    const adminBtn = document.querySelector('[data-nav="admin"]');
+    if (adminBtn) adminBtn.style.display = (ME.role === "admin") ? "" : "none";
     routeFromHash();
   } else {
     ME = null;
@@ -123,6 +125,7 @@ dropdown.querySelectorAll("[data-menu]").forEach(b => {
 function showTab(name) {
   document.querySelectorAll("[data-nav]").forEach(x => x.classList.toggle("active", x.dataset.nav === name));
   if (name === "feed") renderFeed();
+  else if (name === "admin") renderAdmin();
   else renderProfile();
 }
 document.querySelectorAll("[data-nav]").forEach(b => {
@@ -163,6 +166,10 @@ function routeFromHash() {
   if (raw.startsWith("score/")) {
     document.querySelectorAll("[data-nav]").forEach(x => x.classList.remove("active"));
     renderScoreBreakdown(raw.slice("score/".length));
+    return;
+  }
+  if (raw === "admin") {
+    showTab("admin");
     return;
   }
   showTab(raw === "profile" ? "profile" : "feed");
