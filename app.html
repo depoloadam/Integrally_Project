@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Integrally</title>
+  <!-- =================================================================
+       app.html — SHELL ONLY
+       The page skeleton + nav. All styles and view logic live in
+       separate files, loaded at the bottom. This file rarely changes;
+       edit the JS/CSS files instead.
+
+       Files this expects (relative to app.html):
+         assets/css/app.css
+         assets/js/shell.js     (loaded FIRST — defines api, helpers, router)
+         assets/js/profile.js   (profile + public profile + score views)
+         assets/js/feed.js      (feed view, composer, posts)
+       ================================================================= -->
+  <link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+
+<!-- ===================== SHELL: NAV ===================== -->
+<nav class="in-nav">
+  <div class="in-nav-inner">
+    <div class="in-brand" id="brand-home" role="button" tabindex="0"><span class="in-mark">I</span> Integrally</div>
+    <div class="in-nav-links">
+      <button data-nav="feed">Feed</button>
+      <button class="active" data-nav="profile">Profile</button>
+    </div>
+    <div class="in-nav-right">
+      <!-- logged-in: profile menu -->
+      <div class="in-profile-menu" id="profile-menu" style="display:none">
+        <button class="in-profile-trigger" id="profile-trigger">
+          <span class="in-profile-ava" id="nav-ava">?</span>
+          <span class="in-nav-user" id="nav-user"></span>
+          <span class="in-caret">▾</span>
+        </button>
+        <div class="in-dropdown" id="profile-dropdown">
+          <button data-menu="edit">Edit profile</button>
+          <button data-menu="settings">Settings</button>
+          <div class="in-dropdown-sep"></div>
+          <button data-menu="signout" class="danger">Sign out</button>
+        </div>
+      </div>
+      <!-- logged-out: sign up / sign in dropdown -->
+      <div class="in-authmenu" id="auth-menu" style="display:none">
+        <button class="in-authbtn" id="auth-trigger">Sign up / Sign in <span class="in-caret">▾</span></button>
+        <div class="in-dropdown in-authdrop" id="auth-dropdown">
+          <button data-auth="signup" class="in-auth-signup">Sign up</button>
+          <div class="in-dropdown-sep"></div>
+          <div class="in-auth-form">
+            <div class="in-auth-formlabel">Already have an account?</div>
+            <input type="text" id="qs-login" placeholder="Email or username" autocomplete="username">
+            <input type="password" id="qs-pass" placeholder="Password" autocomplete="current-password">
+            <div class="in-auth-msg" id="qs-msg"></div>
+            <button class="in-btn primary" id="qs-go" style="width:100%">Sign in</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<div class="in-main" id="view"><div class="in-loading">Loading…</div></div>
+
+<!-- generic modal mount -->
+<div class="in-overlay" id="overlay"><div class="in-modal" id="modal"></div></div>
+
+<!-- ===================== SCRIPTS (order matters) ===================== -->
+<script src="assets/js/shell.js"></script>
+<script src="assets/js/profile.js"></script>
+<script src="assets/js/feed.js"></script>
+<script>
+  // Everything is defined; start the app.
+  boot();
+</script>
+</body>
+</html>

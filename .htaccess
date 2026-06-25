@@ -1,0 +1,17 @@
+
+# =====================================================================
+# FILE: .htaccess   (place in your Integrally project root)
+# ---------------------------------------------------------------------
+# Makes app.html the default page served when visiting the site root,
+# instead of the usual index.html. index.html still works when linked
+# to directly (it's the dedicated sign-up page).
+#
+# Visiting integrally.net  ->  serves app.html
+# Visiting integrally.net/index.html  ->  still serves the signup page
+# =====================================================================
+
+DirectoryIndex app.html index.html
+
+# The second name (index.html) is a fallback: if app.html is ever
+# missing, the server falls back to index.html rather than showing a
+# directory listing or 403.

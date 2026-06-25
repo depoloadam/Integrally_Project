@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Integrally — Sign in</title>
+<!--
+  =====================================================================
+  index.html — Integrally auth / signup page (self-contained).
+  Dedicated sign-up destination; quick sign-in also lives here.
+  Does NOT use the assets/ files — it's standalone on purpose.
+
+  Endpoints: api/auth/register.php, login.php, me.php
+  Set API_BASE / APP_PAGE below to match your folder.
+  =====================================================================
+-->
+<style>
+  :root {
+    --in-ink:#0b1f2a; --in-ink-soft:#38505c; --in-muted:#6b8590;
+    --in-line:#dde7eb; --in-bg:#ffffff; --in-panel-a:#0e3b4a;
+    --in-panel-b:#0a8a8a; --in-panel-c:#14b8a6; --in-accent:#0d9488;
+    --in-accent-d:#0b7a70; --in-field-bg:#f6f9fa; --in-error:#c0392b;
+    --in-success:#0a8a5f; --in-radius:8px;
+    --in-font:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:var(--in-font); color:var(--in-ink); background:var(--in-bg); -webkit-font-smoothing:antialiased; }
+
+  .in-shell { display:grid; grid-template-columns:1.05fr 1fr; min-height:100vh; }
+
+  /* left brand panel */
+  .in-brandpanel {
+    position:relative; overflow:hidden; color:#eafaf8; padding:56px 52px;
+    display:flex; flex-direction:column; justify-content:space-between;
+    background:
+      radial-gradient(circle at 18% 22%, rgba(20,184,166,.45), transparent 42%),
+      radial-gradient(circle at 82% 78%, rgba(13,148,136,.40), transparent 46%),
+      linear-gradient(150deg, var(--in-panel-a), var(--in-panel-b));
+  }
+  .in-brandpanel::before {
+    content:""; position:absolute; inset:0; pointer-events:none;
+    background-image:
+      linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px);
+    background-size:40px 40px;
+    mask-image:radial-gradient(circle at 50% 40%, #000 30%, transparent 75%);
+  }
+  .in-logo { display:flex; align-items:center; gap:12px; font-size:22px; font-weight:700; letter-spacing:-0.4px; position:relative; z-index:1; }
+  .in-logo-mark {
+    width:34px; height:34px; border-radius:9px; display:grid; place-items:center;
+    background:linear-gradient(135deg,var(--in-panel-c),#6ee7df);
+    color:var(--in-panel-a); font-weight:800; font-size:18px;
+    box-shadow:0 6px 18px rgba(20,184,166,.45);
+  }
+  .in-pitch { position:relative; z-index:1; max-width:460px; }
+  .in-pitch h1 { font-size:40px; line-height:1.08; font-weight:700; letter-spacing:-1px; margin:0 0 18px; }
+  .in-pitch h1 .acc { color:#7ff0e4; }
+  .in-pitch p { font-size:16px; line-height:1.6; color:#bfe9e4; margin:0; }
+  .in-points { position:relative; z-index:1; display:flex; flex-direction:column; gap:14px; margin-top:28px; }
+  .in-point { display:flex; align-items:center; gap:12px; font-size:14px; color:#d7f5f1; }
+  .in-point .dot {
+    width:22px; height:22px; flex:none; border:1px solid rgba(127,240,228,.6);
+    border-radius:6px; display:grid; place-items:center; color:#7ff0e4; font-size:13px;
+  }
+  .in-foot { position:relative; z-index:1; font-size:12px; color:#8fc9c2; }
+
+  /* right form panel */
+  .in-formpanel { display:flex; align-items:center; justify-content:center; padding:40px; }
+  .in-formwrap { width:100%; max-width:400px; }
+  .in-eyebrow { font-size:12px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase; color:var(--in-accent); margin-bottom:8px; }
+  .in-formwrap h2 { font-size:26px; font-weight:700; letter-spacing:-0.5px; margin:0 0 6px; }
+  .in-sub { color:var(--in-muted); font-size:14px; margin-bottom:24px; }
+
+  .in-tabs {
+    display:inline-flex; width:100%; background:var(--in-field-bg);
+    border:1px solid var(--in-line); border-radius:10px; padding:4px; margin-bottom:22px;
+  }
+  .in-tab {
+    flex:1; background:none; border:none; padding:9px 0; font-size:14px; font-weight:600;
+    color:var(--in-muted); cursor:pointer; border-radius:7px; font-family:inherit; transition:all .15s;
+  }
+  .in-tab.active { background:var(--in-bg); color:var(--in-ink); box-shadow:0 1px 3px rgba(11,31,42,.12); }
+
+  .in-field { margin-bottom:14px; }
+  .in-field label { display:block; font-size:12.5px; font-weight:600; margin-bottom:6px; color:var(--in-ink-soft); }
+  .in-field input {
+    width:100%; padding:11px 13px; font-size:14.5px; background:var(--in-field-bg);
+    border:1px solid var(--in-line); border-radius:8px; font-family:inherit; color:var(--in-ink);
+    transition:border-color .15s, box-shadow .15s, background .15s;
+  }
+  .in-field input:focus {
+    outline:none; background:#fff; border-color:var(--in-accent);
+    box-shadow:0 0 0 3px rgba(13,148,136,.14);
+  }
+  .in-row { display:flex; gap:12px; }
+  .in-row .in-field { flex:1; }
+
+  /* username @ prefix */
+  .in-username-wrap { position:relative; }
+  .in-username-wrap .in-at {
+    position:absolute; left:13px; top:50%; transform:translateY(-50%);
+    color:var(--in-muted); font-size:15px; font-weight:600; pointer-events:none;
+  }
+  .in-username-wrap input { padding-left:28px; }
+
+  /* live password requirement checklist */
+  .in-pwreq {
+    list-style:none; margin:2px 0 16px; padding:12px 14px;
+    background:var(--in-field-bg); border:1px solid var(--in-line); border-radius:8px;
+  }
+  .in-pwreq li {
+    display:flex; align-items:center; gap:9px; font-size:12.5px;
+    color:var(--in-muted); padding:3px 0; transition:color .15s;
+  }
+  .in-pwreq li .rdot {
+    width:15px; height:15px; border-radius:50%; flex:none; position:relative;
+    border:1.5px solid var(--in-line); transition:all .15s;
+  }
+  .in-pwreq li.met { color:var(--in-success); }
+  .in-pwreq li.met .rdot { background:var(--in-success); border-color:var(--in-success); }
+  .in-pwreq li.met .rdot::after {
+    content:"✓"; position:absolute; inset:0; color:#fff; font-size:10px;
+    display:grid; place-items:center; font-weight:700;
+  }
+
+  .in-btn {
+    width:100%; padding:12px; font-size:15px; font-weight:600; color:#fff;
+    background:var(--in-accent); border:none; border-radius:8px; cursor:pointer;
+    font-family:inherit; transition:background .15s, transform .05s; margin-top:4px;
+  }
+  .in-btn:hover { background:var(--in-accent-d); }
+  .in-btn:active { transform:translateY(1px); }
+  .in-btn:disabled { opacity:.6; cursor:default; }
+
+  .in-msg { padding:10px 13px; border-radius:8px; font-size:13.5px; margin-bottom:16px; display:none; }
+  .in-msg.show { display:block; }
+  .in-msg.error   { background:#fdecea; color:var(--in-error);   border:1px solid #f5c6c0; }
+  .in-msg.success { background:#e7f7f0; color:var(--in-success); border:1px solid #b3e6d1; }
+
+  @media (max-width:860px) {
+    .in-shell { grid-template-columns:1fr; }
+    .in-brandpanel { padding:36px 28px; }
+    .in-pitch h1 { font-size:30px; }
+    .in-points, .in-foot { display:none; }
+    .in-formpanel { padding:36px 24px 56px; }
+  }
+  @media (max-width:420px) { .in-row { flex-direction:column; gap:0; } }
+</style>
+</head>
+<body>
+
+<div class="in-shell">
+
+  <!-- LEFT: brand -->
+  <aside class="in-brandpanel">
+    <div class="in-logo"><span class="in-logo-mark">I</span><span>Integrally</span></div>
+    <div class="in-pitch">
+      <h1>Your career, <span class="acc">measured</span> and mapped.</h1>
+      <p>Integrally turns your experience, skills, and goals into a clear signal —
+         so you always know where you stand and where to go next.</p>
+      <div class="in-points">
+        <div class="in-point"><span class="dot">›</span> Build a profile that reflects your work</div>
+        <div class="in-point"><span class="dot">›</span> Score yourself against roles and fields</div>
+        <div class="in-point"><span class="dot">›</span> Follow people and companies that matter</div>
+      </div>
+    </div>
+    <div class="in-foot">© 2026 Integrally</div>
+  </aside>
+
+  <!-- RIGHT: form -->
+  <main class="in-formpanel">
+    <div class="in-formwrap">
+      <div class="in-eyebrow">Welcome</div>
+      <h2 id="in-heading">Sign in to Integrally</h2>
+      <div class="in-sub" id="in-subtext">Pick up right where you left off.</div>
+
+      <div class="in-tabs">
+        <button class="in-tab active" id="tab-login">Sign in</button>
+        <button class="in-tab" id="tab-register">Create account</button>
+      </div>
+
+      <div class="in-msg" id="in-msg"></div>
+
+      <!-- LOGIN -->
+      <div id="form-login">
+        <div class="in-field">
+          <label for="login-id">Email or username</label>
+          <input type="text" id="login-id" autocomplete="username" />
+        </div>
+        <div class="in-field">
+          <label for="login-pass">Password</label>
+          <input type="password" id="login-pass" autocomplete="current-password" />
+        </div>
+        <button class="in-btn" id="btn-login">Sign in</button>
+      </div>
+
+      <!-- REGISTER -->
+      <div id="form-register" style="display:none;">
+        <div class="in-row">
+          <div class="in-field">
+            <label for="reg-first">First name</label>
+            <input type="text" id="reg-first" autocomplete="given-name" />
+          </div>
+          <div class="in-field" style="max-width:92px;flex:none">
+            <label for="reg-mi">M.I.</label>
+            <input type="text" id="reg-mi" maxlength="2" autocomplete="additional-name" />
+          </div>
+        </div>
+        <div class="in-field">
+          <label for="reg-last">Last name</label>
+          <input type="text" id="reg-last" autocomplete="family-name" />
+        </div>
+        <div class="in-field">
+          <label for="reg-email">Email</label>
+          <input type="email" id="reg-email" autocomplete="email" />
+        </div>
+        <div class="in-field">
+          <label for="reg-username">Username</label>
+          <div class="in-username-wrap">
+            <span class="in-at">@</span>
+            <input type="text" id="reg-username" autocomplete="username" />
+          </div>
+        </div>
+        <div class="in-field">
+          <label for="reg-pass">Password</label>
+          <input type="password" id="reg-pass" autocomplete="new-password" />
+        </div>
+        <div class="in-field">
+          <label for="reg-pass2">Confirm password</label>
+          <input type="password" id="reg-pass2" autocomplete="new-password" />
+        </div>
+
+        <ul class="in-pwreq" id="pwreq">
+          <li data-req="len"><span class="rdot"></span> At least 8 characters</li>
+          <li data-req="cap"><span class="rdot"></span> One capital letter</li>
+          <li data-req="num"><span class="rdot"></span> One number</li>
+          <li data-req="spec"><span class="rdot"></span> One special character</li>
+          <li data-req="match"><span class="rdot"></span> Passwords match</li>
+        </ul>
+
+        <div class="in-field">
+          <label for="reg-country">Country</label>
+          <input type="text" id="reg-country" autocomplete="country-name" />
+        </div>
+        <button class="in-btn" id="btn-register">Create account</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+  // ===================================================================
+  // CONFIG — set to match your XAMPP folder.
+  // ===================================================================
+  const API_BASE = "/integrally/api/auth";
+  const APP_PAGE = "app.html";
+
+  const $ = (id) => document.getElementById(id);
+  const msg = $("in-msg");
+  function showMsg(t, type) { msg.textContent = t; msg.className = "in-msg show " + type; }
+  function clearMsg() { msg.className = "in-msg"; }
+
+  function setTab(which) {
+    clearMsg();
+    const login = which === "login";
+    $("tab-login").classList.toggle("active", login);
+    $("tab-register").classList.toggle("active", !login);
+    $("form-login").style.display    = login ? "block" : "none";
+    $("form-register").style.display = login ? "none"  : "block";
+    $("in-heading").textContent = login ? "Sign in to Integrally" : "Create your account";
+    $("in-subtext").textContent = login ? "Pick up right where you left off." : "Start measuring your career in minutes.";
+  }
+  $("tab-login").onclick    = () => setTab("login");
+  $("tab-register").onclick = () => setTab("register");
+
+  async function api(path, method, body) {
+    const opts = { method, headers:{ "Content-Type":"application/json" }, credentials:"include" };
+    if (body) opts.body = JSON.stringify(body);
+    const res  = await fetch(API_BASE + path, opts);
+    const data = await res.json();
+    return { ok: res.ok, data };
+  }
+
+  // --- live password requirement checklist (mirrors register.php) ----
+  function checkPasswordReqs() {
+    const pw  = $("reg-pass").value;
+    const pw2 = $("reg-pass2").value;
+    const rules = {
+      len:   pw.length >= 8,
+      cap:   /[A-Z]/.test(pw),
+      num:   /[0-9]/.test(pw),
+      spec:  /[^A-Za-z0-9]/.test(pw),
+      match: pw.length > 0 && pw === pw2,
+    };
+    let allMet = true;
+    for (const key in rules) {
+      const li = document.querySelector('#pwreq li[data-req="' + key + '"]');
+      if (li) li.classList.toggle("met", rules[key]);
+      if (!rules[key]) allMet = false;
+    }
+    return allMet;
+  }
+  $("reg-pass").addEventListener("input", checkPasswordReqs);
+  $("reg-pass2").addEventListener("input", checkPasswordReqs);
+
+  // --- LOGIN ---------------------------------------------------------
+  $("btn-login").onclick = async () => {
+    clearMsg();
+    const login = $("login-id").value.trim();
+    const password = $("login-pass").value;
+    if (!login || !password) return showMsg("Enter your login and password.", "error");
+    $("btn-login").disabled = true;
+    try {
+      const { ok, data } = await api("/login.php", "POST", { login, password });
+      if (ok && data.success) window.location.href = APP_PAGE;
+      else showMsg(data.error || "Sign in failed.", "error");
+    } catch (e) {
+      showMsg("Could not reach the server. Is XAMPP running?", "error");
+    } finally { $("btn-login").disabled = false; }
+  };
+
+  // --- REGISTER ------------------------------------------------------
+  $("btn-register").onclick = async () => {
+    clearMsg();
+    const payload = {
+      first_name:       $("reg-first").value.trim(),
+      middle_initial:   $("reg-mi").value.trim(),
+      last_name:        $("reg-last").value.trim(),
+      email:            $("reg-email").value.trim(),
+      username:         $("reg-username").value.trim(),
+      password:         $("reg-pass").value,
+      confirm_password: $("reg-pass2").value,
+      country:          $("reg-country").value.trim(),
+    };
+    if (!payload.first_name || !payload.last_name || !payload.email ||
+        !payload.username || !payload.password) {
+      return showMsg("Please fill in your name, email, username, and password.", "error");
+    }
+    if (!checkPasswordReqs()) {
+      return showMsg("Please meet all password requirements, including matching passwords.", "error");
+    }
+    $("btn-register").disabled = true;
+    try {
+      const { ok, data } = await api("/register.php", "POST", payload);
+      if (ok && data.success) {
+        showMsg("Account created!", "success");
+        setTimeout(() => window.location.href = APP_PAGE, 600);
+      } else showMsg(data.error || "Registration failed.", "error");
+    } catch (e) {
+      showMsg("Could not reach the server. Is XAMPP running?", "error");
+    } finally { $("btn-register").disabled = false; }
+  };
+
+  // --- On load: already logged in -> go to app -----------------------
+  (async function init() {
+    try {
+      const { ok, data } = await api("/me.php", "GET");
+      if (ok && data.success) window.location.href = APP_PAGE;
+    } catch (e) {}
+  })();
+</script>
+</body>
+</html>
