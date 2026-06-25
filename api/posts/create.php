@@ -46,15 +46,41 @@ if (!in_array($postType, $allowedTypes, true)) {
 
 // Structured metadata for non-text posts (e.g. cert name/issuer).
 // Stored as JSON. Null for plain text posts.
-$meta = null;
-if (isset($in['meta']) && is_array($in['meta'])) {
-    $meta = json_encode($in['meta']);
+$metaArr = (isset($in['meta']) && is_array($in['meta'])) ? $in['meta'] : [];
+
+// Link preview: the client sends meta.link from /posts/link-preview.php.
+// We DON'T trust it blindly — whitelist exactly the expected fields and
+// require http(s) URLs, so the client can't smuggle arbitrary data.
+if (isset($metaArr['link']) && is_array($metaArr['link'])) {
+    $lk  = $metaArr['link'];
+    $u   = trim((string) ($lk['url'] ?? ''));
+    $img = trim((string) ($lk['image'] ?? ''));
+
+    $isHttp = fn(string $s) => $s !== '' && preg_match('#^https?://#i', $s) === 1;
+
+    if (!$isHttp($u)) {
+        // No valid URL -> drop the link entirely rather than store junk.
+        unset($metaArr['link']);
+    } else {
+        $clip = fn($s, int $n) => mb_substr(trim((string) $s), 0, $n);
+        $metaArr['link'] = [
+            'url'         => $clip($u, 500),
+            'title'       => $clip($lk['title']       ?? '', 200) ?: null,
+            'description' => $clip($lk['description'] ?? '', 400) ?: null,
+            'image'       => $isHttp($img) ? $clip($img, 500) : null,
+            'site'        => $clip($lk['site']        ?? '', 100) ?: null,
+        ];
+    }
 }
 
-// Validation: a 'text' post needs text or an image. A structured post
-// (cert/job) carries its content in meta, so empty body is fine there.
-if ($postType === 'text' && $body === '' && $mediaUrl === null) {
-    Response::error('A post needs text or an image.', 422);
+$meta = $metaArr ? json_encode($metaArr) : null;
+
+// Validation: a 'text' post needs text, an image, OR a link preview card.
+// A structured post (cert/job) carries its content in meta, so empty
+// body is fine there.
+$hasLink = isset($metaArr['link']) && is_array($metaArr['link']);
+if ($postType === 'text' && $body === '' && $mediaUrl === null && !$hasLink) {
+    Response::error('A post needs text, an image, or a link.', 422);
 }
 if (mb_strlen($body) > 5000) {
     Response::error('Post is too long (5000 characters max).', 422);

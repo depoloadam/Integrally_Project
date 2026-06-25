@@ -44,6 +44,7 @@ class Auth
     {
         self::startSession();
         session_regenerate_id(true);   // prevent session fixation
+        unset($_SESSION['company_id']); // mutual exclusivity: one identity at a time
         $_SESSION['user_id'] = $userId;
     }
 
@@ -75,6 +76,7 @@ class Auth
     {
         self::startSession();
         session_regenerate_id(true);
+        unset($_SESSION['user_id']);   // mutual exclusivity: one identity at a time
         $_SESSION['company_id'] = $companyId;
     }
 

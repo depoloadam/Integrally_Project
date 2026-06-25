@@ -45,9 +45,15 @@ async function uploadImage(file) {
 
 // ---- auth guard + boot -----------------------------------------------
 async function boot() {
+  // One identity at a time. Load whichever session exists.
+  await loadCompanySession();   // sets CO
   const { ok, data } = await api("/auth/me.php");
-  if (ok && data?.success) {
-    ME = data.data;
+  ME = (ok && data?.success) ? data.data : null;
+
+  if (ME) {
+    // ---- USER identity ----
+    CO = null;                              // enforce single identity in UI
+    updateCompanyNav();                     // removes/hides any company tab
     const initial = (ME.username || "?").charAt(0).toUpperCase();
     $("nav-user").textContent = "@" + ME.username;
     $("nav-ava").textContent = initial;
@@ -57,16 +63,65 @@ async function boot() {
     const adminBtn = document.querySelector('[data-nav="admin"]');
     if (adminBtn) adminBtn.style.display = (ME.role === "admin") ? "" : "none";
     routeFromHash();
+  } else if (CO) {
+    // ---- COMPANY identity ---- (no user signed in)
+    $("profile-menu").style.display = "none";
+    $("auth-menu").style.display = "none";   // hide user sign in/up to avoid confusion
+    setupCompanyIdentityNav();               // company avatar + sign-out menu
+    // Company sees: Jobs + their Company dashboard only.
+    document.querySelectorAll("[data-nav]").forEach(b => {
+      const n = b.dataset.nav;
+      b.style.display = (n === "jobs" || n === "company-dashboard") ? "" : "none";
+    });
+    updateCompanyNav();
+    const raw = location.hash.replace(/^#/, "");
+    if (raw === "jobs" || raw.startsWith("job/") || raw.startsWith("company")) routeFromHash();
+    else location.hash = "company-dashboard";
   } else {
-    ME = null;
+    // ---- SIGNED OUT ----
     $("profile-menu").style.display = "none";
     $("auth-menu").style.display = "";
     renderSignedOut();
   }
 }
 
+// When logged in as a company, present the company as the nav identity
+// (reusing the profile menu area) with a sign-out action.
+function setupCompanyIdentityNav() {
+  if (!CO) return;
+  const menu = $("profile-menu");
+  menu.style.display = "";
+  const initial = (CO.name || "?").charAt(0).toUpperCase();
+  $("nav-user").textContent = CO.name;
+  $("nav-ava").textContent = initial;
+  // Rewire the dropdown for company context.
+  const dd = $("profile-dropdown");
+  dd.innerHTML = `
+    <button data-co-menu="dashboard">Company dashboard</button>
+    <div class="in-dropdown-sep"></div>
+    <button data-co-menu="signout" class="danger">Sign out</button>`;
+  dd.querySelectorAll("[data-co-menu]").forEach(b => {
+    b.onclick = async (e) => {
+      e.stopPropagation();
+      dd.classList.remove("show");
+      if (b.dataset.coMenu === "dashboard") location.hash = "company-dashboard";
+      else { await api("/company/logout.php", "POST"); CO = null; location.hash = ""; location.reload(); }
+    };
+  });
+}
+
 function renderSignedOut() {
   document.querySelectorAll("[data-nav]").forEach(b => b.style.display = "none");
+  // Jobs browsing is public — keep it reachable when signed out.
+  const jobsBtn = document.querySelector('[data-nav="jobs"]');
+  if (jobsBtn) jobsBtn.style.display = "";
+  updateCompanyNav();   // shows the Company tab if a company session exists
+  // If the visitor is heading somewhere public, honor it; else welcome.
+  const raw = location.hash.replace(/^#/, "");
+  if (raw === "jobs" || raw.startsWith("job/") || raw.startsWith("company")) {
+    routeFromHash();
+    return;
+  }
   $("view").innerHTML = `
     <div class="in-card2" style="text-align:center;padding:60px 22px;max-width:480px;margin:40px auto">
       <h2 style="justify-content:center;font-size:22px;text-transform:none;letter-spacing:-0.3px">Welcome to Integrally</h2>
@@ -84,6 +139,8 @@ $("auth-trigger").onclick = (e) => { e.stopPropagation(); authDrop.classList.tog
 authDrop.addEventListener("click", e => e.stopPropagation());
 document.addEventListener("click", () => authDrop.classList.remove("show"));
 authDrop.querySelector(".in-auth-signup").onclick = () => { window.location.href = AUTH_PAGE; };
+const coAuthLink = authDrop.querySelector('[data-auth="company"]');
+if (coAuthLink) coAuthLink.onclick = () => { authDrop.classList.remove("show"); openCompanyAuth("login"); };
 $("qs-go").onclick = async () => {
   const login = $("qs-login").value.trim();
   const password = $("qs-pass").value;
@@ -126,6 +183,8 @@ function showTab(name) {
   document.querySelectorAll("[data-nav]").forEach(x => x.classList.toggle("active", x.dataset.nav === name));
   if (name === "feed") renderFeed();
   else if (name === "admin") renderAdmin();
+  else if (name === "jobs") renderJobs();
+  else if (name === "company-dashboard") renderCompanyDashboard();
   else renderProfile();
 }
 document.querySelectorAll("[data-nav]").forEach(b => {
@@ -140,10 +199,16 @@ const brandHome = $("brand-home");
 if (brandHome) {
   const goHome = (e) => {
     if (e) e.preventDefault();
+    if (!ME) {
+      // Signed out: feed isn't available — show the welcome view.
+      if (location.hash) location.hash = "";   // fires hashchange -> guarded router
+      else renderSignedOut();                   // already at root -> re-render directly
+      return;
+    }
     if (location.hash === "#feed" || location.hash === "") {
-      showTab("feed");          // already on feed route -> just (re)render
+      showTab("feed");
     } else {
-      location.hash = "feed";   // triggers hashchange -> router -> feed
+      location.hash = "feed";
     }
   };
   brandHome.addEventListener("click", goHome);
@@ -172,6 +237,24 @@ function routeFromHash() {
     showTab("admin");
     return;
   }
+  if (raw === "jobs") {
+    showTab("jobs");
+    return;
+  }
+  if (raw === "company-dashboard") {
+    showTab("company-dashboard");
+    return;
+  }
+  if (raw.startsWith("job/")) {
+    renderJobDetail(raw.slice("job/".length));
+    return;
+  }
+  if (raw.startsWith("company/")) {
+    renderCompanyProfile(raw.slice("company/".length));
+    return;
+  }
+  // Feed and profile require a user session. If signed out, show welcome.
+  if (!ME) { renderSignedOut(); return; }
   showTab(raw === "profile" ? "profile" : "feed");
 }
 window.addEventListener("hashchange", routeFromHash);
