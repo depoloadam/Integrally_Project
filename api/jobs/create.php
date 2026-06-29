@@ -10,6 +10,7 @@
 require_once __DIR__ . '/../../src/Database.php';
 require_once __DIR__ . '/../../src/Response.php';
 require_once __DIR__ . '/../../src/Auth.php';
+require_once __DIR__ . '/../../src/RichText.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     Response::error('Method not allowed.', 405);
@@ -63,7 +64,7 @@ $stmt = $pdo->prepare(
 );
 $stmt->execute([
     $uuid, $companyId, $title,
-    trim($in['description'] ?? '') ?: null,
+    (RichText::clean((string) ($in['description'] ?? '')) ?: null),
     trim($in['location'] ?? '') ?: null,
     $employmentType ?: null,
     $remotePolicy ?: null,

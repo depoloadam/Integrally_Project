@@ -165,7 +165,93 @@ async function renderCompanyDashboard() {
   wrap.appendChild(jobsCard);
   $("co-add-job").onclick = () => openJobEditor();
 
+  // Link to the "who lists us" page.
+  const empCard = el(`
+    <div class="in-card2" style="cursor:pointer">
+      <h2 style="text-transform:none;font-size:18px;letter-spacing:-0.2px;margin:0">
+        People who list ${esc(CO.name)}
+        <span style="margin-left:auto;color:var(--in-muted);font-weight:400;font-size:15px">View →</span>
+      </h2>
+    </div>`);
+  empCard.onclick = () => { location.hash = "company-employees"; };
+  wrap.appendChild(empCard);
+
   loadCompanyJobs();
+}
+
+// ---- company "who lists us" page (#company-employees) ---------------
+let CO_EMP_SORT = "current";
+
+async function renderCompanyEmployees() {
+  document.querySelectorAll("[data-nav]").forEach(x => x.classList.remove("active"));
+  const view = $("view");
+
+  if (!CO) {
+    view.innerHTML = `<div class="in-card2"><div class="in-empty">Company sign-in required.</div></div>`;
+    return;
+  }
+
+  view.innerHTML = "";
+  const wrap = el(`<div class="in-admin"></div>`);
+  wrap.appendChild(el(`<div class="in-back"><button class="in-back-btn" onclick="location.hash='company-dashboard'">‹ Back to dashboard</button></div>`));
+
+  const card = el(`
+    <div class="in-card2">
+      <h2 style="text-transform:none;font-size:18px;letter-spacing:-0.2px">People who list ${esc(CO.name)}</h2>
+      <div class="in-empty" style="font-style:normal;margin:-6px 0 14px">Users who linked your company in their job history.</div>
+      <div class="in-admin-toolbar">
+        <select id="emp-sort">
+          <option value="current">Current first</option>
+          <option value="recent">Most recent</option>
+          <option value="name">Name (A–Z)</option>
+        </select>
+      </div>
+      <div id="emp-summary" class="emp-summary"></div>
+      <div id="emp-list"></div>
+    </div>`);
+  wrap.appendChild(card);
+  view.appendChild(wrap);
+
+  $("emp-sort").value = CO_EMP_SORT;
+  $("emp-sort").onchange = () => { CO_EMP_SORT = $("emp-sort").value; loadCompanyEmployees(); };
+
+  loadCompanyEmployees();
+}
+
+async function loadCompanyEmployees() {
+  const list = $("emp-list");
+  const summary = $("emp-summary");
+  list.innerHTML = `<div class="in-loading">Loading…</div>`;
+  summary.innerHTML = "";
+
+  const r = await api("/company/employees.php?sort=" + encodeURIComponent(CO_EMP_SORT));
+  if (!r.ok || !r.data?.success) { list.innerHTML = `<div class="in-empty">Could not load the list.</div>`; return; }
+
+  const { employees, current, past, total } = r.data.data;
+  if (!total) {
+    list.innerHTML = `<div class="in-empty">No one has listed your company yet. Turn on "Allow users to list us as their employer" in your profile so people can link to you.</div>`;
+    return;
+  }
+
+  summary.innerHTML = `<span class="emp-pill ok">${current} current</span><span class="emp-pill">${past} past</span><span class="emp-pill">${total} total</span>`;
+
+  list.innerHTML = "";
+  employees.forEach(e => {
+    const nm = e.name || ("@" + e.username);
+    const dates = (e.start_date || "") + (e.is_current ? " – Present" : (e.end_date ? " – " + e.end_date : ""));
+    const avatarChar = (e.username || "?").charAt(0).toUpperCase();
+    const row = el(`
+      <div class="in-item" role="button" tabindex="0" style="cursor:pointer">
+        <div class="connect-ava" style="width:42px;height:42px;font-size:16px">${e.profile_pic ? `<img src="${esc(e.profile_pic)}" alt="">` : esc(avatarChar)}</div>
+        <div class="meta" style="margin-left:12px">
+          <div class="t">${esc(nm)} ${e.is_current ? `<span class="in-admin-badge ok">Current</span>` : `<span class="in-admin-badge off">Past</span>`}</div>
+          <div class="s">${esc(e.title || "")}${dates.trim() ? " · " + esc(dates.trim()) : ""}</div>
+        </div>
+        <span style="color:var(--in-muted);align-self:center">›</span>
+      </div>`);
+    row.onclick = () => { location.hash = "user/" + e.user_uuid; };
+    list.appendChild(row);
+  });
 }
 
 async function loadCompanyJobs() {
@@ -191,16 +277,38 @@ async function loadCompanyJobs() {
           <div class="t">${esc(j.title)} ${badge}</div>
           <div class="s">${esc(meta)}</div>
         </div>
-        <button class="in-btn ghost" style="flex:none;padding:6px 12px" data-edit>Edit</button>
-        <button class="del" data-del title="Delete">✕</button>
+        <div class="job-actions">
+          <button class="job-actions-btn" title="Actions" aria-label="Actions">⋮</button>
+          <div class="job-actions-menu">
+            <button data-act="edit">Edit</button>
+            ${j.status !== "closed" ? `<button data-act="close" class="danger">Close</button>` : ""}
+          </div>
+        </div>
       </div>`);
-    row.querySelector("[data-edit]").onclick = () => openJobEditor(j.uuid);
-    row.querySelector("[data-del]").onclick = async () => {
-      if (!confirm(`Delete "${j.title}"? This can't be undone.`)) return;
-      const res = await api("/jobs/delete.php", "POST", { uuid: j.uuid });
-      if (res.ok && res.data?.success) loadCompanyJobs();
-      else alert(res.data?.error || "Could not delete the job.");
+
+    const menuBtn = row.querySelector(".job-actions-btn");
+    const menu = row.querySelector(".job-actions-menu");
+    menuBtn.onclick = (e) => {
+      e.stopPropagation();
+      // Close any other open menus first.
+      document.querySelectorAll(".job-actions-menu.show").forEach(m => { if (m !== menu) m.classList.remove("show"); });
+      menu.classList.toggle("show");
     };
+    document.addEventListener("click", () => menu.classList.remove("show"));
+
+    menu.querySelector('[data-act="edit"]').onclick = (e) => {
+      e.stopPropagation(); menu.classList.remove("show"); openJobEditor(j.uuid);
+    };
+    const closeBtn = menu.querySelector('[data-act="close"]');
+    if (closeBtn) {
+      closeBtn.onclick = async (e) => {
+        e.stopPropagation(); menu.classList.remove("show");
+        if (!confirm(`Close "${j.title}"? It will no longer appear in public job listings, but you can reopen it by editing the posting.`)) return;
+        const res = await api("/jobs/update.php", "POST", { uuid: j.uuid, status: "closed" });
+        if (res.ok && res.data?.success) loadCompanyJobs();
+        else alert(res.data?.error || "Could not close the job.");
+      };
+    }
     box.appendChild(row);
   });
 }
@@ -227,7 +335,7 @@ async function openJobEditor(uuid = null) {
       <label class="jf-label">Title</label>
       <input class="jf-input" id="job-title" value="${esc(j.title)}" placeholder="Senior Backend Engineer">
       <label class="jf-label">Description</label>
-      <textarea class="jf-input" id="job-desc" rows="6" placeholder="Role, responsibilities, requirements…">${esc(j.description || "")}</textarea>
+      <div id="job-desc-editor"></div>
       <div class="jf-row">
         <div><label class="jf-label">Location</label><input class="jf-input" id="job-loc" value="${esc(j.location || "")}" placeholder="Cleveland, OH"></div>
         <div><label class="jf-label">Apply URL</label><input class="jf-input" id="job-apply" value="${esc(j.apply_url || "")}" placeholder="https://…"></div>
@@ -252,9 +360,14 @@ async function openJobEditor(uuid = null) {
           </select>
         </div>
       </div>
-      <div class="jf-row">
+      <label class="jf-checkrow">
+        <input type="checkbox" id="job-salary-on"> Include a salary range
+      </label>
+      <div class="jf-row" id="job-salary-fields">
         <div><label class="jf-label">Salary min</label><input class="jf-input" id="job-smin" type="number" value="${j.salary_min ?? ""}" placeholder="80000"></div>
         <div><label class="jf-label">Salary max</label><input class="jf-input" id="job-smax" type="number" value="${j.salary_max ?? ""}" placeholder="120000"></div>
+      </div>
+      <div class="jf-row">
         <div><label class="jf-label">Status</label>
           <select class="jf-input" id="job-status">
             <option value="open">Open</option>
@@ -275,21 +388,37 @@ async function openJobEditor(uuid = null) {
   $("job-remote").value = j.remote_policy || "";
   $("job-status").value = j.status || "open";
 
+  // Salary toggle: on when the job already has a salary value.
+  const salaryToggle = $("job-salary-on");
+  const salaryFields = $("job-salary-fields");
+  const hasSalary = (j.salary_min != null && j.salary_min !== "") || (j.salary_max != null && j.salary_max !== "");
+  salaryToggle.checked = hasSalary;
+  const syncSalary = () => { salaryFields.style.display = salaryToggle.checked ? "" : "none"; };
+  syncSalary();
+  salaryToggle.onchange = syncSalary;
+
+  const descEditor = mountRichEditor("job-desc-editor", {
+    placeholder: "Role, responsibilities, requirements…",
+    html: j.description || "",
+  });
+
   const back = () => renderCompanyDashboard();
   $("job-back").onclick = back;
   $("job-cancel").onclick = back;
 
   $("job-save").onclick = async () => {
     const msg = $("job-msg"); msg.className = "in-set-msg";
+    const salaryOn = salaryToggle.checked;
     const payload = {
       title: $("job-title").value.trim(),
-      description: $("job-desc").value.trim(),
+      description: descEditor.getHTML(),
       location: $("job-loc").value.trim(),
       apply_url: $("job-apply").value.trim(),
       employment_type: $("job-emp").value,
       remote_policy: $("job-remote").value,
-      salary_min: $("job-smin").value,
-      salary_max: $("job-smax").value,
+      // Send salary only when the toggle is on; otherwise clear it.
+      salary_min: salaryOn ? $("job-smin").value : "",
+      salary_max: salaryOn ? $("job-smax").value : "",
       status: $("job-status").value,
     };
     if (!payload.title) { msg.textContent = "A job title is required."; msg.className = "in-set-msg err"; return; }
@@ -321,6 +450,11 @@ function openCompanyEdit() {
       <div><label>City</label><input id="coe-city" value="${esc(CO.city || "")}"></div>
       <div><label>State</label><input id="coe-state" value="${esc(CO.state || "")}"></div>
     </div>
+    <label class="jf-checkrow" style="margin-top:16px">
+      <input type="checkbox" id="coe-listing"${(CO.allow_employee_listing == 1 || CO.allow_employee_listing === undefined) ? " checked" : ""}>
+      Allow users to list us as their employer
+    </label>
+    <div class="in-set-placeholder" style="margin:-2px 0 4px">When on, people can link your company in their job history via search.</div>
     <div class="in-modal-actions">
       <button class="in-btn ghost" onclick="closeModal()">Cancel</button>
       <button class="in-btn primary" id="coe-save">Save</button>
@@ -337,6 +471,7 @@ function openCompanyEdit() {
       city: $("coe-city").value.trim(),
       state: $("coe-state").value.trim(),
       logo: avatarState.avatarUrl || "",
+      allow_employee_listing: $("coe-listing").checked ? 1 : 0,
     };
     if (!payload.name) { msg.textContent = "Company name is required."; msg.className = "in-auth-msg show"; return; }
     const btn = $("coe-save"); btn.disabled = true; btn.textContent = "Saving…";

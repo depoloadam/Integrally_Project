@@ -459,6 +459,19 @@ body { margin:0; font-family:var(--in-font); background:var(--in-bg); color:var(
 textarea.jf-input { resize:vertical; }
 .jf-row { display:flex; gap:12px; }
 .jf-row > div { flex:1; }
+.jf-checkrow { display:flex; align-items:center; gap:9px; font-size:13.5px; color:var(--in-ink-soft); margin:14px 0 4px; cursor:pointer; }
+.jf-checkrow input { width:auto; margin:0; }
+
+/* job actions ⋮ menu (company dashboard) */
+.job-actions { position:relative; flex:none; align-self:center; }
+.job-actions-btn { width:32px; height:32px; border:1px solid var(--in-line); border-radius:8px; background:var(--in-bg); cursor:pointer; font-size:18px; line-height:1; color:var(--in-ink-soft); display:grid; place-items:center; }
+.job-actions-btn:hover { border-color:var(--in-accent); color:var(--in-accent); }
+.job-actions-menu { position:absolute; right:0; top:38px; min-width:150px; background:var(--in-card); border:1px solid var(--in-line); border-radius:10px; box-shadow:0 8px 24px rgba(11,31,42,.14); padding:6px; display:none; z-index:30; }
+.job-actions-menu.show { display:block; }
+.job-actions-menu button { width:100%; text-align:left; background:none; border:none; font-family:inherit; font-size:13.5px; color:var(--in-ink); padding:9px 11px; border-radius:7px; cursor:pointer; }
+.job-actions-menu button:hover { background:var(--in-bg); }
+.job-actions-menu button.danger { color:var(--in-error); }
+.job-actions-menu button.danger:hover { background:#fdecea; }
 
 /* ---------- connect page ---------- */
 .connect-row { display:flex; align-items:center; gap:14px; padding:13px 0; border-top:1px solid var(--in-line); cursor:pointer; }
@@ -504,6 +517,49 @@ textarea.jf-input { resize:vertical; }
 .avatar-pick-controls { display:flex; flex-direction:column; gap:8px; align-items:flex-start; }
 .avatar-pick-msg { font-size:12px; color:var(--in-muted); }
 .avatar-pick-msg.err { color:var(--in-error); }
+
+/* ---------- rich text editor ---------- */
+.rt-editor { border:1px solid var(--in-line); border-radius:10px; overflow:hidden; background:#fff; }
+.rt-toolbar { display:flex; align-items:center; gap:4px; padding:6px 8px; background:var(--in-bg); border-bottom:1px solid var(--in-line); flex-wrap:wrap; }
+.rt-btn { width:30px; height:30px; border:1px solid transparent; border-radius:6px; background:none; cursor:pointer; font-size:14px; color:var(--in-ink); display:grid; place-items:center; position:relative; font-family:inherit; }
+.rt-btn:hover { background:var(--in-card); border-color:var(--in-line); }
+.rt-btn.active { background:var(--in-accent); color:#fff; border-color:var(--in-accent); }
+.rt-btn.active:hover { background:var(--in-accent-d); }
+.rt-sep { width:1px; height:20px; background:var(--in-line); margin:0 4px; }
+.rt-color-wrap { position:relative; }
+.rt-color-bar { position:absolute; bottom:3px; left:6px; right:6px; height:3px; border-radius:2px; background:linear-gradient(90deg,#c0392b,#2563eb,#16a34a); }
+.rt-color-menu { position:absolute; top:34px; left:0; z-index:30; background:#fff; border:1px solid var(--in-line); border-radius:10px; padding:8px; box-shadow:0 8px 24px rgba(11,31,42,.14); display:none; grid-template-columns:repeat(4,1fr); gap:6px; }
+.rt-color-menu.show { display:grid; }
+.rt-swatch { width:24px; height:24px; border-radius:6px; border:1px solid rgba(0,0,0,.1); cursor:pointer; padding:0; }
+.rt-swatch:hover { transform:scale(1.1); }
+.rt-size { padding:5px 8px; border:1px solid var(--in-line); border-radius:6px; background:var(--in-card); font-family:inherit; font-size:13px; cursor:pointer; }
+.rt-area { min-height:80px; max-height:340px; overflow-y:auto; padding:11px 14px; font-size:15px; line-height:1.5; color:var(--in-ink); outline:none; }
+.rt-area:empty::before { content:attr(data-placeholder); color:var(--in-muted); pointer-events:none; }
+.rt-area u { text-decoration:underline; }
+.rt-toolbar.rt-hint { box-shadow:inset 0 0 0 2px var(--in-accent); border-radius:6px; transition:box-shadow .1s; }
+.rt-toolbar.rt-hint::after { content:"Select text first"; font-size:11.5px; color:var(--in-accent); margin-left:6px; }
+
+/* rendered rich text in posts/jobs */
+.rich-content { line-height:1.5; word-break:break-word; }
+
+/* ---------- employer live search (job history) ---------- */
+.emp-search { position:relative; }
+.emp-results { position:absolute; left:0; right:0; top:calc(100% + 2px); z-index:40; background:var(--in-card); border:1px solid var(--in-line); border-radius:10px; box-shadow:0 8px 24px rgba(11,31,42,.14); padding:6px; display:none; max-height:280px; overflow-y:auto; }
+.emp-result { width:100%; display:flex; align-items:center; gap:10px; text-align:left; background:none; border:none; font-family:inherit; padding:8px 10px; border-radius:8px; cursor:pointer; }
+.emp-result:hover { background:var(--in-bg); }
+.emp-result-logo { width:32px; height:32px; border-radius:8px; flex:none; display:grid; place-items:center; font-weight:700; font-size:14px; color:#fff; background:linear-gradient(135deg,#0e3b4a,#0a8a8a); overflow:hidden; }
+.emp-result-logo img { width:100%; height:100%; object-fit:cover; }
+.emp-result-name { display:block; font-size:14px; font-weight:600; color:var(--in-ink); }
+.emp-result-ind { display:block; font-size:12px; color:var(--in-muted); }
+.emp-linked { display:flex; align-items:center; gap:8px; margin-top:8px; }
+.emp-linked-tag { font-size:13px; font-weight:600; color:var(--in-accent); background:var(--in-bg); border:1px solid var(--in-line); border-radius:20px; padding:5px 12px; }
+.emp-unlink { background:none; border:none; color:var(--in-muted); cursor:pointer; font-size:13px; padding:2px 6px; border-radius:6px; }
+.emp-unlink:hover { color:var(--in-error); background:#fdecea; }
+.emp-link { color:var(--in-accent); font-weight:600; text-decoration:none; }
+.emp-link:hover { text-decoration:underline; }
+.emp-summary { display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+.emp-pill { font-size:12.5px; font-weight:600; color:var(--in-ink-soft); background:var(--in-bg); border:1px solid var(--in-line); border-radius:20px; padding:4px 12px; }
+.emp-pill.ok { color:var(--in-teal-bright); border-color:var(--in-teal-bright); }
 
 /* ---------- responsive ---------- */
 @media (max-width:760px) {

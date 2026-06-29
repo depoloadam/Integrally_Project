@@ -11,6 +11,7 @@
 require_once __DIR__ . '/../../src/Database.php';
 require_once __DIR__ . '/../../src/Response.php';
 require_once __DIR__ . '/../../src/Auth.php';
+require_once __DIR__ . '/../../src/RichText.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST' && $_SERVER['REQUEST_METHOD'] !== 'PATCH') {
     Response::error('Method not allowed.', 405);
@@ -43,11 +44,13 @@ if (array_key_exists('title', $in)) {
     if ($v === '' || mb_strlen($v) > 150) Response::error('Title must be 1–150 chars.', 422);
     $sets[] = 'title = ?'; $params[] = $v;
 }
-foreach (['description', 'location'] as $f) {
-    if (array_key_exists($f, $in)) {
-        $v = trim((string) $in[$f]);
-        $sets[] = "$f = ?"; $params[] = ($v === '' ? null : $v);
-    }
+if (array_key_exists('description', $in)) {
+    $v = RichText::clean((string) $in['description']);
+    $sets[] = 'description = ?'; $params[] = ($v === '' ? null : $v);
+}
+if (array_key_exists('location', $in)) {
+    $v = trim((string) $in['location']);
+    $sets[] = 'location = ?'; $params[] = ($v === '' ? null : $v);
 }
 if (array_key_exists('employment_type', $in)) {
     $v = trim((string) $in['employment_type']);

@@ -39,6 +39,12 @@ foreach ($allowed as $f) {
         }
     }
 }
+
+// Boolean toggle: whether users may list this company as their employer.
+if (array_key_exists('allow_employee_listing', $in)) {
+    $sets[] = 'allow_employee_listing = ?';
+    $params[] = ($in['allow_employee_listing'] ? 1 : 0);
+}
 if (!$sets) Response::error('No valid fields to update.', 422);
 
 $params[] = $companyId;
@@ -46,7 +52,7 @@ $pdo->prepare('UPDATE companies SET ' . implode(', ', $sets) . ' WHERE id = ?')
     ->execute($params);
 
 $stmt = $pdo->prepare(
-    'SELECT uuid, name, email, industry, city, state, country, logo, website, description
+    'SELECT uuid, name, email, industry, city, state, country, logo, website, description, allow_employee_listing
      FROM companies WHERE id = ? LIMIT 1'
 );
 $stmt->execute([$companyId]);

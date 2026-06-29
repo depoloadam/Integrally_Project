@@ -96,6 +96,175 @@ function mountAvatarPicker(mountId, state, opts = {}) {
 }
 window.mountAvatarPicker = mountAvatarPicker;
 
+// =====================================================================
+// Rich-text editor: a contentEditable area with a formatting toolbar
+// (bold, italic, underline, color, size). Returns an object with
+// .getHTML() so callers can read the content on save. Shared by the
+// post composer and the job editor.
+//
+// Security note: this produces HTML, but the SERVER sanitizes it on save
+// (src/RichText.php). Never trust this output directly — it's only safe
+// because the backend whitelists it.
+// =====================================================================
+const RT_COLORS = ["#0b1f2a", "#0d9488", "#c0392b", "#2563eb", "#7c3aed", "#d97706", "#16a34a", "#6b8590"];
+const RT_SIZES  = [["Small", "12px"], ["Normal", "16px"], ["Large", "24px"], ["Huge", "32px"]];
+
+function mountRichEditor(mountId, opts = {}) {
+  const host = $(mountId);
+  if (!host) return null;
+  const placeholder = opts.placeholder || "Write something…";
+  const initialHTML = opts.html || "";
+
+  host.innerHTML = `
+    <div class="rt-editor">
+      <div class="rt-toolbar">
+        <button type="button" class="rt-btn" data-cmd="bold" title="Bold"><b>B</b></button>
+        <button type="button" class="rt-btn" data-cmd="italic" title="Italic"><i>I</i></button>
+        <button type="button" class="rt-btn" data-cmd="underline" title="Underline"><u>U</u></button>
+        <span class="rt-sep"></span>
+        <span class="rt-color-wrap">
+          <button type="button" class="rt-btn" id="${mountId}-colorbtn" title="Text color">A<span class="rt-color-bar"></span></button>
+          <div class="rt-color-menu" id="${mountId}-colormenu">
+            ${RT_COLORS.map(c => `<button type="button" class="rt-swatch" data-color="${c}" style="background:${c}"></button>`).join("")}
+          </div>
+        </span>
+        <select class="rt-size" id="${mountId}-size" title="Text size">
+          ${RT_SIZES.map(([lbl, px]) => `<option value="${px}"${px === "16px" ? " selected" : ""}>${lbl}</option>`).join("")}
+        </select>
+      </div>
+      <div class="rt-area" id="${mountId}-area" contenteditable="true" data-placeholder="${esc(placeholder)}">${initialHTML}</div>
+    </div>`;
+
+  const area = $(`${mountId}-area`);
+
+  // Selection-only formatting: a command applies to highlighted text. With
+  // no selection we do nothing and briefly hint, which avoids the whole
+  // class of contentEditable "pending format" bugs.
+  const hasSelection = () => {
+    const sel = window.getSelection();
+    return sel && sel.rangeCount && !sel.isCollapsed && area.contains(sel.anchorNode);
+  };
+  let hintTimer = null;
+  function flashHint() {
+    const tb = host.querySelector(".rt-toolbar");
+    if (!tb) return;
+    tb.classList.add("rt-hint");
+    clearTimeout(hintTimer);
+    hintTimer = setTimeout(() => tb.classList.remove("rt-hint"), 900);
+  }
+
+  const exec = (cmd, val = null) => {
+    if (!hasSelection()) { flashHint(); return; }
+    area.focus();
+    document.execCommand(cmd, false, val);
+    syncToolbar();
+  };
+
+  host.querySelectorAll(".rt-btn[data-cmd]").forEach(b => {
+    b.onmousedown = (e) => { e.preventDefault(); };   // keep selection
+    b.onclick = () => exec(b.dataset.cmd);
+  });
+
+  // Color menu
+  const colorBtn = $(`${mountId}-colorbtn`);
+  const colorMenu = $(`${mountId}-colormenu`);
+  colorBtn.onmousedown = (e) => e.preventDefault();
+  colorBtn.onclick = (e) => { e.preventDefault(); colorMenu.classList.toggle("show"); };
+  colorMenu.querySelectorAll(".rt-swatch").forEach(s => {
+    s.onmousedown = (e) => e.preventDefault();
+    s.onclick = () => {
+      if (!hasSelection()) { flashHint(); colorMenu.classList.remove("show"); return; }
+      const color = s.dataset.color;
+      area.focus();
+      document.execCommand("foreColor", false, color);
+      area.querySelectorAll("font[color]").forEach(f => {
+        const span = document.createElement("span");
+        span.style.color = f.getAttribute("color");
+        span.innerHTML = f.innerHTML;
+        f.parentNode.replaceChild(span, f);
+      });
+      colorMenu.classList.remove("show");
+    };
+  });
+  document.addEventListener("click", (e) => {
+    if (!colorBtn.contains(e.target) && !colorMenu.contains(e.target)) colorMenu.classList.remove("show");
+  });
+
+  // Apply a font size to the current selection (wrap in a styled span).
+  const sizeSelect = $(`${mountId}-size`);
+  const applySize = (px) => {
+    if (!px) return;
+    area.focus();
+    const sel = window.getSelection();
+    // Selection-only model: formatting applies to highlighted text. If
+    // nothing is selected, do nothing (and nudge the user once).
+    if (!sel || !sel.rangeCount || sel.isCollapsed || !area.contains(sel.anchorNode)) {
+      flashHint();
+      syncToolbar();   // revert the dropdown to reflect the real caret state
+      return;
+    }
+    document.execCommand("fontSize", false, "7");   // tag selection as font[size=7]
+    area.querySelectorAll('font[size="7"]').forEach(f => {
+      const span = document.createElement("span");
+      span.style.fontSize = px;
+      span.innerHTML = f.innerHTML;
+      f.parentNode.replaceChild(span, f);
+    });
+    syncToolbar();
+  };
+  sizeSelect.addEventListener("change", (e) => applySize(e.target.value));
+
+  // --- selection tracking: reflect the current selection's formatting in
+  // the toolbar (bold/italic/underline active states + the size dropdown),
+  // like a normal word processor. ---
+  const sizeFromNode = (node) => {
+    let el2 = (node && node.nodeType === 3) ? node.parentElement : node;
+    while (el2 && el2 !== area) {
+      if (el2.style && el2.style.fontSize) return el2.style.fontSize;
+      el2 = el2.parentElement;
+    }
+    return "16px"; // default
+  };
+
+  let syncing = false;
+  function syncToolbar() {
+    if (syncing) return;
+    syncing = true;
+    try {
+      const sel = window.getSelection();
+      const inside = sel && sel.rangeCount && area.contains(sel.anchorNode);
+      if (inside) {
+        host.querySelector('[data-cmd="bold"]').classList.toggle("active", document.queryCommandState("bold"));
+        host.querySelector('[data-cmd="italic"]').classList.toggle("active", document.queryCommandState("italic"));
+        host.querySelector('[data-cmd="underline"]').classList.toggle("active", document.queryCommandState("underline"));
+        // Reflect the size of wherever the caret/selection is.
+        const px = sizeFromNode(sel.anchorNode);
+        // Snap to the closest option we offer.
+        const opts = Array.from(sizeSelect.options).map(o => o.value);
+        if (opts.includes(px)) sizeSelect.value = px;
+      }
+    } finally { syncing = false; }
+  }
+
+  // Update the toolbar as the selection moves within this editor.
+  document.addEventListener("selectionchange", () => {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount && area.contains(sel.anchorNode)) syncToolbar();
+  });
+  area.addEventListener("keyup", syncToolbar);
+  area.addEventListener("mouseup", syncToolbar);
+  area.addEventListener("focus", syncToolbar);
+
+  return {
+    getHTML: () => area.innerHTML,
+    getText: () => area.innerText.replace(/\u200B/g, "").trim(),
+    clear:   () => { area.innerHTML = ""; },
+    focus:   () => area.focus(),
+    el: area,
+  };
+}
+window.mountRichEditor = mountRichEditor;
+
 // Set the small nav avatar to an image (if url) or fall back to initials.
 function setNavAvatar(url, initial) {
   const ava = $("nav-ava");
@@ -247,6 +416,7 @@ function showTab(name) {
   else if (name === "jobs") renderJobs();
   else if (name === "connect") renderConnect();
   else if (name === "company-dashboard") renderCompanyDashboard();
+  else if (name === "company-employees") renderCompanyEmployees();
   else renderProfile();
 }
 document.querySelectorAll("[data-nav]").forEach(b => {
@@ -315,6 +485,10 @@ function routeFromHash() {
   }
   if (raw === "company-dashboard") {
     showTab("company-dashboard");
+    return;
+  }
+  if (raw === "company-employees") {
+    showTab("company-employees");
     return;
   }
   if (raw.startsWith("job/")) {

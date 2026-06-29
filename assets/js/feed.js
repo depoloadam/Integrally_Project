@@ -16,7 +16,7 @@ async function renderFeed() {
     <div class="in-card2 in-composer">
       <div class="comp-top">
         <div class="comp-avatar">${ME.profile_pic ? `<img src="${esc(ME.profile_pic)}" alt="">` : esc((ME.username||"?").charAt(0).toUpperCase())}</div>
-        <textarea id="comp-body" placeholder="Share an update, @${esc(ME.username)}…" rows="2"></textarea>
+        <div id="comp-editor" style="flex:1;min-width:0"></div>
       </div>
       <div id="comp-preview" class="comp-preview" style="display:none">
         <img id="comp-preview-img" src="" alt="">
@@ -34,8 +34,9 @@ async function renderFeed() {
       </div>
     </div>`);
   view.appendChild(composer);
-  const ta = composer.querySelector("#comp-body");
-  ta.addEventListener("input", () => { ta.style.height = "auto"; ta.style.height = ta.scrollHeight + "px"; });
+  const editor = mountRichEditor("comp-editor", { placeholder: `Share an update, @${ME.username}…` });
+  // Text accessor for link detection (reads the editor's plain text).
+  const bodyText = () => editor.getText();
 
   let attachedUrl = null;
   const fileInput = composer.querySelector("#comp-file");
@@ -66,18 +67,9 @@ async function renderFeed() {
   const findUrl = (text) => {
     const m = text.match(/https?:\/\/[^\s<>"']+/i);
     if (!m) return null;
-    const raw = m[0];                                   // exactly what's in the box
-    const clean = raw.replace(/[.,;:!?)\]]+$/, "");     // trimmed for fetching
+    const raw = m[0];
+    const clean = raw.replace(/[.,;:!?)\]]+$/, "");
     return { raw, clean };
-  };
-
-  // Remove a URL substring from the textarea and tidy the whitespace it
-  // leaves behind, so the composer shows exactly what will be posted.
-  const stripUrlFromBox = (raw) => {
-    let v = ta.value.split(raw).join("");
-    v = v.replace(/[ \t]{2,}/g, " ").replace(/ +\n/g, "\n").replace(/\n{3,}/g, "\n\n");
-    ta.value = v.trim();
-    ta.style.height = "auto"; ta.style.height = ta.scrollHeight + "px";
   };
 
   const renderLinkCard = (lk) => {
@@ -100,11 +92,8 @@ async function renderFeed() {
   };
 
   const fetchLinkPreview = async () => {
-    const found = findUrl(ta.value);
+    const found = findUrl(bodyText());
     if (!found) {
-      // No URL in the box. If we've already locked in a preview (the URL
-      // was stripped out live), keep it — the user is just typing more
-      // text. Only clear when there's genuinely no preview to keep.
       if (!linkPreview) { lastLinkUrl = null; linkBox.style.display = "none"; linkBox.innerHTML = ""; }
       return;
     }
@@ -114,12 +103,10 @@ async function renderFeed() {
     linkBox.style.display = "flex";
     linkBox.innerHTML = `<div class="comp-link-loading">Loading link preview…</div>`;
     const r = await api("/posts/link-preview.php", "POST", { url });
-    // Ignore if the url in the box changed while we were fetching.
-    const still = findUrl(ta.value);
+    const still = findUrl(bodyText());
     if (!still || still.clean !== url) return;
     if (r.ok && r.data?.success) {
       linkPreview = r.data.data;
-      stripUrlFromBox(still.raw);   // live: pull the URL out of the textarea
       renderLinkCard(linkPreview);
     } else {
       linkPreview = null;
@@ -129,19 +116,20 @@ async function renderFeed() {
   };
 
   let linkTimer = null;
-  ta.addEventListener("input", () => {
+  editor.el.addEventListener("input", () => {
     clearTimeout(linkTimer);
     linkTimer = setTimeout(fetchLinkPreview, 600);
   });
 
   composer.querySelector("#comp-post").onclick = async () => {
-    const body = ta.value.trim();   // URL already stripped live; what you see is what posts
+    const html = editor.getHTML();
+    const plain = editor.getText();   // emptiness check ignores formatting tags
     const hasCard = !!(linkPreview && linkPreview.url);
-    if (!body && !attachedUrl && !hasCard) return;
-    if (!body && attachedUrl && !hasCard) { if (!confirm("Post this image without any text?")) return; }
+    if (!plain && !attachedUrl && !hasCard) return;
+    if (!plain && attachedUrl && !hasCard) { if (!confirm("Post this image without any text?")) return; }
 
     const btn = composer.querySelector("#comp-post"); btn.disabled = true; btn.textContent = "Posting…";
-    const payload = { body, visibility: composer.querySelector("#comp-vis").value, media_url: attachedUrl };
+    const payload = { body: html, visibility: composer.querySelector("#comp-vis").value, media_url: attachedUrl };
     if (hasCard) payload.meta = { link: linkPreview };
     await api("/posts/create.php", "POST", payload);
     renderFeed();
@@ -200,7 +188,8 @@ function renderPost(it) {
       </div>
       ${it.body ? `<div class="post-body" style="margin-top:12px">${esc(it.body).replace(/\n/g,"<br>")}</div>` : ""}`;
   } else {
-    contentHtml = it.body ? `<div class="post-body">${esc(it.body).replace(/\n/g, "<br>")}</div>` : "";
+    // Body is server-sanitized rich-text HTML (src/RichText.php), safe to render.
+    contentHtml = it.body ? `<div class="post-body rich-content">${it.body}</div>` : "";
   }
 
   // Link preview card (from meta.link), shown under the body.

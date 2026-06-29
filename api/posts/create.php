@@ -9,6 +9,7 @@
 require_once __DIR__ . '/../../src/Database.php';
 require_once __DIR__ . '/../../src/Response.php';
 require_once __DIR__ . '/../../src/Auth.php';
+require_once __DIR__ . '/../../src/RichText.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     Response::error('Method not allowed.', 405);
@@ -33,7 +34,13 @@ if ($userId !== null) {
 }
 
 $in   = Response::input();
-$body = trim($in['body'] ?? '');
+// Body arrives as rich-text HTML from the editor. Sanitize to a safe
+// whitelist (strips scripts/handlers/etc). Use the plain-text version for
+// the emptiness + length checks so formatting tags don't inflate length
+// or let an "empty" formatted post through.
+$rawBody = (string) ($in['body'] ?? '');
+$body    = RichText::clean($rawBody);
+$bodyPlain = RichText::toPlain($body);
 $mediaUrl = trim($in['media_url'] ?? '') ?: null;
 
 // Post type: 'text' by default. Whitelist known structured types so a
@@ -79,10 +86,10 @@ $meta = $metaArr ? json_encode($metaArr) : null;
 // A structured post (cert/job) carries its content in meta, so empty
 // body is fine there.
 $hasLink = isset($metaArr['link']) && is_array($metaArr['link']);
-if ($postType === 'text' && $body === '' && $mediaUrl === null && !$hasLink) {
+if ($postType === 'text' && $bodyPlain === '' && $mediaUrl === null && !$hasLink) {
     Response::error('A post needs text, an image, or a link.', 422);
 }
-if (mb_strlen($body) > 5000) {
+if (mb_strlen($bodyPlain) > 5000) {
     Response::error('Post is too long (5000 characters max).', 422);
 }
 

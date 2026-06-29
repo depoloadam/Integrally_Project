@@ -165,10 +165,14 @@ async function renderProfile() {
   }
 
   // sections
-  section(rightCol, "Experience", jobs.data?.data, j => `
+  section(rightCol, "Experience", jobs.data?.data, j => {
+    const companyDisplay = j.company_uuid
+      ? `<a href="#company/${esc(j.company_uuid)}" class="emp-link" onclick="event.stopPropagation()">${esc(j.company_name || "")}</a>`
+      : esc(j.company_name || "");
+    return `
     <div class="meta"><div class="t">${esc(j.title)}</div>
-    <div class="s">${esc(j.company_name || "")}${j.start_date ? " · " + j.start_date + (j.end_date ? " – " + j.end_date : " – Present") : ""}</div></div>`,
-    "jobs", addJob, j => j.id);
+    <div class="s">${companyDisplay}${j.start_date ? " · " + j.start_date + (j.end_date ? " – " + j.end_date : " – Present") : ""}</div></div>`;
+  }, "jobs", addJob, j => j.id);
 
   section(rightCol, "Education", edu.data?.data, e => `
     <div class="meta"><div class="t">${esc(e.degree || e.institution)}</div>
@@ -359,18 +363,85 @@ function addJob() {
   openModal(`
     <h3>Add experience</h3>
     <label>Title *</label><input id="j-title">
-    <label>Company</label><input id="j-company">
+    <label>Company</label>
+    <div class="emp-search">
+      <input id="j-company" autocomplete="off" placeholder="Type to search company accounts…">
+      <div class="emp-results" id="j-company-results"></div>
+      <div class="emp-linked" id="j-company-linked" style="display:none"></div>
+    </div>
     <div class="row"><div><label>Start date</label><input id="j-start" type="date"></div><div><label>End date</label><input id="j-end" type="date"></div></div>
+    <label class="jf-checkrow" style="margin-top:4px">
+      <input type="checkbox" id="j-current"> I currently work here
+    </label>
     <label>Description</label><textarea id="j-desc" rows="3"></textarea>
     <div class="in-modal-actions">
       <button class="in-btn ghost" id="j-none">No job history</button>
       <button class="in-btn primary" id="save-job">Add</button>
     </div>`);
+
+  // Live employer search: as the user types, look up company accounts that
+  // allow being listed. Selecting one links it (stores company_uuid).
+  let linkedCompany = null;   // { uuid, name } when a company account is chosen
+  const cInput = $("j-company");
+  const cResults = $("j-company-results");
+  const cLinked = $("j-company-linked");
+
+  const showLinked = () => {
+    if (linkedCompany) {
+      cLinked.innerHTML = `<span class="emp-linked-tag">🔗 Linked to ${esc(linkedCompany.name)}</span><button type="button" class="emp-unlink" title="Unlink">✕</button>`;
+      cLinked.style.display = "flex";
+      cLinked.querySelector(".emp-unlink").onclick = () => { linkedCompany = null; cLinked.style.display = "none"; cLinked.innerHTML = ""; };
+    } else {
+      cLinked.style.display = "none"; cLinked.innerHTML = "";
+    }
+  };
+
+  const doSearch = debounce(async () => {
+    const q = cInput.value.trim();
+    // Typing a new name unlinks any previous selection.
+    if (linkedCompany && q !== linkedCompany.name) { linkedCompany = null; showLinked(); }
+    if (q.length < 2) { cResults.style.display = "none"; cResults.innerHTML = ""; return; }
+    const r = await api("/company/search-employers.php?q=" + encodeURIComponent(q));
+    const list = (r.ok && r.data?.success) ? r.data.data.companies : [];
+    if (!list.length) { cResults.style.display = "none"; cResults.innerHTML = ""; return; }
+    cResults.innerHTML = list.map(c =>
+      `<button type="button" class="emp-result" data-uuid="${esc(c.uuid)}" data-name="${esc(c.name)}">
+        <span class="emp-result-logo">${c.logo ? `<img src="${esc(c.logo)}" alt="">` : esc((c.name||"?").charAt(0).toUpperCase())}</span>
+        <span><span class="emp-result-name">${esc(c.name)}</span>${c.industry ? `<span class="emp-result-ind">${esc(c.industry)}</span>` : ""}</span>
+      </button>`).join("");
+    cResults.style.display = "block";
+    cResults.querySelectorAll(".emp-result").forEach(btn => {
+      btn.onclick = () => {
+        linkedCompany = { uuid: btn.dataset.uuid, name: btn.dataset.name };
+        cInput.value = btn.dataset.name;
+        cResults.style.display = "none"; cResults.innerHTML = "";
+        showLinked();
+      };
+    });
+  }, 250);
+
+  cInput.addEventListener("input", doSearch);
+  document.addEventListener("click", (e) => { if (!cInput.contains(e.target) && !cResults.contains(e.target)) { cResults.style.display = "none"; } });
+
+  // "I currently work here" — clears/disables the end date.
+  const currentCb = $("j-current");
+  const endInput = $("j-end");
+  currentCb.onchange = () => {
+    if (currentCb.checked) { endInput.value = ""; endInput.disabled = true; endInput.style.opacity = ".5"; }
+    else { endInput.disabled = false; endInput.style.opacity = ""; }
+  };
+
   $("j-none").onclick = async () => { await api("/settings/set.php","POST",{key:"step_experience_done",value:"1"}); closeModal(); renderProfile(); };
   $("save-job").onclick = async () => {
     const title = $("j-title").value.trim(); if (!title) return;
     const company = $("j-company").value.trim();
-    await api("/profile/jobs/add.php","POST",{ title, company_name:company, start_date:$("j-start").value, end_date:$("j-end").value, description:$("j-desc").value.trim() });
+    await api("/profile/jobs/add.php","POST",{
+      title, company_name:company,
+      company_uuid: linkedCompany ? linkedCompany.uuid : null,
+      start_date:$("j-start").value,
+      end_date: currentCb.checked ? "" : $("j-end").value,   // current job -> no end date
+      description:$("j-desc").value.trim()
+    });
     closeModal(); offerShare(`💼 Excited to share a new role: ${title}${company ? " at " + company : ""}!`); renderProfile();
   };
 }

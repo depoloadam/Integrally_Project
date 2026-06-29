@@ -42,10 +42,29 @@ if ($uuid === '') {
 }
 
 $stmt = $pdo->prepare(
-    'SELECT id, title, company_name, company_id, start_date, end_date, description
-     FROM job_history
-     WHERE user_id = ?
-     ORDER BY (end_date IS NULL) DESC, end_date DESC, start_date DESC'
+    'SELECT jh.id, jh.title, jh.company_name, jh.company_id,
+            jh.start_date, jh.end_date, jh.description,
+            c.uuid AS company_uuid, c.name AS linked_company_name,
+            c.allow_employee_listing
+     FROM job_history jh
+     LEFT JOIN companies c ON c.id = jh.company_id AND c.is_active = 1
+     WHERE jh.user_id = ?
+     ORDER BY (jh.end_date IS NULL) DESC, jh.end_date DESC, jh.start_date DESC'
 );
 $stmt->execute([$userId]);
-Response::success($stmt->fetchAll());
+
+// Only expose the link if the company still allows being listed.
+$rows = array_map(function ($r) {
+    $linked = $r['company_id'] && $r['company_uuid'] && (int) $r['allow_employee_listing'] === 1;
+    return [
+        'id'           => (int) $r['id'],
+        'title'        => $r['title'],
+        'company_name' => $r['company_name'],
+        'start_date'   => $r['start_date'],
+        'end_date'     => $r['end_date'],
+        'description'  => $r['description'],
+        'company_uuid' => $linked ? $r['company_uuid'] : null,
+    ];
+}, $stmt->fetchAll());
+
+Response::success($rows);
