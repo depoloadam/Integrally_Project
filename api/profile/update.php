@@ -1,4 +1,5 @@
 <?php
+error_reporting(E_ALL); ini_set('display_errors', '1');
 
 // =====================================================================
 // FILE: api/profile/update.php
@@ -36,7 +37,7 @@ if (!empty($in['target_uuid'])) {
 }
 
 // Whitelist the fields a user may change here.
-$allowed = ['username', 'city', 'state', 'country'];
+$allowed = ['username', 'city', 'state', 'country', 'profile_pic'];
 $updates = [];
 $params  = [];
 
@@ -58,6 +59,13 @@ foreach ($allowed as $field) {
             }
             $updates[] = 'username = ?';
             $params[]  = $val;
+        } elseif ($field === 'profile_pic') {
+            // Accept a URL (from the upload endpoint) or empty to clear it.
+            if ($val !== '' && !preg_match('#^https?://#i', $val) && $val[0] !== '/') {
+                Response::error('profile_pic must be a URL.', 422);
+            }
+            $updates[] = 'profile_pic = ?';
+            $params[]  = ($val === '' ? null : $val);
         } else {
             $updates[] = "$field = ?";
             $params[]  = ($val === '' ? null : $val);

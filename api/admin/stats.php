@@ -32,6 +32,8 @@ Response::success([
     'total_users'      => $scalar("SELECT COUNT(*) AS c FROM users"),
     'total_companies'  => $scalar("SELECT COUNT(*) AS c FROM companies"),
     'total_posts'      => $scalar("SELECT COUNT(*) AS c FROM posts"),
+    'total_jobs'       => $scalar("SELECT COUNT(*) AS c FROM jobs"),
+    'open_jobs'        => $scalar("SELECT COUNT(*) AS c FROM jobs WHERE status = 'open'"),
     'active_users'     => $scalar("SELECT COUNT(*) AS c FROM users WHERE is_active = 1"),
     'inactive_users'   => $scalar("SELECT COUNT(*) AS c FROM users WHERE is_active = 0"),
     'new_users_7d'     => $scalar("SELECT COUNT(*) AS c FROM users WHERE created_at >= (NOW() - INTERVAL 7 DAY)"),

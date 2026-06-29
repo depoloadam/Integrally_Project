@@ -122,7 +122,7 @@ async function renderProfile() {
       <div class="in-phead-dropdown" id="phead-dropdown">
         <button data-pmenu="edit">Edit profile</button>
       </div>
-      <div class="in-avatar">${esc(initial)}</div>
+      <div class="in-avatar">${p.profile_pic ? `<img src="${esc(p.profile_pic)}" alt="">` : esc(initial)}</div>
       <div class="in-phead-info">
         <h1>@${esc(p.username || "")}</h1>
         <div class="loc">${esc(loc || "No location set")}</div>
@@ -320,8 +320,10 @@ function adminEditProfile(p, headline, uuid) {
 
 // ---- edit core (own profile) -----------------------------------------
 function editCore(p, headline) {
+  const avatarState = { avatarUrl: p.profile_pic || null };
   openModal(`
     <h3>Edit profile</h3>
+    <div id="f-avatar"></div>
     <label>Username</label><input id="f-username" value="${esc(p.username||"")}">
     <label>Headline</label><input id="f-headline" value="${esc(headline)}" placeholder="e.g. IT Automation Specialist">
     <div class="row">
@@ -333,9 +335,22 @@ function editCore(p, headline) {
       <button class="in-btn ghost" onclick="closeModal()">Cancel</button>
       <button class="in-btn primary" id="save-core">Save</button>
     </div>`);
+  mountAvatarPicker("f-avatar", avatarState, { shape: "circle", fallbackChar: p.username || "?" });
   $("save-core").onclick = async () => {
-    await api("/profile/update.php", "POST", { username:$("f-username").value.trim(), city:$("f-city").value.trim(), state:$("f-state").value.trim(), country:$("f-country").value.trim() });
+    const r = await api("/profile/update.php", "POST", {
+      username:$("f-username").value.trim(), city:$("f-city").value.trim(),
+      state:$("f-state").value.trim(), country:$("f-country").value.trim(),
+      profile_pic: avatarState.avatarUrl || "",
+    });
     await api("/profile/set-attribute.php", "POST", { key:"headline", value:$("f-headline").value.trim() });
+    // Keep the in-memory user in sync so the nav + composer update without
+    // needing a page refresh.
+    if (r.ok && r.data?.success && ME) {
+      ME = { ...ME, ...r.data.data };
+      if (typeof setNavAvatar === "function") {
+        setNavAvatar(ME.profile_pic, (ME.username || "?").charAt(0).toUpperCase());
+      }
+    }
     closeModal(); renderProfile();
   };
 }
@@ -637,7 +652,7 @@ async function renderPublicProfile(uuid) {
 
   const head = el(`
     <div class="in-phead">
-      <div class="in-avatar">${esc(initial)}</div>
+      <div class="in-avatar">${p.profile_pic ? `<img src="${esc(p.profile_pic)}" alt="">` : esc(initial)}</div>
       <div class="in-phead-info">
         <h1>@${esc(p.username || "")}</h1>
         <div class="loc">${esc(loc || "No location set")}</div>

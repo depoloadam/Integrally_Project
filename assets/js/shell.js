@@ -43,6 +43,67 @@ async function uploadImage(file) {
   } catch (e) { return null; }
 }
 
+// Avatar upload: hits the dedicated endpoint that center-crops + resizes
+// to a crisp 256px square (sharp on Retina, small on disk).
+async function uploadAvatar(file) {
+  const fd = new FormData();
+  fd.append("image", file);
+  try {
+    const res = await fetch(API_BASE + "/upload/avatar.php", { method:"POST", credentials:"include", body:fd });
+    const data = await res.json();
+    return (res.ok && data.success) ? data.data : null;
+  } catch (e) { return null; }
+}
+
+// Reusable avatar uploader. Inserts an avatar preview + Upload/Remove
+// controls into `mountId`, and tracks the chosen URL on a state object.
+// `state.avatarUrl` holds the current value (read it when saving).
+// `shape` is "circle" (users) or "square" (companies).
+function mountAvatarPicker(mountId, state, opts = {}) {
+  const shape = opts.shape === "square" ? "square" : "circle";
+  const fallback = (opts.fallbackChar || "?").toString().charAt(0).toUpperCase();
+  const host = $(mountId);
+  if (!host) return;
+
+  const render = () => {
+    const url = state.avatarUrl;
+    host.innerHTML = `
+      <div class="avatar-picker">
+        <div class="avatar-pick-preview ${shape}">${url ? `<img src="${esc(url)}" alt="">` : esc(fallback)}</div>
+        <div class="avatar-pick-controls">
+          <button type="button" class="in-btn ghost" id="${mountId}-btn" style="flex:none;padding:8px 14px">${url ? "Change photo" : "Upload photo"}</button>
+          ${url ? `<button type="button" class="in-btn ghost" id="${mountId}-rm" style="flex:none;padding:8px 14px">Remove</button>` : ""}
+          <div class="avatar-pick-msg" id="${mountId}-msg"></div>
+        </div>
+        <input type="file" id="${mountId}-file" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none">
+      </div>`;
+
+    $(`${mountId}-btn`).onclick = () => $(`${mountId}-file`).click();
+    const rm = $(`${mountId}-rm`);
+    if (rm) rm.onclick = () => { state.avatarUrl = null; render(); };
+
+    $(`${mountId}-file`).onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const msg = $(`${mountId}-msg`);
+      msg.textContent = "Uploading…"; msg.className = "avatar-pick-msg";
+      const up = await uploadAvatar(file);
+      if (up && up.url) { state.avatarUrl = up.url; render(); }
+      else { msg.textContent = "Upload failed. Use a JPG/PNG/GIF/WEBP under 5 MB."; msg.className = "avatar-pick-msg err"; }
+    };
+  };
+  render();
+}
+window.mountAvatarPicker = mountAvatarPicker;
+
+// Set the small nav avatar to an image (if url) or fall back to initials.
+function setNavAvatar(url, initial) {
+  const ava = $("nav-ava");
+  if (!ava) return;
+  if (url) { ava.innerHTML = `<img src="${esc(url)}" alt="">`; }
+  else { ava.textContent = initial; }
+}
+
 // ---- auth guard + boot -----------------------------------------------
 async function boot() {
   // One identity at a time. Load whichever session exists.
@@ -56,7 +117,7 @@ async function boot() {
     updateCompanyNav();                     // removes/hides any company tab
     const initial = (ME.username || "?").charAt(0).toUpperCase();
     $("nav-user").textContent = "@" + ME.username;
-    $("nav-ava").textContent = initial;
+    setNavAvatar(ME.profile_pic, initial);
     $("profile-menu").style.display = "";
     $("auth-menu").style.display = "none";
     document.querySelectorAll("[data-nav]").forEach(b => b.style.display = "");
@@ -93,7 +154,7 @@ function setupCompanyIdentityNav() {
   menu.style.display = "";
   const initial = (CO.name || "?").charAt(0).toUpperCase();
   $("nav-user").textContent = CO.name;
-  $("nav-ava").textContent = initial;
+  setNavAvatar(CO.logo, initial);
   // Rewire the dropdown for company context.
   const dd = $("profile-dropdown");
   dd.innerHTML = `
@@ -184,6 +245,7 @@ function showTab(name) {
   if (name === "feed") renderFeed();
   else if (name === "admin") renderAdmin();
   else if (name === "jobs") renderJobs();
+  else if (name === "connect") renderConnect();
   else if (name === "company-dashboard") renderCompanyDashboard();
   else renderProfile();
 }
@@ -200,6 +262,12 @@ if (brandHome) {
   const goHome = (e) => {
     if (e) e.preventDefault();
     if (!ME) {
+      // Logged in as a COMPANY (no user session): home is the dashboard.
+      if (CO) {
+        if (location.hash === "#company-dashboard") renderCompanyDashboard();
+        else location.hash = "company-dashboard";
+        return;
+      }
       // Signed out: feed isn't available — show the welcome view.
       if (location.hash) location.hash = "";   // fires hashchange -> guarded router
       else renderSignedOut();                   // already at root -> re-render directly
@@ -239,6 +307,10 @@ function routeFromHash() {
   }
   if (raw === "jobs") {
     showTab("jobs");
+    return;
+  }
+  if (raw === "connect") {
+    showTab("connect");
     return;
   }
   if (raw === "company-dashboard") {

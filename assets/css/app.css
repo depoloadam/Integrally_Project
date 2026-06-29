@@ -436,7 +436,10 @@ body { margin:0; font-family:var(--in-font); background:var(--in-bg); color:var(
 .job-row:first-child { border-top:none; }
 .job-row:hover { background:var(--in-bg); margin:0 -12px; padding-left:12px; padding-right:12px; border-radius:8px; }
 .job-logo { width:46px; height:46px; border-radius:11px; flex:none; display:grid; place-items:center; font-weight:800; font-size:18px; color:#fff; background:linear-gradient(135deg,#0e3b4a,#0a8a8a); overflow:hidden; }
-.job-logo img { width:100%; height:100%; object-fit:cover; }
+.job-logo img { grid-area:1 / 1; place-self:stretch; width:100%; height:100%; object-fit:cover; }
+/* When showing an actual logo image, use a white backdrop so any
+   transparent corners (circular logos) read as clean white, not dark. */
+.job-logo:has(img) { background:#fff; }
 .job-logo.lg { width:64px; height:64px; border-radius:14px; font-size:24px; }
 .job-main { flex:1; min-width:0; }
 .job-title { font-weight:700; font-size:15.5px; color:var(--in-ink); }
@@ -456,6 +459,51 @@ body { margin:0; font-family:var(--in-font); background:var(--in-bg); color:var(
 textarea.jf-input { resize:vertical; }
 .jf-row { display:flex; gap:12px; }
 .jf-row > div { flex:1; }
+
+/* ---------- connect page ---------- */
+.connect-row { display:flex; align-items:center; gap:14px; padding:13px 0; border-top:1px solid var(--in-line); cursor:pointer; }
+.connect-row:first-child { border-top:none; }
+.connect-row:hover { background:var(--in-bg); margin:0 -12px; padding-left:12px; padding-right:12px; border-radius:8px; }
+.connect-ava { width:46px; height:46px; border-radius:50%; flex:none; display:grid; place-items:center; font-weight:700; font-size:18px; color:#fff; background:linear-gradient(135deg,var(--in-accent),var(--in-teal-bright)); overflow:hidden; }
+.connect-ava.company { border-radius:11px; background:linear-gradient(135deg,#0e3b4a,#0a8a8a); }
+.connect-ava img { width:100%; height:100%; object-fit:cover; }
+.connect-main { flex:1; min-width:0; }
+.connect-title { font-weight:600; font-size:15px; color:var(--in-ink); }
+.connect-sub { font-size:13px; color:var(--in-muted); margin-top:2px; }
+.connect-follow { font-size:13.5px !important; }
+
+/* ---------- avatars: image fill for any avatar container ---------- */
+/* Containers use display:grid + place-items:center to center the
+   fallback initial. That centering also shrinks an <img> to its content
+   box, so we force images to span the grid cell and fill it. */
+.in-avatar img, .post-avatar img, .in-profile-ava img, .comp-avatar img,
+.connect-ava img, .job-logo img, .avatar-pick-preview img {
+  grid-area:1 / 1; place-self:stretch;
+  width:100%; height:100%; object-fit:cover; display:block;
+}
+.in-avatar, .post-avatar, .in-profile-ava, .comp-avatar { overflow:hidden; }
+/* White backdrop behind any avatar showing a real image, so transparent
+   logo corners read as clean white instead of the colored gradient.
+   Specificity (0,2,0) is set high enough to beat two-class variants like
+   .post-avatar.company and .connect-ava.company. */
+.in-avatar:has(img),
+.post-avatar:has(img), .post-avatar.company:has(img),
+.in-profile-ava:has(img), .comp-avatar:has(img),
+.connect-ava:has(img), .connect-ava.company:has(img) { background:#fff; }
+
+/* avatar picker (profile editors) */
+.avatar-picker { display:flex; align-items:center; gap:16px; margin:4px 0 18px; }
+.avatar-pick-preview { width:72px; height:72px; flex:none; display:grid; place-items:center; font-weight:700; font-size:28px; color:#fff; background:linear-gradient(135deg,var(--in-accent),var(--in-teal-bright)); overflow:hidden; }
+.avatar-pick-preview.circle { border-radius:50%; }
+.avatar-pick-preview.square { border-radius:14px; background:linear-gradient(135deg,#0e3b4a,#0a8a8a); }
+/* White backdrop when a real image is shown — specificity must beat
+   .avatar-pick-preview.square above, so include .square / .circle here. */
+.avatar-pick-preview.square:has(img),
+.avatar-pick-preview.circle:has(img) { background:#fff; }
+.avatar-pick-preview img { width:100%; height:100%; object-fit:cover; display:block; }
+.avatar-pick-controls { display:flex; flex-direction:column; gap:8px; align-items:flex-start; }
+.avatar-pick-msg { font-size:12px; color:var(--in-muted); }
+.avatar-pick-msg.err { color:var(--in-error); }
 
 /* ---------- responsive ---------- */
 @media (max-width:760px) {

@@ -15,7 +15,7 @@ async function renderFeed() {
   const composer = el(`
     <div class="in-card2 in-composer">
       <div class="comp-top">
-        <div class="comp-avatar">${esc((ME.username||"?").charAt(0).toUpperCase())}</div>
+        <div class="comp-avatar">${ME.profile_pic ? `<img src="${esc(ME.profile_pic)}" alt="">` : esc((ME.username||"?").charAt(0).toUpperCase())}</div>
         <textarea id="comp-body" placeholder="Share an update, @${esc(ME.username)}…" rows="2"></textarea>
       </div>
       <div id="comp-preview" class="comp-preview" style="display:none">
@@ -227,7 +227,7 @@ function renderPost(it) {
   const card = el(`
     <div class="in-post-item">
       <div class="post-head">
-        <div class="${avaClass}" ${goProfile}>${esc(initial)}</div>
+        <div class="${avaClass}" ${goProfile}>${a.avatar ? `<img src="${esc(a.avatar)}" alt="">` : esc(initial)}</div>
         <div>
           <div class="${nameClass}" ${goProfile}>${esc(a.name || "Unknown")}${isCompany ? ' <span class="post-tag">Company</span>' : ""}</div>
           <div class="post-when">${esc(when)}${it.reason === "self" ? " · You" : ""}</div>

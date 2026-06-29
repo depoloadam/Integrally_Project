@@ -306,9 +306,11 @@ async function openJobEditor(uuid = null) {
 
 // ---- company profile editor -----------------------------------------
 function openCompanyEdit() {
+  const avatarState = { avatarUrl: CO.logo || null };
   openModal(`
     <h3>Edit company profile</h3>
     <div class="in-auth-msg" id="coe-msg"></div>
+    <div id="coe-avatar"></div>
     <label>Company name</label><input id="coe-name" value="${esc(CO.name || "")}">
     <label>Description</label><textarea id="coe-desc" rows="4">${esc(CO.description || "")}</textarea>
     <div class="row">
@@ -324,6 +326,7 @@ function openCompanyEdit() {
       <button class="in-btn primary" id="coe-save">Save</button>
     </div>
   `);
+  mountAvatarPicker("coe-avatar", avatarState, { shape: "square", fallbackChar: CO.name || "?" });
   $("coe-save").onclick = async () => {
     const msg = $("coe-msg"); msg.className = "in-auth-msg";
     const payload = {
@@ -333,11 +336,21 @@ function openCompanyEdit() {
       website: $("coe-website").value.trim(),
       city: $("coe-city").value.trim(),
       state: $("coe-state").value.trim(),
+      logo: avatarState.avatarUrl || "",
     };
     if (!payload.name) { msg.textContent = "Company name is required."; msg.className = "in-auth-msg show"; return; }
     const btn = $("coe-save"); btn.disabled = true; btn.textContent = "Saving…";
     const r = await api("/company/update.php", "POST", payload);
-    if (r.ok && r.data?.success) { CO = { ...CO, ...r.data.data }; closeModal(); updateCompanyNav(); renderCompanyDashboard(); }
+    if (r.ok && r.data?.success) {
+      CO = { ...CO, ...r.data.data };
+      closeModal();
+      updateCompanyNav();
+      // Refresh the top-right nav avatar with the new logo (no reload needed).
+      if (typeof setNavAvatar === "function") {
+        setNavAvatar(CO.logo, (CO.name || "?").charAt(0).toUpperCase());
+      }
+      renderCompanyDashboard();
+    }
     else { msg.textContent = r.data?.error || "Could not save."; msg.className = "in-auth-msg show"; btn.disabled = false; btn.textContent = "Save"; }
   };
 }
@@ -360,10 +373,21 @@ async function renderCompanyProfile(uuid) {
   const jobs = (jr.ok && jr.data?.success) ? jr.data.data.jobs : [];
   const logoChar = (c.name || "?").charAt(0).toUpperCase();
 
+  // Follow state + counts. Only logged-in USERS can follow companies;
+  // a company viewing any profile, or a signed-out visitor, sees no button.
+  const canFollow = !!ME && !CO;
+  let isFollowing = false, followerCount = 0;
+  const [fstat, fcounts] = await Promise.all([
+    canFollow ? api("/follow/status.php?type=company&uuid=" + encodeURIComponent(uuid)) : Promise.resolve(null),
+    api("/follow/counts.php?type=company&uuid=" + encodeURIComponent(uuid)),
+  ]);
+  if (fstat && fstat.ok && fstat.data?.success) isFollowing = !!fstat.data.data.following;
+  if (fcounts && fcounts.ok && fcounts.data?.success) followerCount = fcounts.data.data.followers ?? 0;
+
   view.innerHTML = "";
   const wrap = el(`<div class="in-admin"></div>`);
 
-  wrap.appendChild(el(`
+  const head = el(`
     <div class="in-card2">
       <div class="job-detail-head">
         <div class="job-logo lg">${c.logo ? `<img src="${esc(c.logo)}" alt="">` : esc(logoChar)}</div>
@@ -371,10 +395,35 @@ async function renderCompanyProfile(uuid) {
           <h1 style="margin:0 0 4px;font-size:24px;letter-spacing:-0.5px">${esc(c.name)}${c.is_verified ? ' <span class="post-tag" style="vertical-align:middle">Verified</span>' : ""}</h1>
           <div class="job-company" style="font-size:14.5px">${esc(c.industry || "")}${c.city ? " · " + esc(c.city) + (c.state ? ", " + esc(c.state) : "") : ""}</div>
           ${c.website ? `<a href="${esc(c.website)}" target="_blank" rel="noopener noreferrer" style="font-size:13.5px;color:var(--in-accent);text-decoration:none">${esc(c.website)} ↗</a>` : ""}
+          <div class="in-followcount">${followerCount} follower${followerCount === 1 ? "" : "s"}</div>
         </div>
+        ${canFollow ? `<button class="in-follow-btn ${isFollowing ? "following" : ""}" id="cp-follow" style="width:auto;flex:none;margin-top:0;padding:9px 22px;align-self:flex-start">${isFollowing ? "Following" : "Follow"}</button>` : ""}
       </div>
       ${c.description ? `<div class="job-desc" style="margin-top:14px">${esc(c.description).replace(/\n/g, "<br>")}</div>` : ""}
-    </div>`));
+    </div>`);
+  wrap.appendChild(head);
+
+  const followBtn = head.querySelector("#cp-follow");
+  if (followBtn) {
+    followBtn.onclick = async () => {
+      const following = followBtn.classList.contains("following");
+      followBtn.disabled = true;
+      const endpoint = following ? "/follow/unfollow.php" : "/follow/follow.php";
+      const r = await api(endpoint, "POST", { target_type: "company", target_uuid: uuid });
+      if (r.ok && r.data?.success) {
+        followBtn.classList.toggle("following");
+        const nowFollowing = followBtn.classList.contains("following");
+        followBtn.textContent = nowFollowing ? "Following" : "Follow";
+        // Update the follower count live.
+        const cnt = head.querySelector(".in-followcount");
+        const n = (parseInt(cnt.textContent, 10) || 0) + (nowFollowing ? 1 : -1);
+        cnt.textContent = `${n} follower${n === 1 ? "" : "s"}`;
+      } else {
+        alert(r.data?.error || "Could not update follow status.");
+      }
+      followBtn.disabled = false;
+    };
+  }
 
   const jobsCard = el(`<div class="in-card2"><h2 style="text-transform:none;font-size:18px">Open positions</h2><div id="cp-jobs"></div></div>`);
   wrap.appendChild(jobsCard);

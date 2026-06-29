@@ -19,7 +19,7 @@ $companyId = Auth::requireCompany();
 $in        = Response::input();
 $pdo       = Database::conn();
 
-$allowed = ['name', 'industry', 'city', 'state', 'country', 'website', 'description'];
+$allowed = ['name', 'industry', 'city', 'state', 'country', 'website', 'description', 'logo'];
 $sets = []; $params = [];
 foreach ($allowed as $f) {
     if (array_key_exists($f, $in)) {
@@ -29,6 +29,11 @@ foreach ($allowed as $f) {
                 Response::error('Company name must be 1–150 characters.', 422);
             }
             $sets[] = 'name = ?'; $params[] = $v;
+        } elseif ($f === 'logo') {
+            if ($v !== '' && !preg_match('#^https?://#i', $v) && $v[0] !== '/') {
+                Response::error('logo must be a URL.', 422);
+            }
+            $sets[] = 'logo = ?'; $params[] = ($v === '' ? null : $v);
         } else {
             $sets[] = "$f = ?"; $params[] = ($v === '' ? null : $v);
         }

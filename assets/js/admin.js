@@ -61,6 +61,109 @@ async function renderAdmin() {
   };
 
   loadAdminUsers();
+
+  // ---- job management card -----------------------------------------
+  const jobsCard = el(`
+    <div class="in-card2">
+      <h2>Job Management</h2>
+      <div class="in-admin-toolbar">
+        <input type="text" id="admin-job-search" placeholder="Search job title or company…">
+        <select id="admin-job-status">
+          <option value="">All statuses</option>
+          <option value="open">Open</option>
+          <option value="draft">Draft</option>
+          <option value="closed">Closed</option>
+        </select>
+      </div>
+      <div class="in-set-msg" id="admin-job-msg"></div>
+      <div id="admin-job-table"></div>
+      <div class="in-admin-pager" id="admin-job-pager"></div>
+    </div>`);
+  wrap.appendChild(jobsCard);
+
+  $("admin-job-search").addEventListener("input", debounce(() => {
+    ADMIN_JOBS.q = $("admin-job-search").value.trim();
+    ADMIN_JOBS.page = 1;
+    loadAdminJobs();
+  }, 350));
+  $("admin-job-status").onchange = () => {
+    ADMIN_JOBS.status = $("admin-job-status").value;
+    ADMIN_JOBS.page = 1;
+    loadAdminJobs();
+  };
+
+  loadAdminJobs();
+}
+
+let ADMIN_JOBS = { q: "", status: "", page: 1, limit: 25 };
+
+const ADMIN_EMP = {
+  full_time: "Full-time", part_time: "Part-time", contract: "Contract",
+  internship: "Internship", temporary: "Temporary",
+};
+
+async function loadAdminJobs() {
+  const tableBox = $("admin-job-table");
+  const pager    = $("admin-job-pager");
+  const msg      = $("admin-job-msg");
+  msg.className = "in-set-msg"; msg.textContent = "";
+  tableBox.innerHTML = `<div class="in-loading">Loading jobs…</div>`;
+
+  const params = new URLSearchParams({ page: ADMIN_JOBS.page, limit: ADMIN_JOBS.limit });
+  if (ADMIN_JOBS.q) params.set("q", ADMIN_JOBS.q);
+  if (ADMIN_JOBS.status) params.set("status", ADMIN_JOBS.status);
+
+  const r = await api("/admin/jobs.php?" + params.toString());
+  if (!r.ok || !r.data?.success) { tableBox.innerHTML = `<div class="in-empty">Could not load jobs.</div>`; pager.innerHTML = ""; return; }
+
+  const { jobs, total, page, limit } = r.data.data;
+  if (!jobs.length) { tableBox.innerHTML = `<div class="in-empty">No jobs match.</div>`; pager.innerHTML = ""; return; }
+
+  tableBox.innerHTML = "";
+  const table = el(`
+    <table class="in-admin-table">
+      <thead><tr><th>Job</th><th>Company</th><th>Type</th><th>Status</th><th>Posted</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>`);
+  const tbody = table.querySelector("tbody");
+
+  jobs.forEach(j => {
+    const type = j.employment_type ? (ADMIN_EMP[j.employment_type] || j.employment_type) : "—";
+    const posted = (j.created_at || "").slice(0, 10);
+    const statusBadge = j.status === "open"
+      ? `<span class="in-admin-badge ok">Open</span>`
+      : `<span class="in-admin-badge off">${esc(j.status)}</span>`;
+
+    const row = el(`
+      <tr>
+        <td><a href="#job/${esc(j.uuid)}" class="in-admin-username" style="text-decoration:none">${esc(j.title)}</a><div class="in-admin-name">${esc(j.location || "")}</div></td>
+        <td><a href="#company/${esc(j.company_uuid)}" style="color:var(--in-accent);text-decoration:none">${esc(j.company_name)}</a></td>
+        <td>${esc(type)}</td>
+        <td>${statusBadge}</td>
+        <td>${esc(posted)}</td>
+        <td><button class="del" data-del title="Delete">✕</button></td>
+      </tr>`);
+    row.querySelector("[data-del]").onclick = async () => {
+      if (!confirm(`Delete "${j.title}" by ${j.company_name}? This can't be undone.`)) return;
+      const res = await api("/admin/delete-job.php", "POST", { uuid: j.uuid });
+      if (res.ok && res.data?.success) { msg.className = "in-set-msg ok"; msg.textContent = `Deleted "${j.title}".`; loadAdminJobs(); }
+      else { msg.className = "in-set-msg err"; msg.textContent = res.data?.error || "Could not delete the job."; }
+    };
+    tbody.appendChild(row);
+  });
+
+  tableBox.appendChild(table);
+
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  pager.innerHTML = "";
+  if (totalPages > 1) {
+    const prev = el(`<button class="in-btn ghost" style="flex:none;padding:7px 14px" ${page <= 1 ? "disabled" : ""}>‹ Prev</button>`);
+    const info = el(`<span class="in-admin-pageinfo">Page ${page} of ${totalPages} · ${total} jobs</span>`);
+    const next = el(`<button class="in-btn ghost" style="flex:none;padding:7px 14px" ${page >= totalPages ? "disabled" : ""}>Next ›</button>`);
+    prev.onclick = () => { ADMIN_JOBS.page = Math.max(1, page - 1); loadAdminJobs(); };
+    next.onclick = () => { ADMIN_JOBS.page = Math.min(totalPages, page + 1); loadAdminJobs(); };
+    pager.append(prev, info, next);
+  }
 }
 
 async function loadAdminStats(box) {
@@ -76,6 +179,7 @@ async function loadAdminStats(box) {
       <div class="in-admin-stat"><div class="in-admin-stat-num">${s.total_users}</div><div class="in-admin-stat-label">Total users</div></div>
       <div class="in-admin-stat"><div class="in-admin-stat-num">${s.total_companies}</div><div class="in-admin-stat-label">Companies</div></div>
       <div class="in-admin-stat"><div class="in-admin-stat-num">${s.total_posts}</div><div class="in-admin-stat-label">Posts</div></div>
+      <div class="in-admin-stat"><div class="in-admin-stat-num">${s.open_jobs ?? 0}</div><div class="in-admin-stat-label">Open jobs</div></div>
       <div class="in-admin-stat"><div class="in-admin-stat-num">${s.new_users_7d}</div><div class="in-admin-stat-label">New (7d)</div></div>
       <div class="in-admin-stat"><div class="in-admin-stat-num">${s.role_counts.admin}</div><div class="in-admin-stat-label">Admins</div></div>
       <div class="in-admin-stat"><div class="in-admin-stat-num">${s.role_counts.moderator}</div><div class="in-admin-stat-label">Moderators</div></div>
