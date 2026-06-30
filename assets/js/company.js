@@ -179,6 +179,17 @@ async function renderCompanyDashboard() {
   loadCompanyJobs();
 }
 
+// ---- company feed page (#company-feed) ------------------------------
+async function renderCompanyFeed() {
+  document.querySelectorAll("[data-nav]").forEach(x => x.classList.toggle("active", x.dataset.nav === "company-feed"));
+  const view = $("view");
+  if (!CO) { view.innerHTML = `<div class="in-card2"><div class="in-empty">Company sign-in required.</div></div>`; return; }
+  view.innerHTML = "";
+  const wrap = el(`<div class="in-admin"></div>`);
+  view.appendChild(wrap);
+  renderCompanyFeedInto(wrap);
+}
+
 // ---- company "who lists us" page (#company-employees) ---------------
 let CO_EMP_SORT = "current";
 
@@ -575,4 +586,29 @@ async function renderCompanyProfile(uuid) {
   }
 
   view.appendChild(wrap);
+
+  // Posts by this company (public profile). Wrapped so a rendering error
+  // can't take down the rest of the profile; the cause is logged.
+  try {
+    const postsCard = el(`<div class="in-card2"><h2 style="text-transform:none;font-size:18px">Posts</h2><div id="cp-posts"><div class="in-loading">Loading…</div></div></div>`);
+    wrap.appendChild(postsCard);
+    const pr = await api("/posts/personal.php?type=company&uuid=" + encodeURIComponent(uuid));
+    const pdata = pr.data?.data || {};
+    const posts = pdata.posts || [];
+    const author = pdata.author || { type: "company", uuid, name: c.name, avatar: c.logo };
+    const pbox = postsCard.querySelector("#cp-posts");
+    pbox.innerHTML = "";
+    if (!posts.length) {
+      pbox.appendChild(el(`<div class="in-empty">No posts yet.</div>`));
+    } else {
+      const listEl = el(`<div class="in-post-list" style="padding:0"></div>`);
+      posts.forEach(p => {
+        try { listEl.appendChild(renderPost({ ...p, post_id: p.post_id ?? p.id, author })); }
+        catch (err) { console.error("renderPost failed for company post", p, err); }
+      });
+      pbox.appendChild(listEl);
+    }
+  } catch (err) {
+    console.error("Company profile posts section failed:", err);
+  }
 }

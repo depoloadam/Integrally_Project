@@ -290,6 +290,9 @@ async function boot() {
     $("profile-menu").style.display = "";
     $("auth-menu").style.display = "none";
     document.querySelectorAll("[data-nav]").forEach(b => b.style.display = "");
+    // The company-only Feed button stays hidden for users (they have their own).
+    const coFeedBtn = document.querySelector('[data-nav="company-feed"]');
+    if (coFeedBtn) coFeedBtn.style.display = "none";
     const adminBtn = document.querySelector('[data-nav="admin"]');
     if (adminBtn) adminBtn.style.display = (ME.role === "admin") ? "" : "none";
     routeFromHash();
@@ -301,7 +304,7 @@ async function boot() {
     // Company sees: Jobs + their Company dashboard only.
     document.querySelectorAll("[data-nav]").forEach(b => {
       const n = b.dataset.nav;
-      b.style.display = (n === "jobs" || n === "company-dashboard") ? "" : "none";
+      b.style.display = (n === "company-feed" || n === "jobs" || n === "company-dashboard") ? "" : "none";
     });
     updateCompanyNav();
     const raw = location.hash.replace(/^#/, "");
@@ -416,6 +419,7 @@ function showTab(name) {
   else if (name === "jobs") renderJobs();
   else if (name === "connect") renderConnect();
   else if (name === "company-dashboard") renderCompanyDashboard();
+  else if (name === "company-feed") renderCompanyFeed();
   else if (name === "company-employees") renderCompanyEmployees();
   else renderProfile();
 }
@@ -489,6 +493,10 @@ function routeFromHash() {
   }
   if (raw === "company-employees") {
     showTab("company-employees");
+    return;
+  }
+  if (raw === "company-feed") {
+    showTab("company-feed");
     return;
   }
   if (raw.startsWith("job/")) {

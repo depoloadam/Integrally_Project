@@ -299,6 +299,8 @@ body { margin:0; font-family:var(--in-font); background:var(--in-bg); color:var(
 /* clickable feed authors */
 .post-name.linkable, .post-avatar.linkable { cursor:pointer; }
 .post-name.linkable:hover { color:var(--in-accent); text-decoration:underline; }
+/* keep the inline "Company" badge from inheriting the name's hover underline */
+.post-name .post-tag { text-decoration:none; display:inline-block; }
 .post-avatar.linkable:hover { filter:brightness(1.08); }
 
 /* modal */
@@ -560,6 +562,10 @@ textarea.jf-input { resize:vertical; }
 .emp-summary { display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
 .emp-pill { font-size:12.5px; font-weight:600; color:var(--in-ink-soft); background:var(--in-bg); border:1px solid var(--in-line); border-radius:20px; padding:4px 12px; }
 .emp-pill.ok { color:var(--in-teal-bright); border-color:var(--in-teal-bright); }
+
+/* ---------- company dashboard feed ---------- */
+.co-feed-section { margin-top:8px; }
+.co-feed-h { font-size:15px; text-transform:uppercase; letter-spacing:0.6px; color:var(--in-ink-soft); margin:0 0 14px; }
 
 /* ---------- responsive ---------- */
 @media (max-width:760px) {

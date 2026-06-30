@@ -11,11 +11,29 @@ async function renderFeed() {
   const view = $("view");
   view.innerHTML = "";
 
-  // ---- composer ----
+  // ---- composer (user identity) ----
+  buildComposer({
+    parent: view,
+    avatarHTML: ME.profile_pic ? `<img src="${esc(ME.profile_pic)}" alt="">` : esc((ME.username || "?").charAt(0).toUpperCase()),
+    placeholder: `Share an update, @${ME.username}…`,
+    onPosted: renderFeed,
+  });
+
+  // ---- tabs + post list ----
+  await renderFeedList(view);
+}
+
+// Builds a post composer (rich editor + image + link preview + visibility).
+// Identity-agnostic: works for a user OR a company session — the backend
+// attributes the post to whichever session is active. opts:
+//   avatarHTML  — inner HTML for the avatar circle
+//   placeholder — editor placeholder text
+//   onPosted    — callback after a successful post
+function buildComposer(opts) {
   const composer = el(`
     <div class="in-card2 in-composer">
       <div class="comp-top">
-        <div class="comp-avatar">${ME.profile_pic ? `<img src="${esc(ME.profile_pic)}" alt="">` : esc((ME.username||"?").charAt(0).toUpperCase())}</div>
+        <div class="comp-avatar">${opts.avatarHTML}</div>
         <div id="comp-editor" style="flex:1;min-width:0"></div>
       </div>
       <div id="comp-preview" class="comp-preview" style="display:none">
@@ -33,9 +51,12 @@ async function renderFeed() {
         <button class="in-btn primary" id="comp-post" style="flex:none;padding:9px 18px">Post</button>
       </div>
     </div>`);
-  view.appendChild(composer);
-  const editor = mountRichEditor("comp-editor", { placeholder: `Share an update, @${ME.username}…` });
-  // Text accessor for link detection (reads the editor's plain text).
+
+  // The editor mounts by element id, so the composer MUST be in the DOM
+  // before mounting. Append to the provided parent first.
+  if (opts.parent) opts.parent.appendChild(composer);
+
+  const editor = mountRichEditor("comp-editor", { placeholder: opts.placeholder });
   const bodyText = () => editor.getText();
 
   let attachedUrl = null;
@@ -57,11 +78,9 @@ async function renderFeed() {
     else { alert("Image upload failed. Please try another file."); attachedUrl = null; fileInput.value = ""; preview.style.display = "none"; previewImg.src = ""; }
   };
   // ---- link preview ----
-  // Detect the first URL in the body, fetch a preview (debounced), and
-  // show a dismissible card. The confirmed preview is sent on post.
-  let linkPreview   = null;   // the preview object to attach on post
-  let lastLinkUrl   = null;   // url we last fetched, to avoid refetching
-  let dismissedUrls = new Set();  // urls the user explicitly removed
+  let linkPreview   = null;
+  let lastLinkUrl   = null;
+  let dismissedUrls = new Set();
   const linkBox = composer.querySelector("#comp-link");
 
   const findUrl = (text) => {
@@ -123,7 +142,7 @@ async function renderFeed() {
 
   composer.querySelector("#comp-post").onclick = async () => {
     const html = editor.getHTML();
-    const plain = editor.getText();   // emptiness check ignores formatting tags
+    const plain = editor.getText();
     const hasCard = !!(linkPreview && linkPreview.url);
     if (!plain && !attachedUrl && !hasCard) return;
     if (!plain && attachedUrl && !hasCard) { if (!confirm("Post this image without any text?")) return; }
@@ -132,9 +151,13 @@ async function renderFeed() {
     const payload = { body: html, visibility: composer.querySelector("#comp-vis").value, media_url: attachedUrl };
     if (hasCard) payload.meta = { link: linkPreview };
     await api("/posts/create.php", "POST", payload);
-    renderFeed();
+    if (opts.onPosted) opts.onPosted();
   };
 
+  return composer;
+}
+
+async function renderFeedList(view) {
   // ---- sub-tabs ----
   const tabs = el(`
     <div class="in-feedtabs">
@@ -163,14 +186,67 @@ async function renderFeed() {
   list.appendChild(container);
 }
 
+// =====================================================================
+// Company feed (used on the company dashboard). A company can post,
+// browse others' public posts (Explore), and see its own posts.
+// Companies have no personalised "Following" feed (feed_items is keyed by
+// user), so their tabs are Explore + Your posts.
+// =====================================================================
+let CO_FEED_TAB = "explore";   // 'explore' | 'mine'
+
+async function renderCompanyFeedInto(view) {
+  if (!CO) { view.appendChild(el(`<div class="in-card2"><div class="in-empty">Company sign-in required.</div></div>`)); return; }
+
+  // Composer (company identity).
+  buildComposer({
+    parent: view,
+    avatarHTML: CO.logo ? `<img src="${esc(CO.logo)}" alt="">` : esc((CO.name || "?").charAt(0).toUpperCase()),
+    placeholder: `Share an update from ${CO.name}…`,
+    onPosted: () => { CO_FEED_TAB = "mine"; renderCompanyFeed(); },
+  });
+
+  // Tabs.
+  const tabs = el(`
+    <div class="in-feedtabs">
+      <button data-cftab="explore" class="${CO_FEED_TAB==="explore"?"active":""}">Explore</button>
+      <button data-cftab="mine" class="${CO_FEED_TAB==="mine"?"active":""}">Your posts</button>
+    </div>`);
+  view.appendChild(tabs);
+  tabs.querySelectorAll("[data-cftab]").forEach(b => b.onclick = () => { CO_FEED_TAB = b.dataset.cftab; renderCompanyFeed(); });
+
+  // List.
+  const list = el(`<div></div>`);
+  view.appendChild(list);
+
+  let items = [];
+  if (CO_FEED_TAB === "explore") {
+    const res = await api("/feed/explore.php");
+    items = res.data?.data?.items || [];
+    if (!items.length) { list.appendChild(el(`<div class="in-card2"><div class="in-empty" style="text-align:center">Nothing to explore yet.</div></div>`)); return; }
+  } else {
+    const res = await api("/posts/personal.php?type=company&uuid=" + encodeURIComponent(CO.uuid));
+    const data = res.data?.data || {};
+    const posts = data.posts || [];
+    // personal.php returns the author at the top level, but renderPost
+    // expects it per-post — attach the company author to each.
+    const author = data.author || { type: "company", uuid: CO.uuid, name: CO.name, avatar: CO.logo };
+    items = posts.map(p => ({ ...p, post_id: p.post_id ?? p.id, author }));
+    if (!items.length) { list.appendChild(el(`<div class="in-card2"><div class="in-empty" style="text-align:center">You haven't posted yet. Share your first update above.</div></div>`)); return; }
+  }
+  const container = el(`<div class="in-card2 in-post-list"></div>`);
+  items.forEach(it => container.appendChild(renderPost(it)));
+  list.appendChild(container);
+}
+
 // ---- single post card ------------------------------------------------
 function renderPost(it) {
   const a = it.author || {};
   const initial = (a.name || "?").charAt(0).toUpperCase();
   const when = new Date(it.created_at).toLocaleString();
   const isCompany = a.type === "company";
-  const isMine = (a.type === "user" && a.uuid && a.uuid === ME.uuid);
-  const isAdmin = (ME.role === "admin");
+  const isMine = (a.type === "user" && a.uuid && ME && a.uuid === ME.uuid)
+              || (a.type === "company" && a.uuid && CO && a.uuid === CO.uuid);
+  const isAdmin = (ME && ME.role === "admin");
   // Admins can delete ANY post; everyone else only their own.
   const canDelete = isMine || isAdmin;
 
@@ -208,10 +284,13 @@ function renderPost(it) {
       </a>`;
   }
 
-  const clickable = (a.type === "user" && a.uuid && !isMine);
+  // Author name/avatar links to their profile — users to #user/<uuid>,
+  // companies to #company/<uuid>. Works regardless of who is viewing.
+  const clickable = !!a.uuid && (a.type === "user" || a.type === "company");
+  const profileHash = a.type === "company" ? `company/${esc(a.uuid)}` : `user/${esc(a.uuid)}`;
   const nameClass = clickable ? "post-name linkable" : "post-name";
   const avaClass  = "post-avatar" + (isCompany ? " company" : "") + (clickable ? " linkable" : "");
-  const goProfile = clickable ? `onclick="location.hash='user/${esc(a.uuid)}'"` : "";
+  const goProfile = clickable ? `onclick="location.hash='${profileHash}'"` : "";
 
   const card = el(`
     <div class="in-post-item">

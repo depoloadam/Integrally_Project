@@ -39,11 +39,14 @@ if (!$author) Response::error('Author not found.', 404);
 $authorId = (int) $author['id'];
 
 // Decide whether the viewer may see 'followers'-only posts.
-$viewerUserId = Auth::userId();
+$viewerUserId    = Auth::userId();
+$viewerCompanyId = Auth::companyId();
 $canSeeFollowerPosts = false;
 
 if ($type === 'user' && $viewerUserId === $authorId) {
-    $canSeeFollowerPosts = true;                 // owner viewing self
+    $canSeeFollowerPosts = true;                 // user owner viewing self
+} elseif ($type === 'company' && $viewerCompanyId === $authorId) {
+    $canSeeFollowerPosts = true;                 // company owner viewing self
 } elseif ($viewerUserId !== null) {
     // Logged-in user: do they follow this author?
     $chk = $pdo->prepare(
