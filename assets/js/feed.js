@@ -292,6 +292,11 @@ function renderPost(it) {
   const avaClass  = "post-avatar" + (isCompany ? " company" : "") + (clickable ? " linkable" : "");
   const goProfile = clickable ? `onclick="location.hash='${profileHash}'"` : "";
 
+  const likes = it.likes || 0;
+  const comments = it.comments || 0;
+  const liked = !!it.liked;
+  const canEngage = !!(ME || CO);   // must be signed in (user or company)
+
   const card = el(`
     <div class="in-post-item">
       <div class="post-head">
@@ -305,6 +310,15 @@ function renderPost(it) {
       ${contentHtml}
       ${linkHtml}
       ${it.media_url ? `<img class="post-media" src="${esc(it.media_url)}" alt="">` : ""}
+      <div class="post-actions">
+        <button class="post-act post-like ${liked ? "liked" : ""}" ${canEngage ? "" : "disabled"}>
+          <span class="pa-icon">${liked ? "♥" : "♡"}</span> <span class="pa-likes">${likes}</span>
+        </button>
+        <button class="post-act post-commentbtn">
+          <span class="pa-icon">💬</span> <span class="pa-comments">${comments}</span>
+        </button>
+      </div>
+      <div class="post-comments" style="display:none"></div>
     </div>`);
 
   if (canDelete) {
@@ -317,5 +331,112 @@ function renderPost(it) {
       else alert(r.data?.error || "Could not delete the post.");
     };
   }
+
+  // ---- like ----
+  const likeBtn = card.querySelector(".post-like");
+  let likedState = liked, likeCount = likes;
+  if (canEngage) {
+    likeBtn.onclick = async () => {
+      likeBtn.disabled = true;
+      const next = !likedState;
+      const r = await api("/posts/like.php", "POST", { post_id: it.post_id, like: next });
+      if (r.ok && r.data?.success) {
+        likedState = r.data.data.liked;
+        likeCount = r.data.data.likes;
+        likeBtn.classList.toggle("liked", likedState);
+        likeBtn.querySelector(".pa-icon").textContent = likedState ? "♥" : "♡";
+        likeBtn.querySelector(".pa-likes").textContent = likeCount;
+      }
+      likeBtn.disabled = false;
+    };
+  }
+
+  // ---- comments (toggle thread) ----
+  const commentBtn = card.querySelector(".post-commentbtn");
+  const commentsBox = card.querySelector(".post-comments");
+  let commentsLoaded = false;
+  commentBtn.onclick = async () => {
+    const open = commentsBox.style.display !== "none";
+    if (open) { commentsBox.style.display = "none"; return; }
+    commentsBox.style.display = "block";
+    if (!commentsLoaded) { commentsLoaded = true; await loadComments(it.post_id, commentsBox, commentBtn, canEngage); }
+  };
+
   return card;
+}
+
+// Load + render a post's comment thread into `box`. Includes an add-comment
+// composer when signed in. Updates the post's comment counter on change.
+async function loadComments(postId, box, commentBtn, canEngage) {
+  box.innerHTML = `<div class="in-loading" style="padding:16px 0">Loading comments…</div>`;
+  const r = await api("/posts/comment-list.php?post_id=" + encodeURIComponent(postId));
+  const comments = (r.ok && r.data?.success) ? r.data.data.comments : [];
+
+  box.innerHTML = "";
+
+  const listEl = el(`<div class="pc-list"></div>`);
+  box.appendChild(listEl);
+
+  const updateCount = (n) => { const c = commentBtn.querySelector(".pa-comments"); if (c) c.textContent = n; };
+
+  const addCommentEl = (c) => {
+    const who = c.author || {};
+    const nm = who.full_name || who.name || "Unknown";
+    const av = who.avatar ? `<img src="${esc(who.avatar)}" alt="">` : esc((nm || "?").charAt(0).toUpperCase());
+    const profHash = who.type === "company" ? `company/${esc(who.uuid)}` : `user/${esc(who.uuid)}`;
+    const row = el(`
+      <div class="pc-item">
+        <div class="pc-ava ${who.type === "company" ? "company" : ""}" ${who.uuid ? `onclick="location.hash='${profHash}'" style="cursor:pointer"` : ""}>${av}</div>
+        <div class="pc-body">
+          <div class="pc-meta"><span class="pc-name" ${who.uuid ? `onclick="location.hash='${profHash}'" style="cursor:pointer"` : ""}>${esc(nm)}</span> <span class="pc-when">${esc(new Date(c.created_at).toLocaleString())}</span></div>
+          <div class="pc-text">${esc(c.body)}</div>
+        </div>
+        ${c.mine ? `<button class="pc-del" title="Delete">✕</button>` : ""}
+      </div>`);
+    if (c.mine) {
+      row.querySelector(".pc-del").onclick = async () => {
+        if (!confirm("Delete this comment?")) return;
+        const dr = await api("/posts/comment-delete.php", "POST", { id: c.id });
+        if (dr.ok && dr.data?.success) {
+          row.remove();
+          updateCount(listEl.querySelectorAll(".pc-item").length);
+        }
+      };
+    }
+    return row;
+  };
+
+  if (!comments.length) {
+    listEl.appendChild(el(`<div class="in-empty" style="padding:8px 0">No comments yet.${canEngage ? " Be the first." : ""}</div>`));
+  } else {
+    comments.forEach(c => listEl.appendChild(addCommentEl(c)));
+  }
+
+  if (canEngage) {
+    const composer = el(`
+      <div class="pc-composer">
+        <input type="text" class="pc-input" placeholder="Write a comment…" maxlength="2000">
+        <button class="in-btn primary pc-send" style="flex:none;padding:8px 16px">Send</button>
+      </div>`);
+    box.appendChild(composer);
+    const input = composer.querySelector(".pc-input");
+    const send = composer.querySelector(".pc-send");
+    const submit = async () => {
+      const body = input.value.trim();
+      if (!body) return;
+      send.disabled = true;
+      const cr = await api("/posts/comment-add.php", "POST", { post_id: postId, body });
+      if (cr.ok && cr.data?.success) {
+        const empty = listEl.querySelector(".in-empty"); if (empty) empty.remove();
+        listEl.appendChild(addCommentEl(cr.data.data));
+        input.value = "";
+        updateCount(listEl.querySelectorAll(".pc-item").length);
+      } else {
+        alert(cr.data?.error || "Could not post comment.");
+      }
+      send.disabled = false;
+    };
+    send.onclick = submit;
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
+  }
 }

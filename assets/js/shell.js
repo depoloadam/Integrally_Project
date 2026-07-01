@@ -295,6 +295,7 @@ async function boot() {
     if (coFeedBtn) coFeedBtn.style.display = "none";
     const adminBtn = document.querySelector('[data-nav="admin"]');
     if (adminBtn) adminBtn.style.display = (ME.role === "admin") ? "" : "none";
+    if (typeof setupNotifications === "function") setupNotifications();
     routeFromHash();
   } else if (CO) {
     // ---- COMPANY identity ---- (no user signed in)
@@ -307,13 +308,15 @@ async function boot() {
       b.style.display = (n === "company-feed" || n === "jobs" || n === "company-dashboard") ? "" : "none";
     });
     updateCompanyNav();
+    if (typeof setupNotifications === "function") setupNotifications();
     const raw = location.hash.replace(/^#/, "");
-    if (raw === "jobs" || raw.startsWith("job/") || raw.startsWith("company")) routeFromHash();
+    if (raw === "jobs" || raw === "notifications" || raw.startsWith("job/") || raw.startsWith("company")) routeFromHash();
     else location.hash = "company-dashboard";
   } else {
     // ---- SIGNED OUT ----
     $("profile-menu").style.display = "none";
     $("auth-menu").style.display = "";
+    if (typeof hideNotifications === "function") hideNotifications();
     renderSignedOut();
   }
 }
@@ -485,6 +488,10 @@ function routeFromHash() {
   }
   if (raw === "connect") {
     showTab("connect");
+    return;
+  }
+  if (raw === "notifications") {
+    renderNotificationsPage();
     return;
   }
   if (raw === "company-dashboard") {
