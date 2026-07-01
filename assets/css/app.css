@@ -603,6 +603,9 @@ textarea.jf-input { resize:vertical; }
 .post-act .pa-icon { font-size:16px; line-height:1; }
 .post-like.liked { color:var(--in-error); }
 .post-like.liked .pa-icon { color:var(--in-error); }
+.pa-caret { font-size:10px; color:var(--in-muted); margin-left:1px; transition:transform .15s ease; display:inline-block; }
+.post-commentbtn.open { color:var(--in-accent); background:var(--in-bg); }
+.post-commentbtn.open .pa-caret { transform:rotate(180deg); color:var(--in-accent); }
 
 /* ---------- comments ---------- */
 .post-comments { margin-top:8px; padding-top:10px; border-top:1px solid var(--in-line); }
@@ -623,6 +626,8 @@ textarea.jf-input { resize:vertical; }
 .pc-composer { display:flex; gap:8px; }
 .pc-input { flex:1; padding:9px 12px; font-size:13.5px; font-family:inherit; border:1px solid var(--in-line); border-radius:8px; background:var(--in-bg); }
 .pc-input:focus { outline:none; background:#fff; border-color:var(--in-accent); box-shadow:0 0 0 3px rgba(13,148,136,.14); }
+.pc-hide { display:block; width:100%; text-align:center; margin-top:10px; background:none; border:none; font-family:inherit; font-size:12.5px; font-weight:600; color:var(--in-muted); padding:8px; border-radius:8px; cursor:pointer; }
+.pc-hide:hover { color:var(--in-accent); background:var(--in-bg); }
 
 .post-when-link:hover { color:var(--in-accent); text-decoration:underline; }
 

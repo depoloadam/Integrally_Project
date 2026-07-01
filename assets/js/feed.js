@@ -342,6 +342,7 @@ function renderPost(it) {
         </button>
         <button class="post-act post-commentbtn">
           <span class="pa-icon">💬</span> <span class="pa-comments">${comments}</span>
+          <span class="pa-caret">▾</span>
         </button>
       </div>
       <div class="post-comments" style="display:none"></div>
@@ -381,11 +382,16 @@ function renderPost(it) {
   const commentBtn = card.querySelector(".post-commentbtn");
   const commentsBox = card.querySelector(".post-comments");
   let commentsLoaded = false;
+  const setOpen = (open) => {
+    commentsBox.style.display = open ? "block" : "none";
+    commentBtn.classList.toggle("open", open);
+    commentBtn.title = open ? "Hide comments" : "Show comments";
+  };
   commentBtn.onclick = async () => {
     const open = commentsBox.style.display !== "none";
-    if (open) { commentsBox.style.display = "none"; return; }
-    commentsBox.style.display = "block";
-    if (!commentsLoaded) { commentsLoaded = true; await loadComments(it.post_id, commentsBox, commentBtn, canEngage); }
+    if (open) { setOpen(false); return; }
+    setOpen(true);
+    if (!commentsLoaded) { commentsLoaded = true; await loadComments(it.post_id, commentsBox, commentBtn, canEngage, setOpen); }
   };
 
   return card;
@@ -393,7 +399,7 @@ function renderPost(it) {
 
 // Load + render a post's comment thread into `box`. Includes an add-comment
 // composer when signed in. Updates the post's comment counter on change.
-async function loadComments(postId, box, commentBtn, canEngage) {
+async function loadComments(postId, box, commentBtn, canEngage, setOpen) {
   box.innerHTML = `<div class="in-loading" style="padding:16px 0">Loading comments…</div>`;
   const r = await api("/posts/comment-list.php?post_id=" + encodeURIComponent(postId));
   const comments = (r.ok && r.data?.success) ? r.data.data.comments : [];
@@ -464,5 +470,11 @@ async function loadComments(postId, box, commentBtn, canEngage) {
     };
     send.onclick = submit;
     input.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
+  }
+
+  if (setOpen) {
+    const hideRow = el(`<button class="pc-hide">Hide comments ▴</button>`);
+    hideRow.onclick = () => setOpen(false);
+    box.appendChild(hideRow);
   }
 }
