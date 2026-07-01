@@ -779,6 +779,9 @@ function openExtrasFlow() {
 async function renderPublicProfile(uuid) {
   const view = $("view");
   view.innerHTML = `<div class="in-loading">Loading profile…</div>`;
+  // Only logged-in USERS can follow other users; skip the status call
+  // entirely for a company session or a signed-out visitor.
+  const canFollow = !!ME && !CO;
   const [prof, jobs, edu, certs, skills, interests, scores, fstat, counts] = await Promise.all([
     api("/profile/get.php?uuid=" + encodeURIComponent(uuid)),
     api("/profile/jobs/list.php?uuid=" + encodeURIComponent(uuid)),
@@ -787,7 +790,7 @@ async function renderPublicProfile(uuid) {
     api("/profile/skills/list.php?uuid=" + encodeURIComponent(uuid)),
     api("/profile/interests/list.php?uuid=" + encodeURIComponent(uuid)),
     api("/score/latest.php?uuid=" + encodeURIComponent(uuid)),
-    api("/follow/status.php?type=user&uuid=" + encodeURIComponent(uuid)),
+    canFollow ? api("/follow/status.php?type=user&uuid=" + encodeURIComponent(uuid)) : Promise.resolve(null),
     api("/follow/counts.php?type=user&uuid=" + encodeURIComponent(uuid)),
   ]);
   const p = prof.data?.data;
@@ -800,7 +803,8 @@ async function renderPublicProfile(uuid) {
   const headline = attrs.headline?.value || "";
   const initial = (p.username || "?").charAt(0).toUpperCase();
   const loc = [p.city, p.state, p.country].filter(Boolean).join(", ");
-  const isFollowing = !!(fstat.data?.data?.following);
+  // Follow state + counts.
+  const isFollowing = canFollow ? !!(fstat && fstat.data?.data?.following) : false;
   const followerCount = counts.data?.data?.followers ?? 0;
 
   view.innerHTML = "";
@@ -820,20 +824,23 @@ async function renderPublicProfile(uuid) {
         <div class="in-followcount">${followerCount} follower${followerCount === 1 ? "" : "s"}</div>
       </div>
       ${socialLinksHtml(attrs)}
-      <button class="in-follow-btn ${isFollowing ? "following" : ""}" id="follow-toggle">${isFollowing ? "Following" : "Follow"}</button>
+      ${canFollow ? `<button class="in-follow-btn ${isFollowing ? "following" : ""}" id="follow-toggle">${isFollowing ? "Following" : "Follow"}</button>` : ""}
       ${ME && ME.role === "admin" ? `<button class="in-admin-btn" id="admin-edit">🛠 Edit (admin)</button>` : ""}
     </div>`);
   leftCol.appendChild(head);
-  head.querySelector("#follow-toggle").onclick = async () => {
-    const btn = head.querySelector("#follow-toggle");
-    const currentlyFollowing = btn.classList.contains("following");
-    btn.disabled = true;
-    const endpoint = currentlyFollowing ? "/follow/unfollow.php" : "/follow/follow.php";
-    const r = await api(endpoint, "POST", { target_type:"user", target_uuid:uuid });
-    btn.disabled = false;
-    if (r.ok && r.data?.success) { btn.classList.toggle("following"); btn.textContent = btn.classList.contains("following") ? "Following" : "Follow"; }
-    else { alert(r.data?.error || "Could not update follow status."); }
-  };
+  const followBtn = head.querySelector("#follow-toggle");
+  if (followBtn) {
+    followBtn.onclick = async () => {
+      const btn = head.querySelector("#follow-toggle");
+      const currentlyFollowing = btn.classList.contains("following");
+      btn.disabled = true;
+      const endpoint = currentlyFollowing ? "/follow/unfollow.php" : "/follow/follow.php";
+      const r = await api(endpoint, "POST", { target_type:"user", target_uuid:uuid });
+      btn.disabled = false;
+      if (r.ok && r.data?.success) { btn.classList.toggle("following"); btn.textContent = btn.classList.contains("following") ? "Following" : "Follow"; }
+      else { alert(r.data?.error || "Could not update follow status."); }
+    };
+  }
   // admin: edit this user's core profile fields
   if (ME && ME.role === "admin") {
     head.querySelector("#admin-edit").onclick = () => adminEditProfile(p, headline, uuid);

@@ -61,6 +61,9 @@ async function loadConnect() {
   if (!results.length) { box.innerHTML = `<div class="in-empty">${CONNECT_STATE.q ? "No matches found." : "Nothing to show yet."}</div>`; pager.innerHTML = ""; return; }
 
   box.innerHTML = "";
+  // Only logged-in USERS can follow people/companies; a company session
+  // browsing Connect sees results without a follow button.
+  const canFollow = !!ME && !CO;
   results.forEach(res => {
     const avatarChar = (res.title || "?").charAt(0).toUpperCase();
     const isCompany = res.kind === "company";
@@ -74,7 +77,7 @@ async function loadConnect() {
           <div class="connect-title">${isCompany ? esc(res.title) : "@" + esc(res.title)}${verified}</div>
           <div class="connect-sub">${esc(sub || (isCompany ? "Company" : "Member"))}</div>
         </div>
-        <button class="in-follow-btn connect-follow ${res.following ? "following" : ""}" style="width:auto;flex:none;margin-top:0;padding:8px 18px">${res.following ? "Following" : "Follow"}</button>
+        ${canFollow ? `<button class="in-follow-btn connect-follow ${res.following ? "following" : ""}" style="width:auto;flex:none;margin-top:0;padding:8px 18px">${res.following ? "Following" : "Follow"}</button>` : ""}
       </div>`);
 
     // Navigate to the public profile when clicking the row (but not the button).
@@ -84,20 +87,22 @@ async function loadConnect() {
     });
 
     const btn = row.querySelector(".connect-follow");
-    btn.onclick = async (e) => {
-      e.stopPropagation();
-      const following = btn.classList.contains("following");
-      btn.disabled = true;
-      const endpoint = following ? "/follow/unfollow.php" : "/follow/follow.php";
-      const resp = await api(endpoint, "POST", { target_type: res.kind, target_uuid: res.uuid });
-      if (resp.ok && resp.data?.success) {
-        btn.classList.toggle("following");
-        btn.textContent = btn.classList.contains("following") ? "Following" : "Follow";
-      } else {
-        alert(resp.data?.error || "Could not update follow status.");
-      }
-      btn.disabled = false;
-    };
+    if (btn) {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        const following = btn.classList.contains("following");
+        btn.disabled = true;
+        const endpoint = following ? "/follow/unfollow.php" : "/follow/follow.php";
+        const resp = await api(endpoint, "POST", { target_type: res.kind, target_uuid: res.uuid });
+        if (resp.ok && resp.data?.success) {
+          btn.classList.toggle("following");
+          btn.textContent = btn.classList.contains("following") ? "Following" : "Follow";
+        } else {
+          alert(resp.data?.error || "Could not update follow status.");
+        }
+        btn.disabled = false;
+      };
+    }
 
     box.appendChild(row);
   });

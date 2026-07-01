@@ -275,6 +275,7 @@ function setNavAvatar(url, initial) {
 
 // ---- auth guard + boot -----------------------------------------------
 async function boot() {
+  setupFooter();
   // One identity at a time. Load whichever session exists.
   await loadCompanySession();   // sets CO
   const { ok, data } = await api("/auth/me.php");
@@ -310,7 +311,7 @@ async function boot() {
     updateCompanyNav();
     if (typeof setupNotifications === "function") setupNotifications();
     const raw = location.hash.replace(/^#/, "");
-    if (raw === "jobs" || raw === "notifications" || raw.startsWith("job/") || raw.startsWith("company")) routeFromHash();
+    if (raw === "jobs" || raw === "notifications" || raw.startsWith("job/") || raw.startsWith("company") || FOOTER_PAGES[raw]) routeFromHash();
     else location.hash = "company-dashboard";
   } else {
     // ---- SIGNED OUT ----
@@ -354,7 +355,7 @@ function renderSignedOut() {
   updateCompanyNav();   // shows the Company tab if a company session exists
   // If the visitor is heading somewhere public, honor it; else welcome.
   const raw = location.hash.replace(/^#/, "");
-  if (raw === "jobs" || raw.startsWith("job/") || raw.startsWith("company")) {
+  if (raw === "jobs" || raw.startsWith("job/") || raw.startsWith("company") || FOOTER_PAGES[raw]) {
     routeFromHash();
     return;
   }
@@ -461,8 +462,69 @@ if (brandHome) {
 }
 
 // ---- hash router -----------------------------------------------------
+// ---- footer: standard pages (placeholders — content added later) -----
+const FOOTER_PAGES = {
+  about: {
+    title: "About Us",
+    body: `<p>Integrally is a career and social networking platform built to help people understand where they stand — and where they can grow — in their professional field.</p>
+           <p>This page is a placeholder. Content about our mission, team, and story will go here.</p>`,
+  },
+  careers: {
+    title: "Careers",
+    body: `<p>We're not listing open roles yet, but check back soon.</p>
+           <p>This page is a placeholder. Open positions and hiring info will go here.</p>`,
+  },
+  contact: {
+    title: "Contact",
+    body: `<p>Have a question or feedback? We'd love to hear from you.</p>
+           <p>This page is a placeholder. Contact details and a message form will go here.</p>`,
+  },
+  help: {
+    title: "Help",
+    body: `<p>Need a hand using Integrally? Answers to common questions will live here.</p>
+           <p>This page is a placeholder. A full help center will go here.</p>`,
+  },
+  privacy: {
+    title: "Privacy Policy",
+    body: `<p>This Privacy Policy explains how Integrally collects, uses, and protects your information.</p>
+           <p>This page is a placeholder. The full privacy policy will go here.</p>`,
+  },
+  terms: {
+    title: "Terms of Service",
+    body: `<p>These Terms of Service govern your use of Integrally.</p>
+           <p>This page is a placeholder. The full terms will go here.</p>`,
+  },
+};
+
+function renderFooterPage(key) {
+  document.querySelectorAll("[data-nav]").forEach(x => x.classList.remove("active"));
+  const page = FOOTER_PAGES[key];
+  const view = $("view");
+  if (!page) { view.innerHTML = `<div class="in-card2"><div class="in-empty">Page not found.</div></div>`; return; }
+  view.innerHTML = "";
+  view.appendChild(el(`
+    <div class="in-back"><button class="in-back-btn" onclick="history.length>1?history.back():location.hash=''">‹ Back</button></div>`));
+  view.appendChild(el(`
+    <div class="in-card2 in-staticpage">
+      <h1>${esc(page.title)}</h1>
+      <div class="in-staticpage-body">${page.body}</div>
+    </div>`));
+}
+
+function setupFooter() {
+  const yearEl = $("footer-year");
+  if (yearEl) yearEl.textContent = new Date().getFullYear();
+  document.querySelectorAll("[data-footer-nav]").forEach(b => {
+    b.onclick = () => { location.hash = b.dataset.footerNav; };
+  });
+}
+
 function routeFromHash() {
   const raw = location.hash.replace(/^#/, "");
+  if (FOOTER_PAGES[raw]) {
+    renderFooterPage(raw);
+    return;
+  }
   if (raw.startsWith("user/")) {
     document.querySelectorAll("[data-nav]").forEach(x => x.classList.remove("active"));
     renderPublicProfile(raw.slice("user/".length));
