@@ -95,6 +95,15 @@ class Social
         $r = $stmt->fetch();
         if (!$r) return ['type' => 'user', 'uuid' => null, 'name' => 'A user', 'avatar' => null];
         $full = trim(($r['first_name'] ?? '') . ' ' . ($r['last_name'] ?? ''));
+        return [
+            'type' => 'user',
+            'uuid' => $r['uuid'],
+            'name' => $r['username'],
+            'full_name' => $full !== '' ? $full : null,
+            'avatar' => $r['profile_pic'],
+        ];
+    }
+
     /**
      * Batch-fetch engagement stats for a set of post IDs from the current
      * actor's perspective. Returns [postId => ['likes'=>n,'comments'=>n,
