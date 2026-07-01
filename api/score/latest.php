@@ -5,6 +5,14 @@
 // FILE: api/score/latest.php
 // GET (logged in) — the most recent score per distinct target for the
 // user. Handy for a profile "scores" panel showing current standings.
+//
+// Respects score visibility:
+//  - Owner viewing their own scores (no uuid, or uuid = self): sees
+//    everything, with `hidden` flagged per row so the UI can offer
+//    an unhide control.
+//  - Visitor viewing someone else's scores: hidden rows are excluded
+//    entirely, and if the profile owner has `hide_all_scores` set,
+//    NO scores are returned at all.
 // =====================================================================
 
 require_once __DIR__ . '/../../src/Database.php';
@@ -15,8 +23,9 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     Response::error('Method not allowed.', 405);
 }
 
-$pdo  = Database::conn();
-$uuid = trim($_GET['uuid'] ?? '');
+$pdo      = Database::conn();
+$uuid     = trim($_GET['uuid'] ?? '');
+$viewerId = Auth::userId();
 
 if ($uuid === '') {
     $userId = Auth::requireLogin();
@@ -26,6 +35,18 @@ if ($uuid === '') {
     $r = $stmt->fetch();
     if (!$r) Response::error('Profile not found.', 404);
     $userId = (int) $r['id'];
+}
+
+$isOwner = ($viewerId !== null && $viewerId === $userId);
+
+// If a visitor and the owner has chosen to hide ALL scores, short-circuit.
+if (!$isOwner) {
+    $hideAll = $pdo->prepare("SELECT setting_value FROM user_settings WHERE user_id = ? AND setting_key = 'hide_all_scores' LIMIT 1");
+    $hideAll->execute([$userId]);
+    $row = $hideAll->fetch();
+    if ($row && $row['setting_value'] === '1') {
+        Response::success([]);
+    }
 }
 
 // Latest score per (target_type, target_value): take the max created_at
@@ -47,11 +68,30 @@ $sql = '
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute([$userId, $userId]);
+$rows = $stmt->fetchAll();
 
-$rows = array_map(function ($r) {
-    $r['id']          = (int) $r['id'];
-    $r['score_value'] = (float) $r['score_value'];
-    return $r;
-}, $stmt->fetchAll());
+// Pull the set of hidden targets for this user.
+$hiddenStmt = $pdo->prepare('SELECT target_type, target_value FROM hidden_scores WHERE user_id = ?');
+$hiddenStmt->execute([$userId]);
+$hiddenSet = [];
+foreach ($hiddenStmt->fetchAll() as $h) {
+    $hiddenSet[$h['target_type'] . '|' . $h['target_value']] = true;
+}
 
-Response::success($rows);
+$out = [];
+foreach ($rows as $r) {
+    $isHidden = isset($hiddenSet[$r['target_type'] . '|' . $r['target_value']]);
+    if ($isHidden && !$isOwner) continue; // visitors never see hidden rows
+
+    $out[] = [
+        'id'           => (int) $r['id'],
+        'target_type'  => $r['target_type'],
+        'target_value' => $r['target_value'],
+        'score_value'  => (float) $r['score_value'],
+        'algo_version' => $r['algo_version'],
+        'created_at'   => $r['created_at'],
+        'hidden'       => $isHidden,
+    ];
+}
+
+Response::success($out);

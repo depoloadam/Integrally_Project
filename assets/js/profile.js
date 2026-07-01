@@ -82,10 +82,7 @@ async function renderProfile() {
   if (allDone && st.rec_box_hidden !== "1") {
     const recs = [];
     if (!p.profile_pic) {
-      recs.push({ label:"Add a profile picture", action: () => openModal(`
-        <h3>Profile picture</h3>
-        <p style="color:var(--in-muted);font-size:14px">Avatar upload is coming soon — your image system is ready, this just needs wiring to the profile.</p>
-        <div class="in-modal-actions"><button class="in-btn ghost" onclick="closeModal()">Close</button></div>`) });
+      recs.push({ label:"Add a profile picture", action: () => editCore(p, headline, attrs) });
     }
     if (recs.length) {
       const recBox = el(`
@@ -128,14 +125,19 @@ async function renderProfile() {
         <div class="loc">${esc(loc || "No location set")}</div>
         ${headline ? `<div class="headline">${esc(headline)}</div>` : ""}
       </div>
+      ${socialLinksHtml(attrs)}
     </div>`));
   const pheadBtn = $("phead-menu-btn");
   const pheadDrop = $("phead-dropdown");
   pheadBtn.onclick = (e) => { e.stopPropagation(); pheadDrop.classList.toggle("show"); };
   document.addEventListener("click", () => pheadDrop.classList.remove("show"));
   pheadDrop.querySelector('[data-pmenu="edit"]').onclick = (e) => {
-    e.stopPropagation(); pheadDrop.classList.remove("show"); editCore(p, headline);
+    e.stopPropagation(); pheadDrop.classList.remove("show"); editCore(p, headline, attrs);
   };
+
+  // bio — distinct shape from the standard section cards, sits at the
+  // very top of the right column, above scores.
+  rightCol.appendChild(renderBioBox(attrs, true));
 
   // scores panel
   const onboardingDone = (st.onboarding_complete === "1");
@@ -148,7 +150,7 @@ async function renderProfile() {
       ? "No scores yet. Use “Score Me!” below to measure yourself against a role or skill."
       : "Scoring unlocks once your profile setup is complete."}</div>`));
   } else {
-    scoreRows.forEach(s => sb.appendChild(renderScoreRow(s)));
+    scoreRows.forEach(s => sb.appendChild(renderScoreRow(s, true)));
   }
   if (onboardingDone) {
     sb.appendChild(el(`<div style="margin-top:14px"><button class="in-btn primary" style="flex:none;padding:10px 16px" id="score-me">Score Me!</button></div>`));
@@ -214,10 +216,13 @@ async function renderPersonalFeed(col, uuid) {
 }
 
 // ---- score row (badge, gradient bar, mini-breakdown, full link) ------
-function renderScoreRow(s) {
+// `showOwnerControls` — pass true only when rendering on the OWNER's own
+// profile, to show the per-score hide/unhide toggle.
+function renderScoreRow(s, showOwnerControls) {
   const val = Math.max(0, Math.min(100, Math.round(s.score_value)));
   const date = new Date(s.created_at).toLocaleDateString();
   const typeLabel = esc(s.target_type.replace("_", " "));
+  const isHidden = !!s.hidden;
   let miniRows = "";
   if (Array.isArray(s.breakdown) && s.breakdown.length) {
     miniRows = s.breakdown.map(f => `
@@ -230,10 +235,11 @@ function renderScoreRow(s) {
     miniRows = `<div class="in-empty" style="padding:8px 0">No breakdown detail stored for this score yet.</div>`;
   }
   const row = el(`
-    <div class="in-score-card">
+    <div class="in-score-card ${isHidden ? "score-hidden" : ""}">
       <div class="in-score-row">
         <div class="in-score-badge">${val}</div>
-        <div class="meta"><div class="t">${esc(s.target_value)}</div><div class="s">${typeLabel} · ${date}</div></div>
+        <div class="meta"><div class="t">${esc(s.target_value)}${isHidden ? '<span class="score-hidden-tag">Hidden</span>' : ""}</div><div class="s">${typeLabel} · ${date}</div></div>
+        ${showOwnerControls ? `<button class="score-hide-toggle" title="${isHidden ? "Unhide from your profile" : "Hide from your profile"}">${isHidden ? "🙈" : "👁"}</button>` : ""}
         <button class="score-expand" title="Show breakdown">▾</button>
       </div>
       <div class="score-bar">
@@ -249,7 +255,80 @@ function renderScoreRow(s) {
   const caret = row.querySelector(".score-expand");
   caret.onclick = () => { const open = detail.style.display !== "none"; detail.style.display = open ? "none" : "block"; caret.textContent = open ? "▾" : "▴"; };
   row.querySelector(".score-fullbtn").onclick = () => { location.hash = "score/" + s.id; };
+  if (showOwnerControls) {
+    const hideBtn = row.querySelector(".score-hide-toggle");
+    hideBtn.onclick = async (e) => {
+      e.stopPropagation();
+      hideBtn.disabled = true;
+      const next = !isHidden;
+      const r = await api("/score/hide.php", "POST", { target_type: s.target_type, target_value: s.target_value, hide: next });
+      hideBtn.disabled = false;
+      if (r.ok && r.data?.success) {
+        s.hidden = next;
+        row.replaceWith(renderScoreRow(s, true));
+      } else {
+        alert(r.data?.error || "Could not update visibility.");
+      }
+    };
+  }
   return row;
+}
+
+// ---- social link buttons (LinkedIn / X / website) ---------------------
+// Renders a row of buttons, one per attribute that actually has a value.
+// Returns "" (nothing) if none are set, so it never leaves an empty gap.
+function socialLinksHtml(attrs) {
+  const links = [
+    { key: "linkedin_url", label: "LinkedIn", cls: "linkedin" },
+    { key: "twitter_url",  label: "X",         cls: "twitter"  },
+    { key: "website_url",  label: "Website",   cls: "website"  },
+  ].map(l => ({ ...l, url: (attrs[l.key]?.value || "").trim() }))
+   .filter(l => l.url);
+
+  if (!links.length) return "";
+
+  const normalize = (u) => /^https?:\/\//i.test(u) ? u : "https://" + u;
+
+  return `
+    <div class="in-sociallinks">
+      ${links.map(l => `<a class="in-social-btn ${l.cls}" href="${esc(normalize(l.url))}" target="_blank" rel="noopener noreferrer nofollow">${esc(l.label)}</a>`).join("")}
+    </div>`;
+}
+
+// ---- bio box (distinct shape, sits above scores) -----------------------
+// `isOwner` controls whether an inline "Edit bio" affordance is shown.
+function renderBioBox(attrs, isOwner) {
+  const bio = (attrs.bio?.value || "").trim();
+  if (!bio && !isOwner) return el(`<div style="display:none"></div>`); // nothing to show a visitor
+  const box = el(`
+    <div class="in-bio-box">
+      ${bio
+        ? `<div class="in-bio-text">${esc(bio)}</div>`
+        : `<div class="in-bio-empty">Add a short bio to tell people about yourself.</div>`}
+      ${isOwner ? `<button class="in-bio-edit" title="Edit bio">${bio ? "Edit" : "Add bio"}</button>` : ""}
+    </div>`);
+  if (isOwner) {
+    box.querySelector(".in-bio-edit").onclick = () => editBio(bio);
+  }
+  return box;
+}
+
+// ---- edit bio modal -----------------------------------------------------
+function editBio(currentBio) {
+  openModal(`
+    <h3>Bio</h3>
+    <label>Tell people about yourself</label>
+    <textarea id="bio-input" rows="6" maxlength="1000" placeholder="A sentence or two about your background, what you're working on, or what you're looking for…">${esc(currentBio || "")}</textarea>
+    <div class="in-modal-actions">
+      <button class="in-btn ghost" onclick="closeModal()">Cancel</button>
+      <button class="in-btn primary" id="bio-save">Save</button>
+    </div>`);
+  $("bio-save").onclick = async () => {
+    const value = $("bio-input").value.trim();
+    const r = await api("/profile/set-attribute.php", "POST", { key: "bio", value });
+    if (r.ok && r.data?.success) { closeModal(); renderProfile(); }
+    else { alert(r.data?.error || "Could not save bio."); }
+  };
 }
 
 // ---- list + chip section renderers -----------------------------------
@@ -323,8 +402,12 @@ function adminEditProfile(p, headline, uuid) {
 }
 
 // ---- edit core (own profile) -----------------------------------------
-function editCore(p, headline) {
+function editCore(p, headline, attrs) {
+  attrs = attrs || {};
   const avatarState = { avatarUrl: p.profile_pic || null };
+  const linkedin = attrs.linkedin_url?.value || "";
+  const twitter  = attrs.twitter_url?.value || "";
+  const website  = attrs.website_url?.value || "";
   openModal(`
     <h3>Edit profile</h3>
     <div id="f-avatar"></div>
@@ -335,6 +418,9 @@ function editCore(p, headline) {
       <div><label>State</label><input id="f-state" value="${esc(p.state||"")}"></div>
     </div>
     <label>Country</label><input id="f-country" value="${esc(p.country||"")}">
+    <label>LinkedIn URL</label><input id="f-linkedin" value="${esc(linkedin)}" placeholder="linkedin.com/in/yourname">
+    <label>Twitter / X URL</label><input id="f-twitter" value="${esc(twitter)}" placeholder="x.com/yourname">
+    <label>Personal website</label><input id="f-website" value="${esc(website)}" placeholder="yourdomain.com">
     <div class="in-modal-actions">
       <button class="in-btn ghost" onclick="closeModal()">Cancel</button>
       <button class="in-btn primary" id="save-core">Save</button>
@@ -347,6 +433,9 @@ function editCore(p, headline) {
       profile_pic: avatarState.avatarUrl || "",
     });
     await api("/profile/set-attribute.php", "POST", { key:"headline", value:$("f-headline").value.trim() });
+    await api("/profile/set-attribute.php", "POST", { key:"linkedin_url", value:$("f-linkedin").value.trim() });
+    await api("/profile/set-attribute.php", "POST", { key:"twitter_url", value:$("f-twitter").value.trim() });
+    await api("/profile/set-attribute.php", "POST", { key:"website_url", value:$("f-website").value.trim() });
     // Keep the in-memory user in sync so the nav + composer update without
     // needing a page refresh.
     if (r.ok && r.data?.success && ME) {
@@ -730,6 +819,7 @@ async function renderPublicProfile(uuid) {
         ${headline ? `<div class="headline">${esc(headline)}</div>` : ""}
         <div class="in-followcount">${followerCount} follower${followerCount === 1 ? "" : "s"}</div>
       </div>
+      ${socialLinksHtml(attrs)}
       <button class="in-follow-btn ${isFollowing ? "following" : ""}" id="follow-toggle">${isFollowing ? "Following" : "Follow"}</button>
       ${ME && ME.role === "admin" ? `<button class="in-admin-btn" id="admin-edit">🛠 Edit (admin)</button>` : ""}
     </div>`);
@@ -749,12 +839,15 @@ async function renderPublicProfile(uuid) {
     head.querySelector("#admin-edit").onclick = () => adminEditProfile(p, headline, uuid);
   }
 
+  // bio — same distinct box as the owner view, read-only here.
+  rightCol.appendChild(renderBioBox(attrs, false));
+
   const scoreRows = (scores.data?.data || []);
   const scoreCard = el(`<div class="in-card2"><h2>Scores</h2><div></div></div>`);
   rightCol.appendChild(scoreCard);
   const ssb = scoreCard.querySelector("div");
   if (!scoreRows.length) ssb.appendChild(el(`<div class="in-empty">No scores to show.</div>`));
-  else scoreRows.forEach(s => ssb.appendChild(el(`<div class="in-score-row"><div class="in-score-badge">${Math.round(s.score_value)}</div><div class="meta"><div class="t">${esc(s.target_value)}</div><div class="s">${esc(s.target_type.replace("_"," "))} · ${new Date(s.created_at).toLocaleDateString()}</div></div></div>`)));
+  else scoreRows.forEach(s => ssb.appendChild(renderScoreRow(s, false)));
 
   roSection(rightCol, "Experience", jobs.data?.data, j => `<div class="meta"><div class="t">${esc(j.title)}</div><div class="s">${esc(j.company_name || "")}${j.start_date ? " · " + j.start_date + (j.end_date ? " – " + j.end_date : " – Present") : ""}</div></div>`);
   roSection(rightCol, "Education", edu.data?.data, e => `<div class="meta"><div class="t">${esc(e.degree || e.institution)}</div><div class="s">${esc([e.institution, e.field].filter(Boolean).join(" · "))}${e.end_year ? " · " + e.end_year : ""}</div></div>`);
@@ -878,6 +971,7 @@ function renderSetAccount(panel, p) {
 function renderSetPrivacy(panel, st) {
   // following_enabled defaults to ON when unset
   const followingOn = st.following_enabled !== "0";
+  const hideScoresOn = st.hide_all_scores === "1";
   panel.appendChild(el(`
     <div class="in-set-section">
       <h3>Privacy & preferences</h3>
@@ -888,6 +982,13 @@ function renderSetPrivacy(panel, st) {
         </div>
         <button class="in-toggle ${followingOn ? "on" : ""}" id="toggle-following" role="switch" aria-checked="${followingOn}"><span class="in-toggle-knob"></span></button>
       </div>
+      <div class="in-set-toggle" style="margin-top:16px">
+        <div>
+          <div class="in-set-toggle-label">Hide all scores from other users</div>
+          <div class="in-set-toggle-sub">Your scores stay visible to you, but no one else will see them on your profile. You can also hide individual scores from the profile page.</div>
+        </div>
+        <button class="in-toggle ${hideScoresOn ? "on" : ""}" id="toggle-hide-scores" role="switch" aria-checked="${hideScoresOn}"><span class="in-toggle-knob"></span></button>
+      </div>
       <div class="in-set-msg" id="set-privacy-msg"></div>
     </div>`));
   $("toggle-following").onclick = async () => {
@@ -895,6 +996,19 @@ function renderSetPrivacy(panel, st) {
     const turningOn = !btn.classList.contains("on");
     btn.disabled = true;
     const r = await api("/settings/set.php", "POST", { key:"following_enabled", value: turningOn ? "1" : "0" });
+    btn.disabled = false;
+    const msg = $("set-privacy-msg");
+    if (r.ok && r.data?.success) {
+      btn.classList.toggle("on", turningOn);
+      btn.setAttribute("aria-checked", turningOn);
+      msg.className = "in-set-msg ok"; msg.textContent = "Saved.";
+    } else { msg.className = "in-set-msg err"; msg.textContent = r.data?.error || "Could not save."; }
+  };
+  $("toggle-hide-scores").onclick = async () => {
+    const btn = $("toggle-hide-scores");
+    const turningOn = !btn.classList.contains("on");
+    btn.disabled = true;
+    const r = await api("/settings/set.php", "POST", { key:"hide_all_scores", value: turningOn ? "1" : "0" });
     btn.disabled = false;
     const msg = $("set-privacy-msg");
     if (r.ok && r.data?.success) {
