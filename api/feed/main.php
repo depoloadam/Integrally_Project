@@ -80,6 +80,15 @@ foreach ($rows as $r) {
     $lastFeedId = (int) $r['feed_id'];
 }
 
+// Decorate with like/comment counts + viewer's like state.
+require_once __DIR__ . '/../../src/Social.php';
+$eng = Social::engagement(array_map(fn($i) => $i['post_id'], $feed), Social::currentActor());
+foreach ($feed as &$it) {
+    $e = $eng[$it['post_id']] ?? ['likes' => 0, 'comments' => 0, 'liked' => false];
+    $it['likes'] = $e['likes']; $it['comments'] = $e['comments']; $it['liked'] = $e['liked'];
+}
+unset($it);
+
 Response::success([
     'items'       => $feed,
     'next_before' => $lastFeedId,   // pass back as ?before= for next page

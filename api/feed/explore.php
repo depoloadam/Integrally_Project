@@ -77,4 +77,13 @@ foreach ($rows as $r) {
     $lastId = (int) $r['post_id'];
 }
 
+// Decorate with like/comment counts + viewer's like state.
+require_once __DIR__ . '/../../src/Social.php';
+$eng = Social::engagement(array_map(fn($i) => $i['post_id'], $out), Social::currentActor());
+foreach ($out as &$it) {
+    $e = $eng[$it['post_id']] ?? ['likes' => 0, 'comments' => 0, 'liked' => false];
+    $it['likes'] = $e['likes']; $it['comments'] = $e['comments']; $it['liked'] = $e['liked'];
+}
+unset($it);
+
 Response::success(['items' => $out, 'next_before' => $lastId]);

@@ -10,6 +10,7 @@
 require_once __DIR__ . '/../../src/Database.php';
 require_once __DIR__ . '/../../src/Response.php';
 require_once __DIR__ . '/../../src/Auth.php';
+require_once __DIR__ . '/../../src/Social.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     Response::error('Method not allowed.', 405);
@@ -81,6 +82,12 @@ $stmt = $pdo->prepare(
 $stmt->execute([$userId, $targetType, $targetId]);
 
 $alreadyFollowing = ($stmt->rowCount() === 0);
+
+// Notify the target of the new follower (only on a genuinely new follow).
+// The follower is always a user; the recipient is the followed user/company.
+if (!$alreadyFollowing) {
+    Social::notify($targetType, $targetId, 'user', $userId, 'follow');
+}
 
 Response::success([
     'target_type'       => $targetType,

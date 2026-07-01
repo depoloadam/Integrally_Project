@@ -74,6 +74,18 @@ foreach ($posts as &$pp) {
 }
 unset($pp);
 
+// Decorate with like/comment counts + viewer's like state. Also expose
+// post_id (the feed renderer expects post_id, these rows use id).
+require_once __DIR__ . '/../../src/Social.php';
+$eng = Social::engagement(array_map(fn($p) => (int) $p['id'], $posts), Social::currentActor());
+foreach ($posts as &$pp) {
+    $pid = (int) $pp['id'];
+    $pp['post_id']  = $pid;
+    $e = $eng[$pid] ?? ['likes' => 0, 'comments' => 0, 'liked' => false];
+    $pp['likes'] = $e['likes']; $pp['comments'] = $e['comments']; $pp['liked'] = $e['liked'];
+}
+unset($pp);
+
 Response::success([
     'author' => [
         'type'   => $type,
