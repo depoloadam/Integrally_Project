@@ -155,17 +155,28 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 .in-phead .loc { color:var(--in-muted); font-size:14px; }
 .in-phead .headline { color:var(--in-ink-soft); font-size:14px; margin-top:8px; }
 
-/* social link buttons under the profile header — only rendered when set */
-.in-sociallinks { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin-top:14px; width:100%; }
+/* social links under the profile header — stacked rows, only rendered
+   when set. Each row: [logo placeholder] + [site name]. */
+.in-sociallinks { display:flex; flex-direction:column; gap:8px; margin-top:14px; width:100%; }
 .in-social-btn {
-  display:inline-flex; align-items:center; gap:6px; background:var(--in-bg);
-  border:1px solid var(--in-line); border-radius:20px; padding:6px 14px;
-  font-size:12.5px; font-weight:600; color:var(--in-ink-soft); text-decoration:none;
+  display:flex; align-items:center; gap:10px; background:var(--in-bg);
+  border:1px solid var(--in-line); border-radius:10px; padding:9px 12px;
+  font-size:13px; font-weight:600; color:var(--in-ink-soft); text-decoration:none;
+  width:100%; text-align:left;
 }
 .in-social-btn:hover { border-color:var(--in-accent); color:var(--in-accent); background:var(--in-card); }
 .in-social-btn.linkedin:hover { border-color:#0a66c2; color:#0a66c2; }
 .in-social-btn.twitter:hover { border-color:var(--in-ink); color:var(--in-ink); }
 .in-social-btn.website:hover { border-color:var(--in-accent); color:var(--in-accent); }
+/* placeholder logo swatch — swap for an <img> per platform later */
+.in-social-logo {
+  flex:none; width:22px; height:22px; border-radius:6px;
+  background:linear-gradient(135deg,var(--in-accent),var(--in-teal-bright));
+  display:inline-block;
+}
+.in-social-btn.linkedin .in-social-logo { background:linear-gradient(135deg,#0a66c2,#3b9ae1); }
+.in-social-btn.twitter .in-social-logo { background:linear-gradient(135deg,#0b1f2a,#38505c); }
+.in-social-name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
 /* bio box — distinct shape from the standard section cards (.in-card2),
    sits above the scores panel at the top of the right column. */

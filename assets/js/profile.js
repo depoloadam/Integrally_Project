@@ -277,11 +277,15 @@ function renderScoreRow(s, showOwnerControls) {
 // ---- social link buttons (LinkedIn / X / website) ---------------------
 // Renders a row of buttons, one per attribute that actually has a value.
 // Returns "" (nothing) if none are set, so it never leaves an empty gap.
+// Renders a stacked list of buttons, one per attribute that actually has
+// a value. Each row is [logo placeholder] + [site name]. Returns ""
+// (nothing) if none are set, so it never leaves an empty gap.
 function socialLinksHtml(attrs) {
+  const websiteLabel = (attrs.website_label?.value || "").trim() || "Website";
   const links = [
     { key: "linkedin_url", label: "LinkedIn", cls: "linkedin" },
     { key: "twitter_url",  label: "X",         cls: "twitter"  },
-    { key: "website_url",  label: "Website",   cls: "website"  },
+    { key: "website_url",  label: websiteLabel, cls: "website"  },
   ].map(l => ({ ...l, url: (attrs[l.key]?.value || "").trim() }))
    .filter(l => l.url);
 
@@ -291,7 +295,11 @@ function socialLinksHtml(attrs) {
 
   return `
     <div class="in-sociallinks">
-      ${links.map(l => `<a class="in-social-btn ${l.cls}" href="${esc(normalize(l.url))}" target="_blank" rel="noopener noreferrer nofollow">${esc(l.label)}</a>`).join("")}
+      ${links.map(l => `
+        <a class="in-social-btn ${l.cls}" href="${esc(normalize(l.url))}" target="_blank" rel="noopener noreferrer nofollow">
+          <span class="in-social-logo" aria-hidden="true"></span>
+          <span class="in-social-name">${esc(l.label)}</span>
+        </a>`).join("")}
     </div>`;
 }
 
@@ -408,6 +416,7 @@ function editCore(p, headline, attrs) {
   const linkedin = attrs.linkedin_url?.value || "";
   const twitter  = attrs.twitter_url?.value || "";
   const website  = attrs.website_url?.value || "";
+  const websiteLabel = attrs.website_label?.value || "";
   openModal(`
     <h3>Edit profile</h3>
     <div id="f-avatar"></div>
@@ -421,6 +430,9 @@ function editCore(p, headline, attrs) {
     <label>LinkedIn URL</label><input id="f-linkedin" value="${esc(linkedin)}" placeholder="linkedin.com/in/yourname">
     <label>Twitter / X URL</label><input id="f-twitter" value="${esc(twitter)}" placeholder="x.com/yourname">
     <label>Personal website</label><input id="f-website" value="${esc(website)}" placeholder="yourdomain.com">
+    <div class="row">
+      <div><label>Website display name</label><input id="f-website-label" value="${esc(websiteLabel)}" placeholder="e.g. My Portfolio"></div>
+    </div>
     <div class="in-modal-actions">
       <button class="in-btn ghost" onclick="closeModal()">Cancel</button>
       <button class="in-btn primary" id="save-core">Save</button>
@@ -436,6 +448,7 @@ function editCore(p, headline, attrs) {
     await api("/profile/set-attribute.php", "POST", { key:"linkedin_url", value:$("f-linkedin").value.trim() });
     await api("/profile/set-attribute.php", "POST", { key:"twitter_url", value:$("f-twitter").value.trim() });
     await api("/profile/set-attribute.php", "POST", { key:"website_url", value:$("f-website").value.trim() });
+    await api("/profile/set-attribute.php", "POST", { key:"website_label", value:$("f-website-label").value.trim() });
     // Keep the in-memory user in sync so the nav + composer update without
     // needing a page refresh.
     if (r.ok && r.data?.success && ME) {
