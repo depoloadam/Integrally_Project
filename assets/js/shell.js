@@ -494,6 +494,10 @@ function routeFromHash() {
     renderNotificationsPage();
     return;
   }
+  if (raw.startsWith("post/")) {
+    renderSinglePost(raw.slice("post/".length));
+    return;
+  }
   if (raw === "company-dashboard") {
     showTab("company-dashboard");
     return;

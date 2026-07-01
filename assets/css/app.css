@@ -585,7 +585,8 @@ textarea.jf-input { resize:vertical; }
 .in-notif-item.unread:hover { background:#e6f7f3; }
 .in-notif-ava { width:38px; height:38px; border-radius:50%; flex:none; display:grid; place-items:center; font-weight:700; font-size:15px; color:#fff; background:linear-gradient(135deg,var(--in-accent),var(--in-teal-bright)); overflow:hidden; }
 .in-notif-ava.company { border-radius:10px; background:linear-gradient(135deg,#0e3b4a,#0a8a8a); }
-.in-notif-ava img { width:100%; height:100%; object-fit:cover; }
+.in-notif-ava img { grid-area:1 / 1; place-self:stretch; width:100%; height:100%; object-fit:cover; }
+.in-notif-ava:has(img), .in-notif-ava.company:has(img) { background:#fff; }
 .in-notif-body { flex:1; min-width:0; }
 .in-notif-text { font-size:13.5px; line-height:1.4; color:var(--in-ink); }
 .in-notif-snip { font-size:12.5px; color:var(--in-muted); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -609,7 +610,8 @@ textarea.jf-input { resize:vertical; }
 .pc-item { display:flex; gap:10px; align-items:flex-start; }
 .pc-ava { width:32px; height:32px; border-radius:50%; flex:none; display:grid; place-items:center; font-weight:700; font-size:13px; color:#fff; background:linear-gradient(135deg,var(--in-accent),var(--in-teal-bright)); overflow:hidden; }
 .pc-ava.company { border-radius:8px; background:linear-gradient(135deg,#0e3b4a,#0a8a8a); }
-.pc-ava img { width:100%; height:100%; object-fit:cover; }
+.pc-ava img { grid-area:1 / 1; place-self:stretch; width:100%; height:100%; object-fit:cover; }
+.pc-ava:has(img), .pc-ava.company:has(img) { background:#fff; }
 .pc-body { flex:1; min-width:0; background:var(--in-bg); border-radius:10px; padding:8px 12px; }
 .pc-meta { display:flex; gap:8px; align-items:baseline; }
 .pc-name { font-weight:600; font-size:13px; color:var(--in-ink); }
@@ -621,6 +623,8 @@ textarea.jf-input { resize:vertical; }
 .pc-composer { display:flex; gap:8px; }
 .pc-input { flex:1; padding:9px 12px; font-size:13.5px; font-family:inherit; border:1px solid var(--in-line); border-radius:8px; background:var(--in-bg); }
 .pc-input:focus { outline:none; background:#fff; border-color:var(--in-accent); box-shadow:0 0 0 3px rgba(13,148,136,.14); }
+
+.post-when-link:hover { color:var(--in-accent); text-decoration:underline; }
 
 /* ---------- responsive ---------- */
 @media (max-width:760px) {

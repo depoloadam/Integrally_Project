@@ -238,6 +238,32 @@ async function renderCompanyFeedInto(view) {
   list.appendChild(container);
 }
 
+// ---- single post page (#post/<id>) ----------------------------------
+async function renderSinglePost(id) {
+  document.querySelectorAll("[data-nav]").forEach(x => x.classList.remove("active"));
+  const view = $("view");
+  view.innerHTML = `<div class="in-loading" style="padding:40px 0;text-align:center">Loading post…</div>`;
+
+  const r = await api("/posts/get.php?id=" + encodeURIComponent(id));
+  if (!r.ok || !r.data?.success) {
+    view.innerHTML = `<div class="in-admin"><div class="in-card2"><div class="in-empty">This post could not be found.</div></div></div>`;
+    return;
+  }
+
+  view.innerHTML = "";
+  const wrap = el(`<div class="in-admin"></div>`);
+  wrap.appendChild(el(`<div class="in-back"><button class="in-back-btn" onclick="history.length>1?history.back():location.hash='feed'">‹ Back</button></div>`));
+  const listWrap = el(`<div class="in-card2 in-post-list" style="padding:0"></div>`);
+  const card = renderPost(r.data.data);
+  listWrap.appendChild(card);
+  wrap.appendChild(listWrap);
+  view.appendChild(wrap);
+
+  // Auto-open the comments thread on the dedicated page.
+  const commentBtn = card.querySelector(".post-commentbtn");
+  if (commentBtn) commentBtn.click();
+}
+
 // ---- single post card ------------------------------------------------
 function renderPost(it) {
   const a = it.author || {};
@@ -303,7 +329,7 @@ function renderPost(it) {
         <div class="${avaClass}" ${goProfile}>${a.avatar ? `<img src="${esc(a.avatar)}" alt="">` : esc(initial)}</div>
         <div>
           <div class="${nameClass}" ${goProfile}>${esc(a.name || "Unknown")}${isCompany ? ' <span class="post-tag">Company</span>' : ""}</div>
-          <div class="post-when">${esc(when)}${it.reason === "self" ? " · You" : ""}</div>
+          <div class="post-when"><span class="post-when-link" onclick="location.hash='post/${esc(String(it.post_id))}'" style="cursor:pointer">${esc(when)}</span>${it.reason === "self" ? " · You" : ""}</div>
         </div>
         ${canDelete ? `<button class="post-del" title="${isMine ? "Delete post" : "Delete (admin)"}">🗑</button>` : ""}
       </div>

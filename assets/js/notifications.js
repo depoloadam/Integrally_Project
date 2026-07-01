@@ -6,6 +6,15 @@
 
 let NOTIF_POLL = null;
 
+function notifTarget(n) {
+  // Like/comment notifications open the post; follow opens the follower.
+  if ((n.type === "like" || n.type === "comment") && n.post && n.post.id) {
+    return "post/" + n.post.id;
+  }
+  const who = n.actor || {};
+  return who.type === "company" ? `company/${who.uuid}` : `user/${who.uuid}`;
+}
+
 // Build a human sentence + target hash for a notification.
 function notifText(n) {
   const who = n.actor || {};
@@ -23,7 +32,7 @@ function notifRowHTML(n) {
   const t = notifText(n);
   const av = t.avatar ? `<img src="${esc(t.avatar)}" alt="">` : esc((t.name || "?").charAt(0).toUpperCase());
   return `
-    <div class="in-notif-item ${n.is_read ? "" : "unread"}" data-id="${n.id}" data-prof="${esc(t.profHash)}">
+    <div class="in-notif-item ${n.is_read ? "" : "unread"}" data-id="${n.id}" data-prof="${esc(notifTarget(n))}">
       <div class="in-notif-ava ${t.isCompany ? "company" : ""}">${av}</div>
       <div class="in-notif-body">
         <div class="in-notif-text"><strong>${esc(t.name)}</strong> ${esc(t.verb)}</div>
