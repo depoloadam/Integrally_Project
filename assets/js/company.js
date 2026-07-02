@@ -128,29 +128,48 @@ async function renderCompanyDashboard() {
   const wrap = el(`<div class="in-admin"></div>`);
   view.appendChild(wrap);
 
-  // Header card
+  // Header card: logo + name on the left, company info panel on the
+  // right, and a small ✎ edit button in the corner (same treatment as
+  // the bio box). Sign out lives in the nav identity dropdown, so it's
+  // no longer duplicated here.
   const logoChar = (CO.name || "?").charAt(0).toUpperCase();
+
+  // Follower count for the info panel (cheap, single query).
+  let followerCount = 0;
+  const fc = await api("/follow/counts.php?type=company&uuid=" + encodeURIComponent(CO.uuid));
+  if (fc.ok && fc.data?.success) followerCount = fc.data.data.followers ?? 0;
+
+  const loc = [CO.city, CO.state, CO.country].filter(Boolean).join(", ");
+  const since = CO.created_at
+    ? new Date(CO.created_at.replace(" ", "T")).toLocaleDateString(undefined, { month: "long", year: "numeric" })
+    : "";
+  // Websites are stored as typed — normalize the href, show the bare host-ish text.
+  const webHref = CO.website ? (/^https?:\/\//i.test(CO.website) ? CO.website : "https://" + CO.website) : "";
+  const webText = CO.website ? CO.website.replace(/^https?:\/\//i, "").replace(/\/$/, "") : "";
+
+  const infoRows = [
+    CO.email ? `<div class="co-info-row"><div class="co-info-label">Email</div><div class="co-info-value">${esc(CO.email)}</div></div>` : "",
+    CO.website ? `<div class="co-info-row"><div class="co-info-label">Website</div><div class="co-info-value"><a href="${esc(webHref)}" target="_blank" rel="noopener noreferrer">${esc(webText)} ↗</a></div></div>` : "",
+    loc ? `<div class="co-info-row"><div class="co-info-label">Location</div><div class="co-info-value">${esc(loc)}</div></div>` : "",
+    `<div class="co-info-row"><div class="co-info-label">Followers</div><div class="co-info-value">${followerCount}</div></div>`,
+    since ? `<div class="co-info-row"><div class="co-info-label">Member since</div><div class="co-info-value">${esc(since)}</div></div>` : "",
+  ].filter(Boolean).join("");
+
   const head = el(`
-    <div class="in-card2">
-      <div class="job-detail-head">
+    <div class="in-card2" style="position:relative">
+      <button class="co-edit-corner" id="co-edit" title="Edit company profile">✎</button>
+      <div class="job-detail-head co-head">
         <div class="job-logo lg">${CO.logo ? `<img src="${esc(CO.logo)}" alt="">` : esc(logoChar)}</div>
-        <div style="flex:1">
-          <h1 style="margin:0 0 4px;font-size:22px;letter-spacing:-0.4px">${esc(CO.name)}</h1>
+        <div style="flex:1;min-width:180px">
+          <h1 style="margin:0 0 4px;font-size:22px;letter-spacing:-0.4px">${esc(CO.name)}${Number(CO.is_verified) ? ' <span class="post-tag" style="vertical-align:middle">Verified</span>' : ""}</h1>
           <div class="job-company" style="font-size:14px">${esc(CO.industry || "")}${CO.city ? " · " + esc(CO.city) + (CO.state ? ", " + esc(CO.state) : "") : ""}</div>
+          ${CO.description ? `<div class="co-head-desc">${esc(CO.description)}</div>` : ""}
         </div>
-        <div style="display:flex;flex-direction:column;gap:8px">
-          <button class="in-btn ghost" style="flex:none;padding:8px 16px" id="co-edit">Edit profile</button>
-          <button class="in-btn ghost" style="flex:none;padding:8px 16px" id="co-signout">Sign out</button>
-        </div>
+        <div class="co-info">${infoRows}</div>
       </div>
     </div>`);
   wrap.appendChild(head);
 
-  $("co-signout").onclick = async () => {
-    await api("/company/logout.php", "POST");
-    CO = null; updateCompanyNav();
-    location.hash = "feed";
-  };
   $("co-edit").onclick = () => openCompanyEdit();
 
   // Jobs management card
@@ -534,6 +553,10 @@ async function renderCompanyProfile(uuid) {
   view.innerHTML = "";
   const wrap = el(`<div class="in-admin"></div>`);
 
+  const since = c.created_at
+    ? new Date(c.created_at.replace(" ", "T")).toLocaleDateString(undefined, { month: "long", year: "numeric" })
+    : "";
+
   const head = el(`
     <div class="in-card2">
       <div class="job-detail-head">
@@ -542,13 +565,37 @@ async function renderCompanyProfile(uuid) {
           <h1 style="margin:0 0 4px;font-size:24px;letter-spacing:-0.5px">${esc(c.name)}${c.is_verified ? ' <span class="post-tag" style="vertical-align:middle">Verified</span>' : ""}</h1>
           <div class="job-company" style="font-size:14.5px">${esc(c.industry || "")}${c.city ? " · " + esc(c.city) + (c.state ? ", " + esc(c.state) : "") : ""}</div>
           ${c.website ? `<a href="${esc(c.website)}" target="_blank" rel="noopener noreferrer" style="font-size:13.5px;color:var(--in-accent);text-decoration:none">${esc(c.website)} ↗</a>` : ""}
-          <div class="in-followcount">${followerCount} follower${followerCount === 1 ? "" : "s"}</div>
+          <div class="co-meta-row"><span class="in-followcount">${followerCount} follower${followerCount === 1 ? "" : "s"}</span>${since ? `<span class="co-since">· Member since ${esc(since)}</span>` : ""}</div>
         </div>
         ${canFollow ? `<button class="in-follow-btn ${isFollowing ? "following" : ""}" id="cp-follow" style="width:auto;flex:none;margin-top:0;padding:9px 22px;align-self:flex-start">${isFollowing ? "Following" : "Follow"}</button>` : ""}
       </div>
-      ${c.description ? `<div class="job-desc" style="margin-top:14px">${esc(c.description).replace(/\n/g, "<br>")}</div>` : ""}
     </div>`);
   wrap.appendChild(head);
+
+  // About the company — same distinct treatment as the user bio box.
+  // Owners get an edit affordance (opens the profile editor); visitors
+  // see nothing when there's no description.
+  const desc = (c.description || "").trim();
+  const isOwnerHere = !!c.is_owner && !!CO;
+  if (desc) {
+    const about = el(`
+      <div class="in-bio-box">
+        <div class="in-bio-label">About ${esc(c.name)}</div>
+        <div class="in-bio-text">${esc(desc)}</div>
+        ${isOwnerHere ? `<button class="in-bio-edit" title="Edit description">✎</button>` : ""}
+      </div>`);
+    if (isOwnerHere) about.querySelector(".in-bio-edit").onclick = () => openCompanyEdit();
+    wrap.appendChild(about);
+  } else if (isOwnerHere) {
+    const about = el(`
+      <div class="in-bio-box empty">
+        <div class="in-bio-empty-title">Tell people about ${esc(c.name)}</div>
+        <div class="in-bio-empty-sub">A short description helps visitors understand what your company does.</div>
+        <button class="in-btn ghost in-bio-add" style="flex:none;padding:8px 20px;margin:14px auto 0">Add a description</button>
+      </div>`);
+    about.querySelector(".in-bio-add").onclick = () => openCompanyEdit();
+    wrap.appendChild(about);
+  }
 
   const followBtn = head.querySelector("#cp-follow");
   if (followBtn) {

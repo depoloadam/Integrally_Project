@@ -49,6 +49,7 @@ $out = [
     'website'     => $company['website'],
     'description' => $company['description'],
     'is_verified' => (int) $company['is_verified'],
+    'created_at'  => $company['created_at'],
     'is_owner'    => $isOwner,
 ];
 if ($isOwner) {

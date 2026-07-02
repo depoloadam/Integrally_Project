@@ -14,7 +14,8 @@ $companyId = Auth::requireCompany();
 $pdo  = Database::conn();
 $stmt = $pdo->prepare(
     'SELECT id, uuid, email, name, industry, city, state, country,
-            logo, website, description, is_verified, allow_employee_listing
+            logo, website, description, is_verified, allow_employee_listing,
+            created_at
      FROM companies WHERE id = ? LIMIT 1'
 );
 $stmt->execute([$companyId]);
