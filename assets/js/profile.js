@@ -304,16 +304,30 @@ function socialLinksHtml(attrs) {
 }
 
 // ---- bio box (distinct shape, sits above scores) -----------------------
-// `isOwner` controls whether an inline "Edit bio" affordance is shown.
+// Filled: white card with a teal accent bar, "About" label, and a small
+// pencil button (owner only). Empty + owner: a dashed invitation card.
+// Empty + visitor: nothing.
 function renderBioBox(attrs, isOwner) {
   const bio = (attrs.bio?.value || "").trim();
   if (!bio && !isOwner) return el(`<div style="display:none"></div>`); // nothing to show a visitor
+
+  if (!bio) {
+    // Owner with no bio yet — invite, don't decorate.
+    const box = el(`
+      <div class="in-bio-box empty">
+        <div class="in-bio-empty-title">Tell people who you are</div>
+        <div class="in-bio-empty-sub">A short bio helps visitors get a feel for your background and what you're after.</div>
+        <button class="in-btn ghost in-bio-add" style="flex:none;padding:8px 20px;margin:14px auto 0">Add a bio</button>
+      </div>`);
+    box.querySelector(".in-bio-add").onclick = () => editBio("");
+    return box;
+  }
+
   const box = el(`
     <div class="in-bio-box">
-      ${bio
-        ? `<div class="in-bio-text">${esc(bio)}</div>`
-        : `<div class="in-bio-empty">Add a short bio to tell people about yourself.</div>`}
-      ${isOwner ? `<button class="in-bio-edit" title="Edit bio">${bio ? "Edit" : "Add bio"}</button>` : ""}
+      <div class="in-bio-label">About</div>
+      <div class="in-bio-text">${esc(bio)}</div>
+      ${isOwner ? `<button class="in-bio-edit" title="Edit bio">✎</button>` : ""}
     </div>`);
   if (isOwner) {
     box.querySelector(".in-bio-edit").onclick = () => editBio(bio);
