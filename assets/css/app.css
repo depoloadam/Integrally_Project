@@ -532,7 +532,11 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 
 /* company dashboard header: info panel + corner edit */
 .co-head { flex-wrap:wrap; }
-.co-head-desc { font-size:13.5px; line-height:1.55; color:var(--in-muted); margin-top:8px; max-width:420px; }
+.co-info-link {
+  display:block; margin-top:8px; padding-top:9px; border-top:1px solid var(--in-line);
+  font-size:12.5px; font-weight:600; color:var(--in-accent); text-decoration:none; text-align:center;
+}
+.co-info-link:hover { text-decoration:underline; }
 .co-info {
   flex:none; min-width:230px; max-width:280px; margin-left:auto;
   background:var(--in-bg); border:1px solid var(--in-line); border-radius:12px;

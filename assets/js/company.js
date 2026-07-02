@@ -104,6 +104,60 @@ function openCompanyAuth(mode = "login") {
 }
 window.openCompanyAuth = openCompanyAuth;
 
+// ---- shared "About the company" card + description editor ------------
+// The same card is rendered on the dashboard AND the public profile so
+// the two pages stay visually consistent. `editable` shows the ✎ (or
+// the dashed invite when empty); `onSaved` re-renders the calling view.
+function renderCompanyAbout(name, description, editable, onSaved) {
+  const desc = (description || "").trim();
+  if (!desc && !editable) return el(`<div style="display:none"></div>`);
+
+  if (!desc) {
+    const box = el(`
+      <div class="in-bio-box empty">
+        <div class="in-bio-empty-title">Tell people about ${esc(name)}</div>
+        <div class="in-bio-empty-sub">A short description helps visitors understand what your company does.</div>
+        <button class="in-btn ghost in-bio-add" style="flex:none;padding:8px 20px;margin:14px auto 0">Add a description</button>
+      </div>`);
+    box.querySelector(".in-bio-add").onclick = () => editCompanyDescription(desc, onSaved);
+    return box;
+  }
+
+  const box = el(`
+    <div class="in-bio-box">
+      <div class="in-bio-label">About ${esc(name)}</div>
+      <div class="in-bio-text">${esc(desc)}</div>
+      ${editable ? `<button class="in-bio-edit" title="Edit description">✎</button>` : ""}
+    </div>`);
+  if (editable) box.querySelector(".in-bio-edit").onclick = () => editCompanyDescription(desc, onSaved);
+  return box;
+}
+
+// Small modal that edits ONLY the description (update.php applies
+// partial updates, so other fields are untouched).
+function editCompanyDescription(current, onSaved) {
+  openModal(`
+    <h3>About your company</h3>
+    <textarea id="co-desc-input" rows="6" maxlength="2000" placeholder="What you do, who you serve, what makes you different…">${esc(current || "")}</textarea>
+    <div class="in-modal-actions">
+      <button class="in-btn ghost" onclick="closeModal()">Cancel</button>
+      <button class="in-btn primary" id="co-desc-save">Save</button>
+    </div>`);
+  $("co-desc-save").onclick = async () => {
+    const value = $("co-desc-input").value.trim();
+    const btn = $("co-desc-save"); btn.disabled = true; btn.textContent = "Saving…";
+    const r = await api("/company/update.php", "POST", { description: value });
+    if (r.ok && r.data?.success) {
+      if (CO) CO.description = r.data.data.description;
+      closeModal();
+      if (onSaved) onSaved();
+    } else {
+      alert(r.data?.error || "Could not save the description.");
+      btn.disabled = false; btn.textContent = "Save";
+    }
+  };
+}
+
 // ---- company dashboard ----------------------------------------------
 async function renderCompanyDashboard() {
   document.querySelectorAll("[data-nav]").forEach(x => x.classList.toggle("active", x.dataset.nav === "company-dashboard"));
@@ -163,14 +217,17 @@ async function renderCompanyDashboard() {
         <div style="flex:1;min-width:180px">
           <h1 style="margin:0 0 4px;font-size:22px;letter-spacing:-0.4px">${esc(CO.name)}${Number(CO.is_verified) ? ' <span class="post-tag" style="vertical-align:middle">Verified</span>' : ""}</h1>
           <div class="job-company" style="font-size:14px">${esc(CO.industry || "")}${CO.city ? " · " + esc(CO.city) + (CO.state ? ", " + esc(CO.state) : "") : ""}</div>
-          ${CO.description ? `<div class="co-head-desc">${esc(CO.description)}</div>` : ""}
         </div>
-        <div class="co-info">${infoRows}</div>
+        <div class="co-info">${infoRows}<a class="co-info-link" href="#company/${esc(CO.uuid)}">View public profile →</a></div>
       </div>
     </div>`);
   wrap.appendChild(head);
 
   $("co-edit").onclick = () => openCompanyEdit();
+
+  // About the company — the same card visitors see on the public
+  // profile, editable right here too.
+  wrap.appendChild(renderCompanyAbout(CO.name, CO.description, true, renderCompanyDashboard));
 
   // Jobs management card
   const jobsCard = el(`
@@ -572,30 +629,10 @@ async function renderCompanyProfile(uuid) {
     </div>`);
   wrap.appendChild(head);
 
-  // About the company — same distinct treatment as the user bio box.
-  // Owners get an edit affordance (opens the profile editor); visitors
-  // see nothing when there's no description.
-  const desc = (c.description || "").trim();
+  // About the company — same shared card as the dashboard. Owners can
+  // edit it in place; visitors see nothing when there's no description.
   const isOwnerHere = !!c.is_owner && !!CO;
-  if (desc) {
-    const about = el(`
-      <div class="in-bio-box">
-        <div class="in-bio-label">About ${esc(c.name)}</div>
-        <div class="in-bio-text">${esc(desc)}</div>
-        ${isOwnerHere ? `<button class="in-bio-edit" title="Edit description">✎</button>` : ""}
-      </div>`);
-    if (isOwnerHere) about.querySelector(".in-bio-edit").onclick = () => openCompanyEdit();
-    wrap.appendChild(about);
-  } else if (isOwnerHere) {
-    const about = el(`
-      <div class="in-bio-box empty">
-        <div class="in-bio-empty-title">Tell people about ${esc(c.name)}</div>
-        <div class="in-bio-empty-sub">A short description helps visitors understand what your company does.</div>
-        <button class="in-btn ghost in-bio-add" style="flex:none;padding:8px 20px;margin:14px auto 0">Add a description</button>
-      </div>`);
-    about.querySelector(".in-bio-add").onclick = () => openCompanyEdit();
-    wrap.appendChild(about);
-  }
+  wrap.appendChild(renderCompanyAbout(c.name, c.description, isOwnerHere, () => renderCompanyProfile(uuid)));
 
   const followBtn = head.querySelector("#cp-follow");
   if (followBtn) {
