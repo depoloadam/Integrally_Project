@@ -1,10 +1,11 @@
 <?php
 
-
 // =====================================================================
 // FILE: api/follow/counts.php
 // GET ?type=user|company&uuid=<uuid>
-// Returns follower count (and, for users, following count) for display.
+// Returns follower count and following count for display. Both users
+// and companies can follow now, so both get a `following` count, and
+// `followers` counts followers of every type.
 // =====================================================================
 
 require_once __DIR__ . '/../../src/Database.php';
@@ -36,20 +37,21 @@ $target = $stmt->fetch();
 if (!$target) Response::error('Target not found.', 404);
 $targetId = (int) $target['id'];
 
-// Followers of this target.
+// Followers of this target (users AND companies).
 $stmt = $pdo->prepare(
     'SELECT COUNT(*) FROM follows WHERE target_type = ? AND target_id = ?'
 );
 $stmt->execute([$type, $targetId]);
 $followers = (int) $stmt->fetchColumn();
 
-$result = ['followers' => $followers];
+// How many this identity follows.
+$stmt = $pdo->prepare(
+    'SELECT COUNT(*) FROM follows WHERE follower_type = ? AND follower_id = ?'
+);
+$stmt->execute([$type, $targetId]);
+$following = (int) $stmt->fetchColumn();
 
-// Following count only applies to users (companies don't follow).
-if ($type === 'user') {
-    $stmt = $pdo->prepare('SELECT COUNT(*) FROM follows WHERE follower_id = ?');
-    $stmt->execute([$targetId]);
-    $result['following'] = (int) $stmt->fetchColumn();
-}
-
-Response::success($result);
+Response::success([
+    'followers' => $followers,
+    'following' => $following,
+]);

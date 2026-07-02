@@ -2,15 +2,17 @@
 
 // =====================================================================
 // FILE: api/follow/following.php
-// GET ?uuid=<uuid>  -> who that user follows (public)
-// GET (no uuid, logged in) -> who YOU follow
-// Optional ?type=user|company to filter.
+// GET ?uuid=<uuid>  -> who that USER follows (public profile view)
+// GET (no uuid, signed in) -> who the CURRENT ACTOR follows — works
+//   for both user and company sessions.
+// Optional ?type=user|company to filter targets.
 // Resolves target names so the client gets a usable list, not bare IDs.
 // =====================================================================
 
 require_once __DIR__ . '/../../src/Database.php';
 require_once __DIR__ . '/../../src/Response.php';
 require_once __DIR__ . '/../../src/Auth.php';
+require_once __DIR__ . '/../../src/Social.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     Response::error('Method not allowed.', 405);
@@ -18,20 +20,26 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 
 $pdo  = Database::conn();
 $uuid = trim($_GET['uuid'] ?? '');
-$type = trim($_GET['type'] ?? '');   // optional filter
+$type = trim($_GET['type'] ?? '');   // optional target-type filter
 
 if ($uuid === '') {
-    $userId = Auth::requireLogin();
+    // Whoever is signed in — user OR company.
+    $actor        = Social::requireActor();
+    $followerType = $actor['type'];
+    $followerId   = $actor['id'];
 } else {
+    // Public lookup by uuid is a USER profile feature.
     $stmt = $pdo->prepare('SELECT id FROM users WHERE uuid = ? LIMIT 1');
     $stmt->execute([$uuid]);
     $r = $stmt->fetch();
     if (!$r) Response::error('Profile not found.', 404);
-    $userId = (int) $r['id'];
+    $followerType = 'user';
+    $followerId   = (int) $r['id'];
 }
 
-$sql    = 'SELECT target_type, target_id, created_at FROM follows WHERE follower_id = ?';
-$params = [$userId];
+$sql    = 'SELECT target_type, target_id, created_at FROM follows
+           WHERE follower_type = ? AND follower_id = ?';
+$params = [$followerType, $followerId];
 if ($type === 'user' || $type === 'company') {
     $sql .= ' AND target_type = ?';
     $params[] = $type;
@@ -67,8 +75,7 @@ foreach ($rows as $r) {
             $entry['logo'] = $info['logo'];
         }
     }
-    // Skip targets that no longer exist (orphaned follows) — and they
-    // can be cleaned up lazily here if desired.
+    // Skip targets that no longer exist (orphaned follows).
     if (isset($entry['uuid'])) {
         $out[] = $entry;
     }

@@ -4,20 +4,22 @@
 // FILE: api/connect/search.php
 // GET ?q=&type=all|users|companies&page=1&limit=20
 // Searches users and/or companies for the Connect page. Returns a
-// unified list with each result's follow state for the current user.
-// Requires login (Connect is a signed-in discovery feature).
+// unified list with each result's follow state for the CURRENT ACTOR —
+// which can be a user session OR a company session, since companies
+// can now follow too. Requires being signed in as either.
 // =====================================================================
 
 require_once __DIR__ . '/../../src/Database.php';
 require_once __DIR__ . '/../../src/Response.php';
 require_once __DIR__ . '/../../src/Auth.php';
+require_once __DIR__ . '/../../src/Social.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     Response::error('Method not allowed.', 405);
 }
 
-$userId = Auth::requireLogin();
-$pdo    = Database::conn();
+$actor = Social::requireActor();   // ['type' => 'user'|'company', 'id' => int]
+$pdo   = Database::conn();
 
 $q     = trim($_GET['q'] ?? '');
 $type  = trim($_GET['type'] ?? 'all');
@@ -34,6 +36,10 @@ if (!in_array($type, ['all', 'users', 'companies'], true)) {
 $like = '%' . $q . '%';
 $results = [];
 
+// Exclude the actor's own identity from its matching result set.
+$excludeUserId    = $actor['type'] === 'user'    ? $actor['id'] : 0;
+$excludeCompanyId = $actor['type'] === 'company' ? $actor['id'] : 0;
+
 // ---- users -----------------------------------------------------------
 if ($type === 'all' || $type === 'users') {
     if ($q === '') {
@@ -45,7 +51,7 @@ if ($type === 'all' || $type === 'users') {
              ORDER BY created_at DESC
              LIMIT 30"
         );
-        $stmt->execute([$userId]);
+        $stmt->execute([$excludeUserId]);
     } else {
         $stmt = $pdo->prepare(
             "SELECT uuid, username, first_name, last_name, city, state, profile_pic, is_verified
@@ -56,7 +62,7 @@ if ($type === 'all' || $type === 'users') {
              ORDER BY username ASC
              LIMIT 30"
         );
-        $stmt->execute([$userId, $like, $like, $like, $like, $like]);
+        $stmt->execute([$excludeUserId, $like, $like, $like, $like, $like]);
     }
     foreach ($stmt->fetchAll() as $u) {
         $name = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
@@ -77,19 +83,19 @@ if ($type === 'all' || $type === 'companies') {
     if ($q === '') {
         $stmt = $pdo->prepare(
             "SELECT uuid, name, industry, city, state, logo, is_verified
-             FROM companies WHERE is_active = 1
+             FROM companies WHERE is_active = 1 AND id <> ?
              ORDER BY created_at DESC LIMIT 30"
         );
-        $stmt->execute();
+        $stmt->execute([$excludeCompanyId]);
     } else {
         $stmt = $pdo->prepare(
             "SELECT uuid, name, industry, city, state, logo, is_verified
              FROM companies
-             WHERE is_active = 1
+             WHERE is_active = 1 AND id <> ?
                AND (name LIKE ? OR industry LIKE ? OR city LIKE ?)
              ORDER BY name ASC LIMIT 30"
         );
-        $stmt->execute([$like, $like, $like]);
+        $stmt->execute([$excludeCompanyId, $like, $like, $like]);
     }
     foreach ($stmt->fetchAll() as $c) {
         $results[] = [
@@ -105,16 +111,17 @@ if ($type === 'all' || $type === 'companies') {
 }
 
 // ---- annotate follow state ------------------------------------------
-// Pull the user's follows once and mark each result.
+// Pull the actor's follows once and mark each result.
 $followed = ['user' => [], 'company' => []];
-$fstmt = $pdo->query(
-    "SELECT f.target_type, f.target_id,
+$fstmt = $pdo->prepare(
+    "SELECT f.target_type,
             CASE WHEN f.target_type='user' THEN u.uuid ELSE c.uuid END AS target_uuid
      FROM follows f
      LEFT JOIN users u     ON f.target_type='user'    AND u.id = f.target_id
      LEFT JOIN companies c ON f.target_type='company' AND c.id = f.target_id
-     WHERE f.follower_id = " . (int) $userId
+     WHERE f.follower_type = ? AND f.follower_id = ?"
 );
+$fstmt->execute([$actor['type'], $actor['id']]);
 foreach ($fstmt->fetchAll() as $f) {
     if ($f['target_uuid']) $followed[$f['target_type']][$f['target_uuid']] = true;
 }

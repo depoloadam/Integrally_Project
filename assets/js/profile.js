@@ -792,9 +792,9 @@ function openExtrasFlow() {
 async function renderPublicProfile(uuid) {
   const view = $("view");
   view.innerHTML = `<div class="in-loading">Loading profile…</div>`;
-  // Only logged-in USERS can follow other users; skip the status call
-  // entirely for a company session or a signed-out visitor.
-  const canFollow = !!ME && !CO;
+  // Any signed-in identity — user OR company — can follow a user; skip
+  // the status call only for signed-out visitors.
+  const canFollow = !!(ME || CO);
   const [prof, jobs, edu, certs, skills, interests, scores, fstat, counts] = await Promise.all([
     api("/profile/get.php?uuid=" + encodeURIComponent(uuid)),
     api("/profile/jobs/list.php?uuid=" + encodeURIComponent(uuid)),

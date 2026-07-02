@@ -61,12 +61,13 @@ async function loadConnect() {
   if (!results.length) { box.innerHTML = `<div class="in-empty">${CONNECT_STATE.q ? "No matches found." : "Nothing to show yet."}</div>`; pager.innerHTML = ""; return; }
 
   box.innerHTML = "";
-  // Only logged-in USERS can follow people/companies; a company session
-  // browsing Connect sees results without a follow button.
-  const canFollow = !!ME && !CO;
+  // Any signed-in identity — user OR company — can follow. The only
+  // exception: a company doesn't get a follow button on its own row.
   results.forEach(res => {
-    const avatarChar = (res.title || "?").charAt(0).toUpperCase();
     const isCompany = res.kind === "company";
+    const isSelfRow = !!CO && isCompany && res.uuid === CO.uuid;
+    const canFollow = !!(ME || CO) && !isSelfRow;
+    const avatarChar = (res.title || "?").charAt(0).toUpperCase();
     const sub = [res.subtitle, res.location].filter(Boolean).join(" · ");
     const verified = res.verified ? ` <span class="post-tag" style="vertical-align:middle">Verified</span>` : "";
 

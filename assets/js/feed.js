@@ -188,11 +188,12 @@ async function renderFeedList(view) {
 
 // =====================================================================
 // Company feed (used on the company dashboard). A company can post,
-// browse others' public posts (Explore), and see its own posts.
-// Companies have no personalised "Following" feed (feed_items is keyed by
-// user), so their tabs are Explore + Your posts.
+// follow people/companies and read their posts (Following), browse
+// public posts (Explore), and see its own posts.
+// The Following tab reads /feed/company.php — computed at read time
+// from the follows table (feed_items stays user-keyed).
 // =====================================================================
-let CO_FEED_TAB = "explore";   // 'explore' | 'mine'
+let CO_FEED_TAB = "following";   // 'following' | 'explore' | 'mine'
 
 async function renderCompanyFeedInto(view) {
   if (!CO) { view.appendChild(el(`<div class="in-card2"><div class="in-empty">Company sign-in required.</div></div>`)); return; }
@@ -208,6 +209,7 @@ async function renderCompanyFeedInto(view) {
   // Tabs.
   const tabs = el(`
     <div class="in-feedtabs">
+      <button data-cftab="following" class="${CO_FEED_TAB==="following"?"active":""}">Following</button>
       <button data-cftab="explore" class="${CO_FEED_TAB==="explore"?"active":""}">Explore</button>
       <button data-cftab="mine" class="${CO_FEED_TAB==="mine"?"active":""}">Your posts</button>
     </div>`);
@@ -219,7 +221,18 @@ async function renderCompanyFeedInto(view) {
   view.appendChild(list);
 
   let items = [];
-  if (CO_FEED_TAB === "explore") {
+  if (CO_FEED_TAB === "following") {
+    const res = await api("/feed/company.php");
+    items = res.data?.data?.items || [];
+    if (!items.length) {
+      list.appendChild(el(`
+        <div class="in-card2"><div class="in-empty" style="text-align:center">
+          Your feed is quiet. Follow people and companies to see their posts here.
+          <div style="margin-top:14px"><button class="in-btn primary" style="flex:none;padding:9px 20px" onclick="location.hash='connect'">Find people to follow</button></div>
+        </div></div>`));
+      return;
+    }
+  } else if (CO_FEED_TAB === "explore") {
     const res = await api("/feed/explore.php");
     items = res.data?.data?.items || [];
     if (!items.length) { list.appendChild(el(`<div class="in-card2"><div class="in-empty" style="text-align:center">Nothing to explore yet.</div></div>`)); return; }

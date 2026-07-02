@@ -303,15 +303,19 @@ async function boot() {
     $("profile-menu").style.display = "none";
     $("auth-menu").style.display = "none";   // hide user sign in/up to avoid confusion
     setupCompanyIdentityNav();               // company avatar + sign-out menu
-    // Company sees: Jobs + their Company dashboard only.
+    // Company sees: Feed, Jobs, Connect (to follow people/companies for
+    // its Following feed), and its Company dashboard.
     document.querySelectorAll("[data-nav]").forEach(b => {
       const n = b.dataset.nav;
-      b.style.display = (n === "company-feed" || n === "jobs" || n === "company-dashboard") ? "" : "none";
+      b.style.display = (n === "company-feed" || n === "jobs" || n === "connect" || n === "company-dashboard") ? "" : "none";
     });
     updateCompanyNav();
     if (typeof setupNotifications === "function") setupNotifications();
     const raw = location.hash.replace(/^#/, "");
-    if (raw === "jobs" || raw === "notifications" || raw.startsWith("job/") || raw.startsWith("company") || FOOTER_PAGES[raw]) routeFromHash();
+    if (raw === "jobs" || raw === "notifications" || raw === "connect"
+        || raw.startsWith("job/") || raw.startsWith("company")
+        || raw.startsWith("user/") || raw.startsWith("post/")
+        || FOOTER_PAGES[raw]) routeFromHash();
     else location.hash = "company-dashboard";
   } else {
     // ---- SIGNED OUT ----

@@ -103,12 +103,16 @@ $stmt->execute([$authorType, $authorId, $postType, ($body === '' ? null : $body)
 $postId = (int) $pdo->lastInsertId();
 
 // --- Fan-out to followers' feeds -------------------------------------
-// v1: when a post is created, insert a feed_items row for every user
+// v1: when a post is created, insert a feed_items row for every USER
 // who follows this author. This "fan-out on write" makes reading the
 // main feed a simple, fast query later. The score defaults to 0 for
 // now (chronological); a future algorithm can populate it.
+// Company followers are deliberately excluded here: feed_items.user_id
+// references users, so a company's Following feed (api/feed/company.php)
+// is computed at read time from the follows table instead.
 $followers = $pdo->prepare(
-    'SELECT follower_id FROM follows WHERE target_type = ? AND target_id = ?'
+    "SELECT follower_id FROM follows
+     WHERE follower_type = 'user' AND target_type = ? AND target_id = ?"
 );
 $followers->execute([$authorType, $authorId]);
 $followerIds = $followers->fetchAll(PDO::FETCH_COLUMN);

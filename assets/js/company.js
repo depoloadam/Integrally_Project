@@ -519,9 +519,10 @@ async function renderCompanyProfile(uuid) {
   const jobs = (jr.ok && jr.data?.success) ? jr.data.data.jobs : [];
   const logoChar = (c.name || "?").charAt(0).toUpperCase();
 
-  // Follow state + counts. Only logged-in USERS can follow companies;
-  // a company viewing any profile, or a signed-out visitor, sees no button.
-  const canFollow = !!ME && !CO;
+  // Follow state + counts. Any signed-in identity can follow — a user,
+  // or a company following another company. A company viewing its OWN
+  // profile, or a signed-out visitor, sees no button.
+  const canFollow = !!ME || (!!CO && CO.uuid !== uuid);
   let isFollowing = false, followerCount = 0;
   const [fstat, fcounts] = await Promise.all([
     canFollow ? api("/follow/status.php?type=company&uuid=" + encodeURIComponent(uuid)) : Promise.resolve(null),

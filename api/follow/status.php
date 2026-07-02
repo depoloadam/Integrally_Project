@@ -1,22 +1,23 @@
 <?php
 
-
 // =====================================================================
 // FILE: api/follow/status.php
-// GET ?target_type=...&target_id=...
-// Does the logged-in user follow this target? (for follow buttons)
+// GET ?target_type=...&target_id=...   (or ?type=...&uuid=...)
+// Does the CURRENT ACTOR (user or company session) follow this target?
+// Used by the follow buttons on profiles and the Connect page.
 // =====================================================================
 
 require_once __DIR__ . '/../../src/Database.php';
 require_once __DIR__ . '/../../src/Response.php';
 require_once __DIR__ . '/../../src/Auth.php';
+require_once __DIR__ . '/../../src/Social.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     Response::error('Method not allowed.', 405);
 }
 
-$userId     = Auth::requireLogin();
-$pdo        = Database::conn();
+$actor = Social::requireActor();
+$pdo   = Database::conn();
 
 // Accept either (target_type + target_id) or (type + uuid). The public
 // profile page uses the uuid form so it never handles internal IDs.
@@ -41,8 +42,8 @@ if ($targetId <= 0) {
 
 $stmt = $pdo->prepare(
     'SELECT 1 FROM follows
-     WHERE follower_id = ? AND target_type = ? AND target_id = ? LIMIT 1'
+     WHERE follower_type = ? AND follower_id = ? AND target_type = ? AND target_id = ? LIMIT 1'
 );
-$stmt->execute([$userId, $targetType, $targetId]);
+$stmt->execute([$actor['type'], $actor['id'], $targetType, $targetId]);
 
 Response::success(['following' => (bool) $stmt->fetch()]);
