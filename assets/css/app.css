@@ -332,8 +332,9 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 .in-set-section { background:var(--in-card); border:1px solid var(--in-line); border-radius:14px; padding:22px 24px; margin-bottom:18px; }
 .in-set-section h3 { margin:0 0 16px; font-size:16px; }
 .in-set-section label { display:block; font-size:12.5px; font-weight:600; color:var(--in-ink-soft); margin:12px 0 5px; }
-.in-set-section input { width:100%; padding:10px 12px; font-size:14px; font-family:inherit; border:1px solid var(--in-line); border-radius:8px; background:var(--in-bg); color:var(--in-ink); }
-.in-set-section input:focus { outline:none; background:#fff; border-color:var(--in-accent); box-shadow:0 0 0 3px rgba(13,148,136,.14); }
+.in-set-section input, .in-set-section select { width:100%; padding:10px 12px; font-size:14px; font-family:inherit; border:1px solid var(--in-line); border-radius:8px; background:var(--in-bg); color:var(--in-ink); }
+.in-set-section select { cursor:pointer; }
+.in-set-section input:focus, .in-set-section select:focus { outline:none; background:#fff; border-color:var(--in-accent); box-shadow:0 0 0 3px rgba(13,148,136,.14); }
 .in-set-section input:disabled { opacity:.6; cursor:not-allowed; }
 .in-set-actions { margin-top:18px; }
 .in-set-msg { font-size:13px; margin-top:12px; min-height:16px; }

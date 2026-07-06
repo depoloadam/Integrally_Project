@@ -526,8 +526,9 @@ function openCompanyEdit() {
     </div>
     <div class="row">
       <div><label>City</label><input id="coe-city" value="${esc(CO.city || "")}"></div>
-      <div><label>State</label><input id="coe-state" value="${esc(CO.state || "")}"></div>
+      <div><label>Country</label><select id="coe-country"></select></div>
     </div>
+    <div id="coe-sub-wrap"></div>
     <label class="jf-checkrow" style="margin-top:16px">
       <input type="checkbox" id="coe-listing"${(CO.allow_employee_listing == 1 || CO.allow_employee_listing === undefined) ? " checked" : ""}>
       Allow users to list us as their employer
@@ -539,6 +540,7 @@ function openCompanyEdit() {
     </div>
   `);
   mountAvatarPicker("coe-avatar", avatarState, { shape: "square", fallbackChar: CO.name || "?" });
+  geoInitCountryModal($("coe-country"), $("coe-sub-wrap"), { subId: "coe-sub", preselect: { country: CO.country || "", state: CO.state || "" } });
   $("coe-save").onclick = async () => {
     const msg = $("coe-msg"); msg.className = "in-auth-msg";
     const payload = {
@@ -547,7 +549,8 @@ function openCompanyEdit() {
       industry: $("coe-industry").value.trim(),
       website: $("coe-website").value.trim(),
       city: $("coe-city").value.trim(),
-      state: $("coe-state").value.trim(),
+      state: geoGetSubdivisionBy($("coe-sub-wrap"), "coe-sub"),
+      country: $("coe-country").value.trim(),
       logo: avatarState.avatarUrl || "",
       allow_employee_listing: $("coe-listing").checked ? 1 : 0,
     };

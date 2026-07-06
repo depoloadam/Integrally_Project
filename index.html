@@ -83,13 +83,16 @@
 
   .in-field { margin-bottom:14px; }
   .in-field label { display:block; font-size:12.5px; font-weight:600; margin-bottom:6px; color:var(--in-ink-soft); }
-  .in-field input {
+  .in-field input, .in-field select {
     width:100%; padding:11px 13px; font-size:14.5px; background:var(--in-field-bg);
     border:1px solid var(--in-line); border-radius:8px; font-family:inherit; color:var(--in-ink);
     transition:border-color .15s, box-shadow .15s, background .15s;
   }
-  .in-field input:focus {
-    outline:none; background:#fff; border-color:var(--in-accent);
+  .in-field select { appearance:none; -webkit-appearance:none; cursor:pointer;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%236b8590' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 13px center; padding-right:34px; }
+  .in-field input:focus, .in-field select:focus {
+    outline:none; background-color:#fff; border-color:var(--in-accent);
     box-shadow:0 0 0 3px rgba(13,148,136,.14);
   }
   .in-row { display:flex; gap:12px; }
@@ -240,9 +243,10 @@
         </ul>
 
         <div class="in-field">
-          <label for="reg-country">Country</label>
-          <input type="text" id="reg-country" autocomplete="country-name" />
+          <label for="reg-country">Country <span class="opt">(optional)</span></label>
+          <select id="reg-country" autocomplete="country-name"></select>
         </div>
+        <div id="reg-sub-wrap"></div>
         <button class="in-btn" id="btn-register">Create account</button>
       </div>
 
@@ -254,6 +258,7 @@
   </main>
 </div>
 
+<script src="assets/js/geo.js"></script>
 <script>
   // ===================================================================
   // CONFIG — set to match your XAMPP folder.
@@ -307,6 +312,8 @@
     return allMet;
   }
   $("reg-pass").addEventListener("input", checkPasswordReqs);
+  // Dynamic country -> state/province/region field.
+  geoInitCountry($("reg-country"), $("reg-sub-wrap"));
   $("reg-pass2").addEventListener("input", checkPasswordReqs);
 
   // --- LOGIN ---------------------------------------------------------
@@ -337,6 +344,7 @@
       password:         $("reg-pass").value,
       confirm_password: $("reg-pass2").value,
       country:          $("reg-country").value.trim(),
+      state:            geoGetSubdivision($("reg-sub-wrap")),
     };
     if (!payload.first_name || !payload.last_name || !payload.email ||
         !payload.username || !payload.password) {

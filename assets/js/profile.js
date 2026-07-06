@@ -405,19 +405,20 @@ function adminEditProfile(p, headline, uuid) {
     <label>Username</label><input id="af-username" value="${esc(p.username||"")}">
     <div class="row">
       <div><label>City</label><input id="af-city" value="${esc(p.city||"")}"></div>
-      <div><label>State</label><input id="af-state" value="${esc(p.state||"")}"></div>
+      <div><label>Country</label><select id="af-country"></select></div>
     </div>
-    <label>Country</label><input id="af-country" value="${esc(p.country||"")}">
+    <div id="af-sub-wrap"></div>
     <div class="in-modal-actions">
       <button class="in-btn ghost" onclick="closeModal()">Cancel</button>
       <button class="in-btn primary" id="af-save">Save</button>
     </div>`);
+  geoInitCountryModal($("af-country"), $("af-sub-wrap"), { subId: "af-sub", preselect: { country: p.country || "", state: p.state || "" } });
   $("af-save").onclick = async () => {
     const r = await api("/profile/update.php", "POST", {
       target_uuid: uuid,
       username: $("af-username").value.trim(),
       city: $("af-city").value.trim(),
-      state: $("af-state").value.trim(),
+      state: geoGetSubdivisionBy($("af-sub-wrap"), "af-sub"),
       country: $("af-country").value.trim(),
     });
     if (r.ok && r.data?.success) { closeModal(); renderPublicProfile(uuid); }
@@ -440,9 +441,9 @@ function editCore(p, headline, attrs) {
     <label>Headline</label><input id="f-headline" value="${esc(headline)}" placeholder="e.g. IT Automation Specialist">
     <div class="row">
       <div><label>City</label><input id="f-city" value="${esc(p.city||"")}"></div>
-      <div><label>State</label><input id="f-state" value="${esc(p.state||"")}"></div>
+      <div><label>Country</label><select id="f-country"></select></div>
     </div>
-    <label>Country</label><input id="f-country" value="${esc(p.country||"")}">
+    <div id="f-sub-wrap"></div>
     <label>LinkedIn URL</label><input id="f-linkedin" value="${esc(linkedin)}" placeholder="linkedin.com/in/yourname">
     <label>Twitter / X URL</label><input id="f-twitter" value="${esc(twitter)}" placeholder="x.com/yourname">
     <label>Personal website</label><input id="f-website" value="${esc(website)}" placeholder="yourdomain.com">
@@ -454,10 +455,11 @@ function editCore(p, headline, attrs) {
       <button class="in-btn primary" id="save-core">Save</button>
     </div>`);
   mountAvatarPicker("f-avatar", avatarState, { shape: "circle", fallbackChar: p.username || "?" });
+  geoInitCountryModal($("f-country"), $("f-sub-wrap"), { subId: "f-sub", preselect: { country: p.country || "", state: p.state || "" } });
   $("save-core").onclick = async () => {
     const r = await api("/profile/update.php", "POST", {
       username:$("f-username").value.trim(), city:$("f-city").value.trim(),
-      state:$("f-state").value.trim(), country:$("f-country").value.trim(),
+      state:geoGetSubdivisionBy($("f-sub-wrap"),"f-sub"), country:$("f-country").value.trim(),
       profile_pic: avatarState.avatarUrl || "",
     });
     await api("/profile/set-attribute.php", "POST", { key:"headline", value:$("f-headline").value.trim() });
@@ -978,9 +980,9 @@ function renderSetAccount(panel, p) {
       <label>Username</label><input id="set-username" value="${esc(p.username||"")}">
       <div class="row" style="display:flex;gap:10px">
         <div style="flex:1"><label>City</label><input id="set-city" value="${esc(p.city||"")}"></div>
-        <div style="flex:1"><label>State</label><input id="set-state" value="${esc(p.state||"")}"></div>
+        <div style="flex:1"><label>Country</label><select id="set-country"></select></div>
       </div>
-      <label>Country</label><input id="set-country" value="${esc(p.country||"")}">
+      <div id="set-sub-wrap"></div>
       <label>Email</label><input value="${esc(p.email||"")}" disabled title="Email changes require verification (coming soon)">
       <div class="in-set-actions"><button class="in-btn primary" style="flex:none;padding:10px 20px" id="set-save-account">Save changes</button></div>
       <div class="in-set-msg" id="set-account-msg"></div>
@@ -990,12 +992,13 @@ function renderSetAccount(panel, p) {
       <div class="in-set-placeholder">Changing your password will require email verification or multi-factor authentication. This is coming soon.</div>
       <button class="in-btn ghost" style="flex:none;padding:9px 18px;opacity:.6;cursor:not-allowed" disabled>Change password</button>
     </div>`));
+  geoInitCountryModal($("set-country"), $("set-sub-wrap"), { subId: "set-sub", preselect: { country: p.country || "", state: p.state || "" } });
   $("set-save-account").onclick = async () => {
     const msg = $("set-account-msg");
     const r = await api("/profile/update.php", "POST", {
       username: $("set-username").value.trim(),
       city: $("set-city").value.trim(),
-      state: $("set-state").value.trim(),
+      state: geoGetSubdivisionBy($("set-sub-wrap"), "set-sub"),
       country: $("set-country").value.trim(),
     });
     if (r.ok && r.data?.success) { msg.className = "in-set-msg ok"; msg.textContent = "Saved."; }
