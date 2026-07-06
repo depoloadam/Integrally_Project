@@ -325,8 +325,10 @@ function renderBioBox(attrs, isOwner) {
 
   const box = el(`
     <div class="in-bio-box">
-      <div class="in-bio-label">About</div>
-      <div class="in-bio-text">${esc(bio)}</div>
+      <div class="in-bio-inner">
+        <div class="in-bio-label">About</div>
+        <div class="in-bio-text">${esc(bio)}</div>
+      </div>
       ${isOwner ? `<button class="in-bio-edit" title="Edit bio">✎</button>` : ""}
     </div>`);
   if (isOwner) {

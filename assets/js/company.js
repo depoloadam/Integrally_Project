@@ -125,8 +125,10 @@ function renderCompanyAbout(name, description, editable, onSaved) {
 
   const box = el(`
     <div class="in-bio-box">
-      <div class="in-bio-label">About ${esc(name)}</div>
-      <div class="in-bio-text">${esc(desc)}</div>
+      <div class="in-bio-inner">
+        <div class="in-bio-label">About ${esc(name)}</div>
+        <div class="in-bio-text">${esc(desc)}</div>
+      </div>
       ${editable ? `<button class="in-bio-edit" title="Edit description">✎</button>` : ""}
     </div>`);
   if (editable) box.querySelector(".in-bio-edit").onclick = () => editCompanyDescription(desc, onSaved);
@@ -209,8 +211,11 @@ async function renderCompanyDashboard() {
     since ? `<div class="co-info-row"><div class="co-info-label">Member since</div><div class="co-info-value">${esc(since)}</div></div>` : "",
   ].filter(Boolean).join("");
 
+  const dashLabel = el(`<div class="co-dash-label">Your Dashboard <span>· only you can see this view</span></div>`);
+  wrap.appendChild(dashLabel);
+
   const head = el(`
-    <div class="in-card2" style="position:relative">
+    <div class="in-card2 co-dash-head" style="position:relative">
       <button class="co-edit-corner" id="co-edit" title="Edit company profile">✎</button>
       <div class="job-detail-head co-head">
         <div class="job-logo lg">${CO.logo ? `<img src="${esc(CO.logo)}" alt="">` : esc(logoChar)}</div>

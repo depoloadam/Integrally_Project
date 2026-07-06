@@ -190,19 +190,14 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
   content:""; position:absolute; left:0; top:0; bottom:0; width:4px;
   background:linear-gradient(180deg, var(--in-teal-bright), var(--in-accent-d));
 }
-/* faint oversized quote mark, bottom-right flourish */
-.in-bio-box::after {
-  content:"\201D"; position:absolute; right:14px; bottom:-34px;
-  font-family:Georgia,"Times New Roman",serif; font-size:110px; line-height:1;
-  color:var(--in-accent); opacity:.07; pointer-events:none;
-}
+.in-bio-inner { position:relative; z-index:1; }
 .in-bio-label {
   font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:1px;
   color:var(--in-accent); margin-bottom:8px;
 }
 .in-bio-text { font-size:15px; line-height:1.65; color:var(--in-ink-soft); white-space:pre-wrap; word-break:break-word; }
 .in-bio-edit {
-  position:absolute; top:12px; right:12px; width:30px; height:30px;
+  position:absolute; top:12px; right:12px; z-index:2; width:30px; height:30px;
   background:var(--in-bg); border:1px solid var(--in-line); border-radius:8px;
   cursor:pointer; color:var(--in-ink-soft); font-size:13px; line-height:1;
   display:grid; place-items:center; padding:0;
@@ -210,7 +205,7 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 .in-bio-edit:hover { border-color:var(--in-accent); color:var(--in-accent); background:#fff; }
 /* owner-only empty state: a dashed invitation instead of a styled quote */
 .in-bio-box.empty { border-style:dashed; background:var(--in-bg); padding:22px; text-align:center; }
-.in-bio-box.empty::before, .in-bio-box.empty::after { display:none; }
+.in-bio-box.empty::before { display:none; }
 .in-bio-empty-title { font-size:14.5px; font-weight:600; color:var(--in-ink); }
 .in-bio-empty-sub { font-size:13px; color:var(--in-muted); margin-top:4px; }
 
@@ -555,6 +550,15 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
   display:grid; place-items:center; padding:0;
 }
 .co-edit-corner:hover { border-color:var(--in-accent); color:var(--in-accent); background:#fff; }
+
+/* dashboard-only visual cue: eyebrow label + a faint tinted header card,
+   so the management view reads as clearly distinct from the public page */
+.co-dash-label {
+  font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:1px;
+  color:var(--in-accent); margin-bottom:8px;
+}
+.co-dash-label span { font-weight:500; text-transform:none; letter-spacing:0; color:var(--in-muted); }
+.co-dash-head { background:linear-gradient(180deg, rgba(20,184,166,.05), rgba(20,184,166,0) 60%); border-color:#cfe9e2; }
 @media (max-width:640px) {
   .co-info { margin-left:0; min-width:100%; max-width:none; }
 }
