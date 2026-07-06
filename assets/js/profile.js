@@ -247,13 +247,25 @@ function renderScoreRow(s, showOwnerControls) {
         <div class="score-bar-marker" style="left:${val}%"><div class="score-bar-arrow"></div></div>
       </div>
       <div class="score-detail" style="display:none">
+        <div class="score-compare-slot"></div>
         <div class="score-mini">${miniRows}</div>
         <button class="in-btn ghost score-fullbtn" style="flex:none;padding:8px 14px">View full breakdown →</button>
       </div>
     </div>`);
   const detail = row.querySelector(".score-detail");
   const caret = row.querySelector(".score-expand");
-  caret.onclick = () => { const open = detail.style.display !== "none"; detail.style.display = open ? "none" : "block"; caret.textContent = open ? "▾" : "▴"; };
+  let compareLoaded = false;
+  caret.onclick = () => {
+    const open = detail.style.display !== "none";
+    detail.style.display = open ? "none" : "block";
+    caret.textContent = open ? "▾" : "▴";
+    // Lazy-load the "Top X%" comparison the first time the row is opened,
+    // and only for the owner (comparing your own standing).
+    if (!open && !compareLoaded && showOwnerControls && !isHidden) {
+      compareLoaded = true;
+      loadScoreComparison(s, row.querySelector(".score-compare-slot"), s.id);
+    }
+  };
   row.querySelector(".score-fullbtn").onclick = () => { location.hash = "score/" + s.id; };
   if (showOwnerControls) {
     const hideBtn = row.querySelector(".score-hide-toggle");
@@ -272,6 +284,39 @@ function renderScoreRow(s, showOwnerControls) {
     };
   }
   return row;
+}
+
+// ---- "Top X%" comparison against everyone who scored the same target ---
+// Renders into `slot`. `scoreId` optionally pins the comparison to a
+// specific score of yours; omit to compare your latest.
+async function loadScoreComparison(s, slot, scoreId) {
+  if (!slot) return;
+  slot.innerHTML = `<div class="score-compare loading">Comparing…</div>`;
+  const params = new URLSearchParams({
+    target_type: s.target_type,
+    target_value: s.target_value,
+  });
+  if (scoreId != null) params.set("score_id", scoreId);
+  const r = await api("/score/compare.php?" + params.toString());
+  const d = r.data?.data;
+  if (!r.ok || !r.data?.success || !d) {
+    slot.innerHTML = `<div class="score-compare muted">Comparison unavailable right now.</div>`;
+    return;
+  }
+  if (!d.enough_data || d.top_percent == null) {
+    const others = Math.max(0, (d.pool_size || 0) - 1);
+    slot.innerHTML = `<div class="score-compare muted">
+      Not enough people have scored this ${esc(s.target_type.replace("_"," "))} yet to compare
+      ${others > 0 ? `— only ${others} other${others === 1 ? "" : "s"} so far.` : "— you're the first."}
+    </div>`;
+    return;
+  }
+  const top = Math.max(1, d.top_percent); // never show "Top 0%"
+  slot.innerHTML = `<div class="score-compare">
+    <span class="score-compare-badge">Top ${top}%</span>
+    <span class="score-compare-text">of the ${d.pool_size} people scored against
+      “${esc(s.target_value)}”.</span>
+  </div>`;
 }
 
 // ---- social link buttons (LinkedIn / X / website) ---------------------
@@ -625,12 +670,34 @@ function scoreMe() {
     <h3>Score Me!</h3>
     <label>Score against</label>
     <select id="sm-type"><option value="job_title">Job title</option><option value="skill">Skill</option><option value="field">Field</option></select>
-    <label>Target</label><input id="sm-value" placeholder="e.g. Automation Engineer">
+    <label>Target</label>
+    <div class="job-ta-wrap"><input id="sm-value" placeholder="e.g. Automation Engineer" autocomplete="off"></div>
+    <div id="sm-hint" class="sm-hint">Start typing to see recommended titles — or enter any role you like.</div>
     <div class="in-modal-actions"><button class="in-btn ghost" onclick="closeModal()">Cancel</button><button class="in-btn primary" id="run-score">Score</button></div>`);
+
+  const input = $("sm-value");
+  const typeSel = $("sm-type");
+  const hint = $("sm-hint");
+
+  // Attach the job-title typeahead only for the job_title type. The
+  // catalog is a recommendation source; any free-text value is allowed.
+  let ta = null;
+  const syncTypeahead = () => {
+    const isJob = typeSel.value === "job_title";
+    hint.style.display = isJob ? "block" : "none";
+    if (isJob && !ta && typeof jobMountTypeahead === "function") {
+      ta = jobMountTypeahead(input, { minChars: 2, limit: 8 });
+    } else if (!isJob && ta) {
+      ta.close();
+    }
+  };
+  typeSel.onchange = syncTypeahead;
+  syncTypeahead();
+
   $("run-score").onclick = async () => {
-    const target_value = $("sm-value").value.trim(); if (!target_value) return;
+    const target_value = input.value.trim(); if (!target_value) return;
     const btn = $("run-score"); btn.disabled = true; btn.textContent = "Scoring…";
-    const r = await api("/score/score-me.php","POST",{ target_type:$("sm-type").value, target_value });
+    const r = await api("/score/score-me.php","POST",{ target_type:typeSel.value, target_value });
     if (r.ok && r.data?.success) { closeModal(); renderProfile(); }
     else { btn.disabled = false; btn.textContent = "Score"; alert(r.data?.error || "Could not score right now."); }
   };
@@ -1134,6 +1201,7 @@ async function renderScoreBreakdown(scoreId) {
       <div class="in-card2 bd-hero-bar">
         <div class="score-bar" style="margin:0"><div class="score-bar-track"></div><div class="score-bar-marker" style="left:${val}%"><div class="score-bar-arrow"></div></div></div>
         <div class="bd-scale"><span>0</span><span>50</span><span>100</span></div>
+        <div class="bd-compare-slot" style="margin-top:14px"></div>
       </div>
       <div class="in-card2">
         <h2>How this score was calculated</h2>
@@ -1142,4 +1210,7 @@ async function renderScoreBreakdown(scoreId) {
         <div class="bd-algo">Algorithm version: ${esc(s.algo_version || "n/a")}</div>
       </div>
     </div>`));
+  // This breakdown page is the viewer's own score (history.php is
+  // self-scoped when no uuid is passed), so it's safe to compare.
+  loadScoreComparison(s, view.querySelector(".bd-compare-slot"), s.id);
 }

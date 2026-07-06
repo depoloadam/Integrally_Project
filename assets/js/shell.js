@@ -488,7 +488,7 @@ dropdown.querySelectorAll("[data-menu]").forEach(b => {
       if (location.hash !== "#profile") location.hash = "profile";
       const prof = await api("/profile/get.php");
       const p = prof.data?.data || {};
-      editCore(p, p.attributes?.headline?.value || "");
+      editCore(p, p.attributes?.headline?.value || "", p.attributes || {});
     } else if (action === "settings") {
       location.hash = "settings";
     }
