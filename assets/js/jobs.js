@@ -34,10 +34,7 @@ async function renderJobs() {
   wrap.appendChild(cta);
   cta.querySelector("#jobs-cta").onclick = () => {
     if (CO) { location.hash = "company-dashboard"; return; }
-    if (ME) {
-      if (!confirm("Company accounts are separate from your personal account. Continuing will sign you out of your personal account. Continue?")) return;
-    }
-    openCompanyAuth("register");
+    goCompanyAuth(true);   // navigates to company.html#register (confirms if a user is signed in)
   };
 
   wrap.appendChild(el(`

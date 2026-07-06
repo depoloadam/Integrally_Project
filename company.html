@@ -3,15 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Integrally — Sign in</title>
+  <title>Integrally for Companies — Sign in</title>
 <!--
   =====================================================================
-  index.html — Integrally auth / signup page (self-contained).
-  Dedicated sign-up destination; quick sign-in also lives here.
-  Does NOT use the assets/ files — it's standalone on purpose.
+  company.html — Integrally COMPANY auth / signup page (self-contained).
+  Sibling of index.html (the user auth page): same split brand-panel
+  design, company-flavored copy and fields. Standalone on purpose —
+  does NOT use the assets/ files.
 
-  Endpoints: api/auth/register.php, login.php, me.php
+  Endpoints: api/company/register.php, login.php, me.php
   Set API_BASE / APP_PAGE below to match your folder.
+  Deep link: company.html#register opens the Create-account tab.
   =====================================================================
 -->
 <style>
@@ -52,6 +54,11 @@
     color:var(--in-panel-a); font-weight:800; font-size:18px;
     box-shadow:0 6px 18px rgba(20,184,166,.45);
   }
+  .in-logo-tag {
+    font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase;
+    background:rgba(127,240,228,.14); border:1px solid rgba(127,240,228,.4);
+    color:#7ff0e4; border-radius:20px; padding:3px 10px; margin-left:2px;
+  }
   .in-pitch { position:relative; z-index:1; max-width:460px; }
   .in-pitch h1 { font-size:40px; line-height:1.08; font-weight:700; letter-spacing:-1px; margin:0 0 18px; }
   .in-pitch h1 .acc { color:#7ff0e4; }
@@ -83,6 +90,7 @@
 
   .in-field { margin-bottom:14px; }
   .in-field label { display:block; font-size:12.5px; font-weight:600; margin-bottom:6px; color:var(--in-ink-soft); }
+  .in-field label .opt { font-weight:500; color:var(--in-muted); }
   .in-field input {
     width:100%; padding:11px 13px; font-size:14.5px; background:var(--in-field-bg);
     border:1px solid var(--in-line); border-radius:8px; font-family:inherit; color:var(--in-ink);
@@ -94,14 +102,6 @@
   }
   .in-row { display:flex; gap:12px; }
   .in-row .in-field { flex:1; }
-
-  /* username @ prefix */
-  .in-username-wrap { position:relative; }
-  .in-username-wrap .in-at {
-    position:absolute; left:13px; top:50%; transform:translateY(-50%);
-    color:var(--in-muted); font-size:15px; font-weight:600; pointer-events:none;
-  }
-  .in-username-wrap input { padding-left:28px; }
 
   /* live password requirement checklist */
   .in-pwreq {
@@ -137,6 +137,8 @@
   .in-msg.error   { background:#fdecea; color:var(--in-error);   border:1px solid #f5c6c0; }
   .in-msg.success { background:#e7f7f0; color:var(--in-success); border:1px solid #b3e6d1; }
 
+  .in-optional-note { font-size:12px; color:var(--in-muted); margin:4px 0 14px; }
+
   @media (max-width:860px) {
     .in-shell { grid-template-columns:1fr; }
     .in-brandpanel { padding:36px 28px; }
@@ -153,16 +155,16 @@
 
   <!-- LEFT: brand -->
   <aside class="in-brandpanel">
-    <div class="in-logo"><span class="in-logo-mark">I</span><span>Integrally</span></div>
+    <div class="in-logo"><span class="in-logo-mark">I</span><span>Integrally</span><span class="in-logo-tag">For companies</span></div>
     <div class="in-pitch">
-      <h1>Your career, <span class="acc">measured</span> and mapped.</h1>
-      <p>Integrally turns your experience, skills, and goals into a clear signal —
-         so you always know where you stand and where to go next.</p>
+      <h1>Hire with <span class="acc">signal</span>, not noise.</h1>
+      <p>Set up your company page on Integrally — post openings, share updates,
+         and reach candidates whose skills are actually measured.</p>
       <div class="in-points">
-        <div class="in-point"><span class="dot">›</span> Build a profile that reflects your work</div>
-        <div class="in-point"><span class="dot">›</span> Score yourself against roles and fields</div>
-        <div class="in-point"><span class="dot">›</span> Follow people and companies that matter</div>
-        <div class="in-point"><span class="dot">›</span> Hiring? Post jobs and reach candidates</div>
+        <div class="in-point"><span class="dot">›</span> A public company page candidates can follow</div>
+        <div class="in-point"><span class="dot">›</span> Post jobs and manage them from one dashboard</div>
+        <div class="in-point"><span class="dot">›</span> Share updates to a feed of your followers</div>
+        <div class="in-point"><span class="dot">›</span> Verified employer linking on candidate profiles</div>
       </div>
     </div>
     <div class="in-foot">© 2026 Integrally</div>
@@ -171,9 +173,9 @@
   <!-- RIGHT: form -->
   <main class="in-formpanel">
     <div class="in-formwrap">
-      <div class="in-eyebrow">Welcome</div>
-      <h2 id="in-heading">Sign in to Integrally</h2>
-      <div class="in-sub" id="in-subtext">Pick up right where you left off.</div>
+      <div class="in-eyebrow">Companies</div>
+      <h2 id="in-heading">Company sign in</h2>
+      <div class="in-sub" id="in-subtext">Manage your page, posts, and openings.</div>
 
       <div class="in-tabs">
         <button class="in-tab active" id="tab-login">Sign in</button>
@@ -185,8 +187,8 @@
       <!-- LOGIN -->
       <div id="form-login">
         <div class="in-field">
-          <label for="login-id">Email or username</label>
-          <input type="text" id="login-id" autocomplete="username" />
+          <label for="login-id">Company email</label>
+          <input type="email" id="login-id" autocomplete="email" />
         </div>
         <div class="in-field">
           <label for="login-pass">Password</label>
@@ -197,30 +199,13 @@
 
       <!-- REGISTER -->
       <div id="form-register" style="display:none;">
-        <div class="in-row">
-          <div class="in-field">
-            <label for="reg-first">First name</label>
-            <input type="text" id="reg-first" autocomplete="given-name" />
-          </div>
-          <div class="in-field" style="max-width:92px;flex:none">
-            <label for="reg-mi">M.I.</label>
-            <input type="text" id="reg-mi" maxlength="2" autocomplete="additional-name" />
-          </div>
+        <div class="in-field">
+          <label for="reg-name">Company name</label>
+          <input type="text" id="reg-name" placeholder="Acme Inc." autocomplete="organization" />
         </div>
         <div class="in-field">
-          <label for="reg-last">Last name</label>
-          <input type="text" id="reg-last" autocomplete="family-name" />
-        </div>
-        <div class="in-field">
-          <label for="reg-email">Email</label>
-          <input type="email" id="reg-email" autocomplete="email" />
-        </div>
-        <div class="in-field">
-          <label for="reg-username">Username</label>
-          <div class="in-username-wrap">
-            <span class="in-at">@</span>
-            <input type="text" id="reg-username" autocomplete="username" />
-          </div>
+          <label for="reg-email">Work email</label>
+          <input type="email" id="reg-email" placeholder="hr@acme.com" autocomplete="email" />
         </div>
         <div class="in-field">
           <label for="reg-pass">Password</label>
@@ -239,16 +224,35 @@
           <li data-req="match"><span class="rdot"></span> Passwords match</li>
         </ul>
 
+        <div class="in-optional-note">The rest is optional — you can fill it in later from your dashboard.</div>
         <div class="in-field">
-          <label for="reg-country">Country</label>
+          <label for="reg-industry">Industry <span class="opt">(optional)</span></label>
+          <input type="text" id="reg-industry" placeholder="e.g. Software, Manufacturing" />
+        </div>
+        <div class="in-field">
+          <label for="reg-website">Website <span class="opt">(optional)</span></label>
+          <input type="text" id="reg-website" placeholder="https://acme.com" autocomplete="url" />
+        </div>
+        <div class="in-row">
+          <div class="in-field">
+            <label for="reg-city">City <span class="opt">(optional)</span></label>
+            <input type="text" id="reg-city" autocomplete="address-level2" />
+          </div>
+          <div class="in-field">
+            <label for="reg-state">State <span class="opt">(optional)</span></label>
+            <input type="text" id="reg-state" autocomplete="address-level1" />
+          </div>
+        </div>
+        <div class="in-field">
+          <label for="reg-country">Country <span class="opt">(optional)</span></label>
           <input type="text" id="reg-country" autocomplete="country-name" />
         </div>
-        <button class="in-btn" id="btn-register">Create account</button>
+        <button class="in-btn" id="btn-register">Create company account</button>
       </div>
 
       <div style="text-align:center;margin-top:22px;padding-top:18px;border-top:1px solid var(--in-line);font-size:13px;color:var(--in-muted)">
-        Hiring or representing a business?
-        <a href="company.html#register" style="color:var(--in-accent);font-weight:600;text-decoration:none">Create a company account →</a>
+        Looking for a personal account?
+        <a href="index.html" style="color:var(--in-accent);font-weight:600;text-decoration:none">User sign in →</a>
       </div>
     </div>
   </main>
@@ -258,8 +262,8 @@
   // ===================================================================
   // CONFIG — set to match your XAMPP folder.
   // ===================================================================
-  const API_BASE = "/integrally/api/auth";
-  const APP_PAGE = "app.html";
+  const API_BASE = "/integrally/api/company";
+  const APP_PAGE = "app.html#company-dashboard";
 
   const $ = (id) => document.getElementById(id);
   const msg = $("in-msg");
@@ -273,11 +277,14 @@
     $("tab-register").classList.toggle("active", !login);
     $("form-login").style.display    = login ? "block" : "none";
     $("form-register").style.display = login ? "none"  : "block";
-    $("in-heading").textContent = login ? "Sign in to Integrally" : "Create your account";
-    $("in-subtext").textContent = login ? "Pick up right where you left off." : "Start measuring your career in minutes.";
+    $("in-heading").textContent = login ? "Company sign in" : "Create your company account";
+    $("in-subtext").textContent = login ? "Manage your page, posts, and openings." : "Get your company on Integrally in minutes.";
   }
   $("tab-login").onclick    = () => setTab("login");
   $("tab-register").onclick = () => setTab("register");
+
+  // Deep link: company.html#register (used by the landing page CTAs).
+  if (location.hash === "#register") setTab("register");
 
   async function api(path, method, body) {
     const opts = { method, headers:{ "Content-Type":"application/json" }, credentials:"include" };
@@ -287,7 +294,7 @@
     return { ok: res.ok, data };
   }
 
-  // --- live password requirement checklist (mirrors register.php) ----
+  // --- live password requirement checklist ----------------------------
   function checkPasswordReqs() {
     const pw  = $("reg-pass").value;
     const pw2 = $("reg-pass2").value;
@@ -314,7 +321,7 @@
     clearMsg();
     const login = $("login-id").value.trim();
     const password = $("login-pass").value;
-    if (!login || !password) return showMsg("Enter your login and password.", "error");
+    if (!login || !password) return showMsg("Enter your company email and password.", "error");
     $("btn-login").disabled = true;
     try {
       const { ok, data } = await api("/login.php", "POST", { login, password });
@@ -324,23 +331,23 @@
       showMsg("Could not reach the server. Is XAMPP running?", "error");
     } finally { $("btn-login").disabled = false; }
   };
+  $("login-pass").addEventListener("keydown", e => { if (e.key === "Enter") $("btn-login").click(); });
 
   // --- REGISTER ------------------------------------------------------
   $("btn-register").onclick = async () => {
     clearMsg();
     const payload = {
-      first_name:       $("reg-first").value.trim(),
-      middle_initial:   $("reg-mi").value.trim(),
-      last_name:        $("reg-last").value.trim(),
-      email:            $("reg-email").value.trim(),
-      username:         $("reg-username").value.trim(),
-      password:         $("reg-pass").value,
-      confirm_password: $("reg-pass2").value,
-      country:          $("reg-country").value.trim(),
+      name:     $("reg-name").value.trim(),
+      email:    $("reg-email").value.trim(),
+      password: $("reg-pass").value,
+      industry: $("reg-industry").value.trim(),
+      website:  $("reg-website").value.trim(),
+      city:     $("reg-city").value.trim(),
+      state:    $("reg-state").value.trim(),
+      country:  $("reg-country").value.trim(),
     };
-    if (!payload.first_name || !payload.last_name || !payload.email ||
-        !payload.username || !payload.password) {
-      return showMsg("Please fill in your name, email, username, and password.", "error");
+    if (!payload.name || !payload.email || !payload.password) {
+      return showMsg("Please fill in your company name, email, and password.", "error");
     }
     if (!checkPasswordReqs()) {
       return showMsg("Please meet all password requirements, including matching passwords.", "error");
@@ -349,7 +356,7 @@
     try {
       const { ok, data } = await api("/register.php", "POST", payload);
       if (ok && data.success) {
-        showMsg("Account created!", "success");
+        showMsg("Company account created!", "success");
         setTimeout(() => window.location.href = APP_PAGE, 600);
       } else showMsg(data.error || "Registration failed.", "error");
     } catch (e) {
@@ -357,12 +364,12 @@
     } finally { $("btn-register").disabled = false; }
   };
 
-  // --- On load: already logged in -> go to app -----------------------
-  (async function init() {
+  // --- On load: already signed in as a company -> go to dashboard -----
+  (async () => {
     try {
       const { ok, data } = await api("/me.php", "GET");
       if (ok && data.success) window.location.href = APP_PAGE;
-    } catch (e) {}
+    } catch (e) { /* not signed in — stay here */ }
   })();
 </script>
 </body>

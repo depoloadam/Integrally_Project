@@ -8,6 +8,7 @@
 // ---- CONFIG ----------------------------------------------------------
 const API_BASE  = "/integrally/api";
 const AUTH_PAGE = "index.html";
+const COMPANY_AUTH_PAGE = "company.html";   // dedicated company sign-in / signup page
 
 // ---- shared helpers --------------------------------------------------
 const $ = (id) => document.getElementById(id);
@@ -364,14 +365,89 @@ function renderSignedOut() {
     return;
   }
   $("view").innerHTML = `
-    <div class="in-card2" style="text-align:center;padding:60px 22px;max-width:480px;margin:40px auto">
-      <h2 style="justify-content:center;font-size:22px;text-transform:none;letter-spacing:-0.3px">Welcome to Integrally</h2>
-      <div class="in-empty" style="font-style:normal;margin:8px 0 22px">
-        Create an account to build your profile, get scored, and connect —
-        or sign in from the menu above.
+    <div class="landing">
+
+      <div class="landing-hero">
+        <div class="landing-hero-inner">
+          <div class="landing-eyebrow">The career network that keeps score</div>
+          <h1>Know where you stand.<br><span class="acc">Get where you're going.</span></h1>
+          <p>Integrally is a career network with a live scoring engine — see how your skills
+             and experience measure up against real job titles and fields, then connect with
+             the people and companies that matter.</p>
+          <div class="landing-cta-row">
+            <button class="in-btn primary landing-cta" id="land-start">Get started — it's free</button>
+            <button class="in-btn ghost landing-cta ghost-dark" id="land-jobs">Browse open jobs</button>
+          </div>
+          <div class="landing-hero-note">Hiring? <a href="#" id="land-co">Create a company page →</a></div>
+        </div>
       </div>
-      <button class="in-btn primary" style="flex:none;padding:11px 24px" onclick="window.location.href='${AUTH_PAGE}'">Get started</button>
+
+      <div class="landing-features">
+        <div class="landing-feature">
+          <div class="landing-feature-icon">📈</div>
+          <h3>Live career scores</h3>
+          <p>Your profile is scored against job titles, skills, and whole fields — and the
+             numbers move as you grow. No more guessing how you stack up.</p>
+        </div>
+        <div class="landing-feature">
+          <div class="landing-feature-icon">🤝</div>
+          <h3>Follow &amp; connect</h3>
+          <p>Follow people and companies, share updates, and build a feed of posts and
+             conversations that actually matter to your career.</p>
+        </div>
+        <div class="landing-feature">
+          <div class="landing-feature-icon">💼</div>
+          <h3>Real openings</h3>
+          <p>Browse jobs from verified companies and link your work history to real
+             employers — your experience, backed up.</p>
+        </div>
+      </div>
+
+      <div class="landing-steps">
+        <h2>How it works</h2>
+        <div class="landing-steps-row">
+          <div class="landing-step">
+            <div class="landing-step-num">1</div>
+            <h4>Build your profile</h4>
+            <p>Add your experience, education, and skills — it takes minutes.</p>
+          </div>
+          <div class="landing-step">
+            <div class="landing-step-num">2</div>
+            <h4>Get scored</h4>
+            <p>The engine evaluates you against titles and fields you care about.</p>
+          </div>
+          <div class="landing-step">
+            <div class="landing-step-num">3</div>
+            <h4>Connect &amp; grow</h4>
+            <p>Follow companies, engage with your network, and find your next role.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="landing-coband">
+        <div>
+          <h3>Hiring? Set up your company page</h3>
+          <p>Post openings, share updates, and let candidates follow you.</p>
+        </div>
+        <div class="landing-coband-btns">
+          <button class="in-btn primary" style="flex:none;padding:10px 20px" id="land-co-reg">Create a company account</button>
+          <button class="in-btn ghost" style="flex:none;padding:10px 20px" id="land-co-login">Company sign in</button>
+        </div>
+      </div>
+
+      <div class="landing-final">
+        <h2>Ready to see your score?</h2>
+        <button class="in-btn primary landing-cta" id="land-start2">Join Integrally</button>
+      </div>
+
     </div>`;
+
+  $("land-start").onclick  = () => { window.location.href = AUTH_PAGE; };
+  $("land-start2").onclick = () => { window.location.href = AUTH_PAGE; };
+  $("land-jobs").onclick   = () => { location.hash = "jobs"; };
+  $("land-co").onclick       = (e) => { e.preventDefault(); window.location.href = COMPANY_AUTH_PAGE + "#register"; };
+  $("land-co-reg").onclick   = () => { window.location.href = COMPANY_AUTH_PAGE + "#register"; };
+  $("land-co-login").onclick = () => { window.location.href = COMPANY_AUTH_PAGE; };
 }
 
 // ---- signed-out auth dropdown (sign up link + inline sign in) ---------
@@ -381,7 +457,7 @@ authDrop.addEventListener("click", e => e.stopPropagation());
 document.addEventListener("click", () => authDrop.classList.remove("show"));
 authDrop.querySelector(".in-auth-signup").onclick = () => { window.location.href = AUTH_PAGE; };
 const coAuthLink = authDrop.querySelector('[data-auth="company"]');
-if (coAuthLink) coAuthLink.onclick = () => { authDrop.classList.remove("show"); openCompanyAuth("login"); };
+if (coAuthLink) coAuthLink.onclick = () => { authDrop.classList.remove("show"); window.location.href = COMPANY_AUTH_PAGE; };
 $("qs-go").onclick = async () => {
   const login = $("qs-login").value.trim();
   const password = $("qs-pass").value;

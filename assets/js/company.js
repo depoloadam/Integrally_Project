@@ -36,73 +36,16 @@ function updateCompanyNav() {
   }
 }
 
-// ---- company auth modals --------------------------------------------
-function openCompanyAuth(mode = "login") {
-  const isReg = mode === "register";
-  openModal(`
-    <h3>${isReg ? "Create a company account" : "Company sign in"}</h3>
-    <div class="in-auth-msg" id="co-msg"></div>
-    ${isReg ? `<label>Company name</label><input id="co-name" placeholder="Acme Inc.">` : ""}
-    <label>Email</label><input id="co-email" type="email" placeholder="hr@acme.com">
-    <label>Password</label><input id="co-pass" type="password" placeholder="${isReg ? "At least 8 characters" : "Your password"}">
-    ${isReg ? `
-      <div class="row">
-        <div><label>Industry</label><input id="co-industry" placeholder="Software"></div>
-        <div><label>Website</label><input id="co-website" placeholder="https://…"></div>
-      </div>
-      <div class="row">
-        <div><label>City</label><input id="co-city"></div>
-        <div><label>State</label><input id="co-state"></div>
-      </div>` : ""}
-    <div class="in-modal-actions">
-      <button class="in-btn ghost" onclick="closeModal()">Cancel</button>
-      <button class="in-btn primary" id="co-submit">${isReg ? "Create account" : "Sign in"}</button>
-    </div>
-    <div style="text-align:center;margin-top:12px;font-size:13px;color:var(--in-muted)">
-      ${isReg ? "Already have a company account?" : "Need a company account?"}
-      <a href="#" id="co-switch" style="color:var(--in-accent);font-weight:600">${isReg ? "Sign in" : "Create one"}</a>
-    </div>
-  `);
-
-  $("co-switch").onclick = (e) => { e.preventDefault(); openCompanyAuth(isReg ? "login" : "register"); };
-
-  $("co-submit").onclick = async () => {
-    const msg = $("co-msg");
-    msg.className = "in-auth-msg";
-    const email = $("co-email").value.trim();
-    const password = $("co-pass").value;
-    if (!email || !password) { msg.textContent = "Email and password are required."; msg.className = "in-auth-msg show"; return; }
-
-    const btn = $("co-submit"); btn.disabled = true; btn.textContent = "Please wait…";
-    let r;
-    if (isReg) {
-      const name = $("co-name").value.trim();
-      if (!name) { msg.textContent = "Company name is required."; msg.className = "in-auth-msg show"; btn.disabled = false; btn.textContent = "Create account"; return; }
-      r = await api("/company/register.php", "POST", {
-        email, password, name,
-        industry: $("co-industry").value.trim(),
-        website: $("co-website").value.trim(),
-        city: $("co-city").value.trim(),
-        state: $("co-state").value.trim(),
-      });
-    } else {
-      r = await api("/company/login.php", "POST", { login: email, password });
-    }
-    if (r.ok && r.data?.success) {
-      closeModal();
-      // Server enforces single identity (user session is now cleared).
-      // Reload so the whole shell reflects the company identity.
-      ME = null;
-      location.hash = "company-dashboard";
-      location.reload();
-    } else {
-      msg.textContent = r.data?.error || "Something went wrong.";
-      msg.className = "in-auth-msg show";
-      btn.disabled = false; btn.textContent = isReg ? "Create account" : "Sign in";
-    }
-  };
+// ---- company auth --------------------------------------------------
+// All company sign-in / signup now runs through the dedicated page
+// (company.html). This helper navigates there, warning a signed-in
+// USER first, since company login clears the user session (single-
+// identity model enforced server-side).
+function goCompanyAuth(register = false) {
+  if (ME && !confirm("Company accounts are separate from your personal account. Continuing will sign you out of your personal account. Continue?")) return;
+  window.location.href = COMPANY_AUTH_PAGE + (register ? "#register" : "");
 }
-window.openCompanyAuth = openCompanyAuth;
+window.goCompanyAuth = goCompanyAuth;
 
 // ---- shared "About the company" card + description editor ------------
 // The same card is rendered on the dashboard AND the public profile so
@@ -167,16 +110,59 @@ async function renderCompanyDashboard() {
 
   if (!CO) {
     view.innerHTML = `
-      <div class="in-card2" style="text-align:center;padding:50px 22px;max-width:480px;margin:30px auto">
-        <h2 style="justify-content:center;text-transform:none;font-size:20px">Company accounts</h2>
-        <div class="in-empty" style="font-style:normal;margin:8px 0 22px">
-          Post jobs and build your company presence on Integrally.
+      <div class="landing co-landing">
+
+        <div class="landing-hero">
+          <div class="landing-hero-inner">
+            <div class="landing-eyebrow">Integrally for companies</div>
+            <h1>Build your presence.<br><span class="acc">Reach real candidates.</span></h1>
+            <p>Set up a company page to post openings, share updates with followers,
+               and connect with candidates whose skills are actually measured — all
+               from one dashboard.</p>
+            <div class="landing-cta-row">
+              <button class="in-btn primary landing-cta" id="co-land-reg">Create a company account</button>
+              <button class="in-btn ghost landing-cta ghost-dark" id="co-land-login">Company sign in</button>
+            </div>
+            <div class="landing-hero-note">Looking for a personal account? <a href="${AUTH_PAGE}">User sign up →</a></div>
+          </div>
         </div>
-        <div style="display:flex;gap:10px;justify-content:center">
-          <button class="in-btn primary" style="flex:none;padding:11px 22px" onclick="openCompanyAuth('register')">Create company account</button>
-          <button class="in-btn ghost" style="flex:none;padding:11px 22px" onclick="openCompanyAuth('login')">Sign in</button>
+
+        <div class="landing-features">
+          <div class="landing-feature">
+            <div class="landing-feature-icon">📢</div>
+            <h3>Post &amp; manage jobs</h3>
+            <p>Publish openings, toggle salary visibility, and edit or close postings
+               anytime from your dashboard.</p>
+          </div>
+          <div class="landing-feature">
+            <div class="landing-feature-icon">👥</div>
+            <h3>Grow a following</h3>
+            <p>Candidates follow your page and see your posts in their feed — build an
+               audience before you even post a role.</p>
+          </div>
+          <div class="landing-feature">
+            <div class="landing-feature-icon">✅</div>
+            <h3>Verified employer links</h3>
+            <p>Let people list your company in their work history, with your opt-in —
+               real experience, backed by real employers.</p>
+          </div>
         </div>
+
+        <div class="landing-coband">
+          <div>
+            <h3>Ready to start hiring smarter?</h3>
+            <p>Creating a company account takes a couple of minutes.</p>
+          </div>
+          <div class="landing-coband-btns">
+            <button class="in-btn primary" style="flex:none;padding:10px 20px" id="co-land-reg2">Create a company account</button>
+          </div>
+        </div>
+
       </div>`;
+
+    $("co-land-reg").onclick   = () => goCompanyAuth(true);
+    $("co-land-reg2").onclick  = () => goCompanyAuth(true);
+    $("co-land-login").onclick = () => goCompanyAuth(false);
     return;
   }
 
