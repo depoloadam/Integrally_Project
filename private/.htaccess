@@ -1,0 +1,10 @@
+# =====================================================================
+# private/ — files here must NEVER be directly web-accessible.
+# Under XAMPP the whole project sits in htdocs, so without this rule
+# anything in this folder would be downloadable by URL. Resumes and
+# other private uploads are served only through authenticated PHP
+# endpoints (e.g. api/profile/resume-download.php).
+# =====================================================================
+
+# Apache 2.4+
+Require all denied

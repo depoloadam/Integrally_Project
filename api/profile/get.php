@@ -113,4 +113,20 @@ if ($isOwner || $aiEnabled) {
     ];
 }
 
+// --- Resume metadata (OWNER ONLY — resumes are fully private) ---------
+if ($isOwner) {
+    $rStmt = $pdo->prepare(
+        "SELECT setting_key, setting_value FROM user_settings
+         WHERE user_id = ? AND setting_key IN ('resume_file', 'resume_name', 'resume_uploaded_at')"
+    );
+    $rStmt->execute([(int) $user['id']]);
+    $rMeta = [];
+    foreach ($rStmt->fetchAll() as $row) {
+        $rMeta[$row['setting_key']] = $row['setting_value'];
+    }
+    $profile['resume'] = !empty($rMeta['resume_file'])
+        ? ['name' => $rMeta['resume_name'] ?? 'resume', 'uploaded_at' => $rMeta['resume_uploaded_at'] ?? null]
+        : null;
+}
+
 Response::success($profile);

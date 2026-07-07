@@ -669,26 +669,118 @@ function editCore(p, headline, attrs) {
   const twitter  = attrs.twitter_url?.value || "";
   const website  = attrs.website_url?.value || "";
   const websiteLabel = attrs.website_label?.value || "";
+  const resume = p.resume || null;   // { name, uploaded_at } | null
+
   openModal(`
     <h3>Edit profile</h3>
-    <div id="f-avatar"></div>
-    <label>Username</label><input id="f-username" value="${esc(p.username||"")}">
-    <label>Headline</label><input id="f-headline" value="${esc(headline)}" placeholder="e.g. IT Automation Specialist">
-    <div class="row">
-      <div><label>City</label><input id="f-city" value="${esc(p.city||"")}"></div>
-      <div><label>Country</label><select id="f-country"></select></div>
+    <div class="in-modal-tabs">
+      <button class="in-modal-tab active" data-etab="profile">Profile</button>
+      <button class="in-modal-tab" data-etab="jobsearch">Job Search</button>
     </div>
-    <div id="f-sub-wrap"></div>
-    <label>LinkedIn URL</label><input id="f-linkedin" value="${esc(linkedin)}" placeholder="linkedin.com/in/yourname">
-    <label>Twitter / X URL</label><input id="f-twitter" value="${esc(twitter)}" placeholder="x.com/yourname">
-    <label>Personal website</label><input id="f-website" value="${esc(website)}" placeholder="yourdomain.com">
-    <div class="row">
-      <div><label>Website display name</label><input id="f-website-label" value="${esc(websiteLabel)}" placeholder="e.g. My Portfolio"></div>
+    <div data-epanel="profile">
+      <div id="f-avatar"></div>
+      <label>Username</label><input id="f-username" value="${esc(p.username||"")}">
+      <label>Headline</label><input id="f-headline" value="${esc(headline)}" placeholder="e.g. IT Automation Specialist">
+      <div class="row">
+        <div><label>City</label><input id="f-city" value="${esc(p.city||"")}"></div>
+        <div><label>Country</label><select id="f-country"></select></div>
+      </div>
+      <div id="f-sub-wrap"></div>
+      <label>LinkedIn URL</label><input id="f-linkedin" value="${esc(linkedin)}" placeholder="linkedin.com/in/yourname">
+      <label>Twitter / X URL</label><input id="f-twitter" value="${esc(twitter)}" placeholder="x.com/yourname">
+      <label>Personal website</label><input id="f-website" value="${esc(website)}" placeholder="yourdomain.com">
+      <div class="row">
+        <div><label>Website display name</label><input id="f-website-label" value="${esc(websiteLabel)}" placeholder="e.g. My Portfolio"></div>
+      </div>
+    </div>
+    <div data-epanel="jobsearch" style="display:none">
+      <div class="in-resume-note">Your resume is private. It's stored securely, never shown on your profile, and only you can download it.</div>
+      <label>Resume</label>
+      <div class="in-resume-row" id="f-resume-row"></div>
+      <input type="file" id="f-resume-file" accept=".pdf,.doc,.docx" style="display:none">
+      <div class="in-set-msg" id="f-resume-msg"></div>
     </div>
     <div class="in-modal-actions">
       <button class="in-btn ghost" onclick="closeModal()">Cancel</button>
       <button class="in-btn primary" id="save-core">Save</button>
     </div>`);
+
+  // ---- tabs ----
+  const modal = $("modal");
+  modal.querySelectorAll(".in-modal-tab").forEach(t => {
+    t.onclick = () => {
+      modal.querySelectorAll(".in-modal-tab").forEach(x => x.classList.toggle("active", x === t));
+      modal.querySelectorAll("[data-epanel]").forEach(pn => {
+        pn.style.display = (pn.dataset.epanel === t.dataset.etab) ? "" : "none";
+      });
+    };
+  });
+
+  // ---- resume row (upload / replace / download / remove) ----
+  const resumeState = { current: resume };
+  const paintResume = () => {
+    const row = $("f-resume-row");
+    const cur = resumeState.current;
+    if (cur) {
+      const when = cur.uploaded_at ? new Date(cur.uploaded_at).toLocaleDateString() : "";
+      row.innerHTML = `
+        <div class="in-resume-file">
+          <span class="in-resume-icon">📄</span>
+          <div class="in-resume-meta">
+            <div class="in-resume-name">${esc(cur.name || "resume")}</div>
+            ${when ? `<div class="in-resume-date">Uploaded ${esc(when)}</div>` : ""}
+          </div>
+        </div>
+        <div class="in-resume-actions">
+          <button class="in-btn ghost" style="flex:none;padding:7px 12px" id="f-resume-dl">Download</button>
+          <button class="in-btn ghost" style="flex:none;padding:7px 12px" id="f-resume-replace">Replace</button>
+          <button class="in-btn danger-ghost" style="flex:none;padding:7px 12px" id="f-resume-remove">Remove</button>
+        </div>`;
+      $("f-resume-dl").onclick = () => { window.open(API_BASE + "/profile/resume-download.php", "_blank"); };
+      $("f-resume-replace").onclick = () => $("f-resume-file").click();
+      $("f-resume-remove").onclick = async () => {
+        if (!confirm("Remove your resume? The file will be deleted.")) return;
+        const r = await api("/profile/resume-delete.php", "POST");
+        const msg = $("f-resume-msg");
+        if (r.ok && r.data?.success) { resumeState.current = null; paintResume(); msg.className = "in-set-msg ok"; msg.textContent = "Resume removed."; }
+        else { msg.className = "in-set-msg err"; msg.textContent = r.data?.error || "Could not remove the resume."; }
+      };
+    } else {
+      row.innerHTML = `
+        <div class="in-resume-empty">
+          <span>No resume uploaded yet.</span>
+          <button class="in-btn primary" style="flex:none;padding:8px 16px" id="f-resume-add">Upload resume</button>
+        </div>
+        <div class="in-resume-hint">PDF, DOC, or DOCX — up to 5 MB.</div>`;
+      $("f-resume-add").onclick = () => $("f-resume-file").click();
+    }
+  };
+  paintResume();
+
+  $("f-resume-file").onchange = async () => {
+    const file = $("f-resume-file").files[0];
+    if (!file) return;
+    const msg = $("f-resume-msg");
+    if (file.size > 5 * 1024 * 1024) { msg.className = "in-set-msg err"; msg.textContent = "Resume must be under 5 MB."; return; }
+    msg.className = "in-set-msg"; msg.textContent = "Uploading…";
+    const fd = new FormData();
+    fd.append("resume", file);
+    try {
+      const res = await fetch(API_BASE + "/profile/resume-upload.php", { method:"POST", credentials:"include", body:fd });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        resumeState.current = data.data;
+        paintResume();
+        msg.className = "in-set-msg ok"; msg.textContent = "Resume uploaded.";
+      } else {
+        msg.className = "in-set-msg err"; msg.textContent = data.error || "Upload failed.";
+      }
+    } catch (e) {
+      msg.className = "in-set-msg err"; msg.textContent = "Upload failed.";
+    }
+    $("f-resume-file").value = "";
+  };
+
   mountAvatarPicker("f-avatar", avatarState, { shape: "circle", fallbackChar: p.username || "?" });
   geoInitCountryModal($("f-country"), $("f-sub-wrap"), { subId: "f-sub", preselect: { country: p.country || "", state: p.state || "" } });
   $("save-core").onclick = async () => {
