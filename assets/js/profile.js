@@ -678,18 +678,24 @@ function editCore(p, headline, attrs) {
       <button class="in-modal-tab" data-etab="jobsearch">Job Search</button>
     </div>
     <div data-epanel="profile">
-      <div id="f-avatar"></div>
-      <label>Username</label><input id="f-username" value="${esc(p.username||"")}">
-      <label>Headline</label><input id="f-headline" value="${esc(headline)}" placeholder="e.g. IT Automation Specialist">
-      <div class="row">
+      <div class="ep-top">
+        <div class="ep-avatar"><div id="f-avatar"></div></div>
+        <div class="ep-identity">
+          <label>Username</label><input id="f-username" value="${esc(p.username||"")}">
+          <label>Headline</label><input id="f-headline" value="${esc(headline)}" placeholder="e.g. IT Automation Specialist">
+        </div>
+      </div>
+      <div class="ep-sep"><span>Location</span></div>
+      <div class="ep-grid">
         <div><label>City</label><input id="f-city" value="${esc(p.city||"")}"></div>
         <div><label>Country</label><select id="f-country"></select></div>
+        <div class="ep-span" id="f-sub-wrap"></div>
       </div>
-      <div id="f-sub-wrap"></div>
-      <label>LinkedIn URL</label><input id="f-linkedin" value="${esc(linkedin)}" placeholder="linkedin.com/in/yourname">
-      <label>Twitter / X URL</label><input id="f-twitter" value="${esc(twitter)}" placeholder="x.com/yourname">
-      <label>Personal website</label><input id="f-website" value="${esc(website)}" placeholder="yourdomain.com">
-      <div class="row">
+      <div class="ep-sep"><span>Links</span></div>
+      <div class="ep-grid">
+        <div><label>LinkedIn URL</label><input id="f-linkedin" value="${esc(linkedin)}" placeholder="linkedin.com/in/yourname"></div>
+        <div><label>Twitter / X URL</label><input id="f-twitter" value="${esc(twitter)}" placeholder="x.com/yourname"></div>
+        <div><label>Personal website</label><input id="f-website" value="${esc(website)}" placeholder="yourdomain.com"></div>
         <div><label>Website display name</label><input id="f-website-label" value="${esc(websiteLabel)}" placeholder="e.g. My Portfolio"></div>
       </div>
     </div>
@@ -703,7 +709,7 @@ function editCore(p, headline, attrs) {
     <div class="in-modal-actions">
       <button class="in-btn ghost" onclick="closeModal()">Cancel</button>
       <button class="in-btn primary" id="save-core">Save</button>
-    </div>`);
+    </div>`, { wide: true });
 
   // ---- tabs ----
   const modal = $("modal");

@@ -28,8 +28,13 @@ async function api(path, method = "GET", body = null) {
 }
 
 // ---- modal system ----------------------------------------------------
-function openModal(html) { $("modal").innerHTML = html; $("overlay").classList.add("show"); }
-function closeModal() { $("overlay").classList.remove("show"); $("modal").innerHTML = ""; }
+function openModal(html, opts) {
+  const m = $("modal");
+  m.classList.toggle("wide", !!(opts && opts.wide));
+  m.innerHTML = html;
+  $("overlay").classList.add("show");
+}
+function closeModal() { $("overlay").classList.remove("show"); const m = $("modal"); m.innerHTML = ""; m.classList.remove("wide"); }
 $("overlay").addEventListener("click", e => { if (e.target.id === "overlay") closeModal(); });
 window.closeModal = closeModal;   // for inline onclick handlers
 
