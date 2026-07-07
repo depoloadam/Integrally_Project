@@ -340,6 +340,7 @@ function setupCompanyIdentityNav() {
   const dd = $("profile-dropdown");
   dd.innerHTML = `
     <button data-co-menu="dashboard">Company dashboard</button>
+    <button data-co-menu="settings">Settings</button>
     <div class="in-dropdown-sep"></div>
     <button data-co-menu="signout" class="danger">Sign out</button>`;
   dd.querySelectorAll("[data-co-menu]").forEach(b => {
@@ -347,6 +348,7 @@ function setupCompanyIdentityNav() {
       e.stopPropagation();
       dd.classList.remove("show");
       if (b.dataset.coMenu === "dashboard") location.hash = "company-dashboard";
+      else if (b.dataset.coMenu === "settings") location.hash = "company-settings";
       else { await api("/company/logout.php", "POST"); CO = null; location.hash = ""; location.reload(); }
     };
   });
@@ -615,6 +617,11 @@ function routeFromHash() {
     renderSettings();
     return;
   }
+  if (raw.startsWith("score-history/")) {
+    document.querySelectorAll("[data-nav]").forEach(x => x.classList.remove("active"));
+    renderScoreHistory(raw.slice("score-history/".length));
+    return;
+  }
   if (raw.startsWith("score/")) {
     document.querySelectorAll("[data-nav]").forEach(x => x.classList.remove("active"));
     renderScoreBreakdown(raw.slice("score/".length));
@@ -642,6 +649,11 @@ function routeFromHash() {
   }
   if (raw === "company-dashboard") {
     showTab("company-dashboard");
+    return;
+  }
+  if (raw === "company-settings") {
+    document.querySelectorAll("[data-nav]").forEach(x => x.classList.remove("active"));
+    renderCompanySettings();
     return;
   }
   if (raw === "company-employees") {

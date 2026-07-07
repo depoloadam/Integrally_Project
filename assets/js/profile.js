@@ -249,7 +249,11 @@ function renderScoreRow(s, showOwnerControls) {
       <div class="score-detail" style="display:none">
         <div class="score-compare-slot"></div>
         <div class="score-mini">${miniRows}</div>
-        <button class="in-btn ghost score-fullbtn" style="flex:none;padding:8px 14px">View full breakdown →</button>
+        <div class="score-detail-actions">
+          <button class="in-btn ghost score-fullbtn" style="flex:none;padding:8px 14px">View full breakdown →</button>
+          <button class="in-btn ghost score-histbtn" style="flex:none;padding:8px 14px">View history →</button>
+          ${showOwnerControls ? `<button class="in-btn danger-ghost score-delbtn" style="flex:none;padding:8px 14px">Remove score</button>` : ""}
+        </div>
       </div>
     </div>`);
   const detail = row.querySelector(".score-detail");
@@ -267,6 +271,9 @@ function renderScoreRow(s, showOwnerControls) {
     }
   };
   row.querySelector(".score-fullbtn").onclick = () => { location.hash = "score/" + s.id; };
+  row.querySelector(".score-histbtn").onclick = () => {
+    location.hash = "score-history/" + encodeURIComponent(s.target_type + "|" + s.target_value);
+  };
   if (showOwnerControls) {
     const hideBtn = row.querySelector(".score-hide-toggle");
     hideBtn.onclick = async (e) => {
@@ -282,6 +289,22 @@ function renderScoreRow(s, showOwnerControls) {
         alert(r.data?.error || "Could not update visibility.");
       }
     };
+
+    const delBtn = row.querySelector(".score-delbtn");
+    if (delBtn) {
+      delBtn.onclick = async (e) => {
+        e.stopPropagation();
+        if (!confirm(`Remove your ${typeLabel} score for "${s.target_value}"? This permanently deletes this result and can't be undone.`)) return;
+        delBtn.disabled = true; delBtn.textContent = "Removing…";
+        const r = await api("/score/delete.php", "POST", { id: s.id });
+        if (r.ok && r.data?.success) {
+          renderProfile();   // refresh so the latest-per-target list is rebuilt
+        } else {
+          delBtn.disabled = false; delBtn.textContent = "Remove score";
+          alert(r.data?.error || "Could not remove the score.");
+        }
+      };
+    }
   }
   return row;
 }
@@ -1125,13 +1148,76 @@ function renderSetPrivacy(panel, st) {
   };
 }
 
-// ---- Notifications tab: placeholder ----------------------------------
+// ---- Notifications tab: per-type in-app toggles (+ dormant email) ----
 function renderSetNotifications(panel) {
+  const st = (SETTINGS_DATA && SETTINGS_DATA.st) || {};
+  renderNotificationPrefs(panel, {
+    settings: st,
+    save: (key, value) => api("/settings/set.php", "POST", { key, value }),
+  });
+}
+
+// Shared notification-preferences UI for BOTH users and companies.
+// opts = { settings: {key->value}, save: (key,value)=>Promise }
+// In-app toggles are live; email toggles are shown but dormant ("soon").
+function renderNotificationPrefs(panel, opts) {
+  const st = opts.settings || {};
+  const on = (k) => st["notify_" + k] !== "0";        // default ON
+  const emailOn = (k) => st["email_" + k] === "1";     // default OFF (dormant)
+
+  const liveTypes = [
+    { key: "like",    label: "Likes",     sub: "When someone likes your post." },
+    { key: "comment", label: "Comments",  sub: "When someone comments on your post." },
+    { key: "follow",  label: "New followers", sub: "When someone starts following you." },
+  ];
+  const futureTypes = [
+    { key: "mention", label: "Mentions",       sub: "When someone mentions you. (Coming soon)" },
+    { key: "score",   label: "Score updates",  sub: "Updates about your scores and rankings. (Coming soon)" },
+  ];
+
+  const row = (t, kind, checked, disabled) => `
+    <div class="in-set-toggle${disabled ? " disabled" : ""}" style="margin-top:14px">
+      <div>
+        <div class="in-set-toggle-label">${esc(t.label)}</div>
+        <div class="in-set-toggle-sub">${esc(t.sub)}</div>
+      </div>
+      <button class="in-toggle ${checked ? "on" : ""}" data-np="${kind}:${t.key}" role="switch" aria-checked="${checked}" ${disabled ? "disabled" : ""}><span class="in-toggle-knob"></span></button>
+    </div>`;
+
   panel.appendChild(el(`
     <div class="in-set-section">
-      <h3>Notifications</h3>
-      <div class="in-set-placeholder">Notification preferences will appear here once the notification system is built — choosing what you're alerted about (new followers, post activity, score updates, and more).</div>
-    </div>`));
+      <h3>In-app notifications</h3>
+      <div class="in-set-toggle-sub" style="margin-bottom:4px">Control what shows up in your notification bell.</div>
+      ${liveTypes.map(t => row(t, "app", on(t.key), false)).join("")}
+      ${futureTypes.map(t => row(t, "app", true, true)).join("")}
+    </div>
+    <div class="in-set-section">
+      <h3>Email notifications <span class="in-soon-pill">Coming soon</span></h3>
+      <div class="in-set-toggle-sub" style="margin-bottom:4px">Email delivery isn't live yet — set your preferences now and they'll apply once it launches.</div>
+      ${liveTypes.map(t => row(t, "email", emailOn(t.key), false)).join("")}
+    </div>
+    <div class="in-set-msg" id="set-notif-msg"></div>`));
+
+  panel.querySelectorAll("[data-np]").forEach(btn => {
+    if (btn.disabled) return;
+    btn.onclick = async () => {
+      const [kind, type] = btn.dataset.np.split(":");
+      const key = (kind === "email" ? "email_" : "notify_") + type;
+      const turningOn = !btn.classList.contains("on");
+      btn.disabled = true;
+      const r = await opts.save(key, turningOn ? "1" : "0");
+      btn.disabled = false;
+      const msg = $("set-notif-msg");
+      if (r.ok && r.data?.success) {
+        btn.classList.toggle("on", turningOn);
+        btn.setAttribute("aria-checked", turningOn);
+        st[key] = turningOn ? "1" : "0";
+        msg.className = "in-set-msg ok"; msg.textContent = "Saved.";
+      } else {
+        msg.className = "in-set-msg err"; msg.textContent = r.data?.error || "Could not save.";
+      }
+    };
+  });
 }
 
 // ---- Admin tab: links toward admin tools (admins only) ---------------
@@ -1208,9 +1294,204 @@ async function renderScoreBreakdown(scoreId) {
         <div class="bd-placeholder-note">ⓘ This is a placeholder breakdown. The full scoring algorithm is still in development — this page will eventually explain in detail how each part of your profile contributes to your score for “${esc(s.target_value)}.”</div>
         <div class="bd-factors">${factors}</div>
         <div class="bd-algo">Algorithm version: ${esc(s.algo_version || "n/a")}</div>
+        <div class="bd-actions">
+          <button class="in-btn ghost" id="bd-history" style="flex:none;padding:9px 18px">View score history →</button>
+          <button class="in-btn danger-ghost" id="bd-delete" style="flex:none;padding:9px 18px">Remove this score</button>
+        </div>
       </div>
     </div>`));
   // This breakdown page is the viewer's own score (history.php is
   // self-scoped when no uuid is passed), so it's safe to compare.
   loadScoreComparison(s, view.querySelector(".bd-compare-slot"), s.id);
+
+  $("bd-history").onclick = () => {
+    location.hash = "score-history/" + encodeURIComponent(s.target_type + "|" + s.target_value);
+  };
+
+  const del = $("bd-delete");
+  if (del) {
+    del.onclick = async () => {
+      if (!confirm(`Remove your ${esc(s.target_type.replace("_"," "))} score for "${s.target_value}"? This permanently deletes this result and can't be undone.`)) return;
+      del.disabled = true; del.textContent = "Removing…";
+      const r = await api("/score/delete.php", "POST", { id: s.id });
+      if (r.ok && r.data?.success) {
+        location.hash = "profile";
+      } else {
+        del.disabled = false; del.textContent = "Remove this score";
+        alert(r.data?.error || "Could not remove the score.");
+      }
+    };
+  }
+}
+
+// ===================================================================
+// VIEW: SCORE HISTORY (progress over time for ONE target)
+// Hash: #score-history/<encoded "type|value">
+// ===================================================================
+async function renderScoreHistory(encoded) {
+  const view = $("view");
+  view.innerHTML = `<div class="in-loading">Loading score history…</div>`;
+
+  // Decode the "type|value" segment. Split on the FIRST pipe only, since
+  // a target_value could (in theory) contain a pipe of its own.
+  let decoded = "";
+  try { decoded = decodeURIComponent(encoded || ""); } catch { decoded = ""; }
+  const sep = decoded.indexOf("|");
+  const targetType  = sep >= 0 ? decoded.slice(0, sep) : "";
+  const targetValue = sep >= 0 ? decoded.slice(sep + 1) : "";
+
+  if (!targetType || !targetValue) {
+    view.innerHTML = `<div class="in-card2"><div class="in-empty" style="text-align:center">Couldn't read that score target.</div><div style="text-align:center;margin-top:14px"><button class="in-btn ghost" style="flex:none;padding:9px 18px" onclick="location.hash='profile'">← Back to profile</button></div></div>`;
+    return;
+  }
+
+  const params = new URLSearchParams({ target_type: targetType, target_value: targetValue });
+  const res = await api("/score/history.php?" + params.toString());
+  // history.php returns newest-first; we want oldest-first for the chart.
+  const rows = (res.data?.data || []).slice().reverse();
+
+  const typeLabel = esc(targetType.replace("_", " "));
+  const back = `<div class="in-back"><button class="in-back-btn" onclick="location.hash='profile'">← Back to profile</button></div>`;
+
+  if (!rows.length) {
+    view.innerHTML = "";
+    view.appendChild(el(`<div style="max-width:720px;margin:0 auto">${back}
+      <div class="in-card2"><div class="in-empty" style="text-align:center">No score history yet for “${esc(targetValue)}”.</div></div></div>`));
+    return;
+  }
+
+  const values = rows.map(r => Math.max(0, Math.min(100, r.score_value)));
+  const latest = values[values.length - 1];
+  const first  = values[0];
+  const best    = Math.max(...values);
+  const delta   = Math.round(latest - first);
+  const deltaTxt = rows.length < 2 ? "—"
+    : (delta > 0 ? `+${delta}` : String(delta));
+  const deltaCls = delta > 0 ? "up" : (delta < 0 ? "down" : "flat");
+
+  view.innerHTML = "";
+  view.appendChild(el(`
+    <div style="max-width:720px;margin:0 auto">
+      ${back}
+      <div class="in-card2 sh-hero">
+        <div class="sh-eyebrow">${typeLabel} · score history</div>
+        <div class="sh-title">${esc(targetValue)}</div>
+        <div class="sh-stats">
+          <div class="sh-stat"><div class="sh-stat-v">${Math.round(latest)}</div><div class="sh-stat-l">Latest</div></div>
+          <div class="sh-stat"><div class="sh-stat-v">${Math.round(best)}</div><div class="sh-stat-l">Best</div></div>
+          <div class="sh-stat"><div class="sh-stat-v ${deltaCls}">${deltaTxt}</div><div class="sh-stat-l">Change</div></div>
+          <div class="sh-stat"><div class="sh-stat-v">${rows.length}</div><div class="sh-stat-l">Scores</div></div>
+        </div>
+      </div>
+      <div class="in-card2">
+        <h2>Progress over time</h2>
+        <div class="sh-chart-wrap">${scoreHistoryChart(rows)}</div>
+      </div>
+      <div class="in-card2">
+        <h2>All scores</h2>
+        <div class="sh-list">
+          ${rows.slice().reverse().map(r => {
+            const v = Math.round(Math.max(0, Math.min(100, r.score_value)));
+            const d = new Date(r.created_at).toLocaleString();
+            return `<div class="sh-row" data-id="${r.id}">
+              <div class="sh-row-badge">${v}</div>
+              <div class="sh-row-meta"><div class="sh-row-date">${esc(d)}</div><div class="sh-row-algo">${esc(r.algo_version || "n/a")}</div></div>
+              <button class="in-btn ghost sh-row-view" style="flex:none;padding:6px 12px">Breakdown →</button>
+            </div>`;
+          }).join("")}
+        </div>
+      </div>
+    </div>`));
+
+  view.querySelectorAll(".sh-row-view").forEach(btn => {
+    btn.onclick = () => { location.hash = "score/" + btn.closest(".sh-row").dataset.id; };
+  });
+
+  // ---- Interactive chart points: hover highlight + tooltip, click → breakdown.
+  const svg = view.querySelector(".sh-chart");
+  if (svg) {
+    const tip   = svg.querySelector(".sh-tip");
+    const tipBg = svg.querySelector(".sh-tip-bg");
+    const tipTx = svg.querySelector(".sh-tip-tx");
+
+    const showTip = (g) => {
+      const cx = parseFloat(g.dataset.cx), cy = parseFloat(g.dataset.cy);
+      tipTx.textContent = g.dataset.label;
+      tip.style.display = "";
+      // Size the background to the text, then position above the point,
+      // clamped to stay inside the 0–680 viewBox width.
+      const pad = 7, box = tipTx.getBBox();
+      const w = box.width + pad * 2, h = box.height + pad * 1.4;
+      let x = cx - w / 2;
+      x = Math.max(2, Math.min(x, 680 - w - 2));
+      const y = Math.max(2, cy - h - 10);
+      tipBg.setAttribute("x", x.toFixed(1));
+      tipBg.setAttribute("y", y.toFixed(1));
+      tipBg.setAttribute("width", w.toFixed(1));
+      tipBg.setAttribute("height", h.toFixed(1));
+      tipTx.setAttribute("x", (x + w / 2).toFixed(1));
+      tipTx.setAttribute("y", (y + h / 2 + box.height / 2 - 1).toFixed(1));
+    };
+    const hideTip = () => { tip.style.display = "none"; };
+
+    svg.querySelectorAll(".sh-point").forEach(g => {
+      const go = () => { location.hash = "score/" + g.dataset.id; };
+      g.addEventListener("mouseenter", () => { g.classList.add("active"); showTip(g); });
+      g.addEventListener("mouseleave", () => { g.classList.remove("active"); hideTip(); });
+      g.addEventListener("focus", () => { g.classList.add("active"); showTip(g); });
+      g.addEventListener("blur", () => { g.classList.remove("active"); hideTip(); });
+      g.addEventListener("click", go);
+      g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+    });
+  }
+}
+
+// Build an inline SVG line chart from history rows (oldest-first).
+// No charting library — plain SVG to match the vanilla-JS codebase.
+function scoreHistoryChart(rows) {
+  const W = 680, H = 240;
+  const padL = 34, padR = 16, padT = 16, padB = 34;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+  const n = rows.length;
+
+  const yFor = v => padT + plotH - (Math.max(0, Math.min(100, v)) / 100) * plotH;
+  const xFor = i => n === 1 ? padL + plotW / 2 : padL + (i / (n - 1)) * plotW;
+
+  // Horizontal gridlines + y labels at 0/25/50/75/100.
+  let grid = "";
+  [0, 25, 50, 75, 100].forEach(g => {
+    const y = yFor(g);
+    grid += `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W - padR}" y2="${y.toFixed(1)}" class="sh-grid"/>`;
+    grid += `<text x="${padL - 8}" y="${(y + 3.5).toFixed(1)}" class="sh-axis" text-anchor="end">${g}</text>`;
+  });
+
+  const pts = rows.map((r, i) => [xFor(i), yFor(r.score_value)]);
+  const linePath = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+  // Area under the line for a subtle fill.
+  const areaPath = n > 1
+    ? `${linePath} L${pts[n - 1][0].toFixed(1)},${(padT + plotH).toFixed(1)} L${pts[0][0].toFixed(1)},${(padT + plotH).toFixed(1)} Z`
+    : "";
+
+  const dots = pts.map((p, i) => {
+    const r = rows[i];
+    const v = Math.round(Math.max(0, Math.min(100, r.score_value)));
+    const cx = p[0].toFixed(1), cy = p[1].toFixed(1);
+    const label = `${v} · ${new Date(r.created_at).toLocaleDateString()}`;
+    // A large transparent hit-circle makes the point easy to click/hover;
+    // the visible dot sits on top. Both share the sh-point group so CSS
+    // can highlight the visible dot when the group is hovered.
+    return `<g class="sh-point" data-id="${r.id}" data-label="${esc(label)}" data-cx="${cx}" data-cy="${cy}" tabindex="0" role="button" aria-label="${esc(label)}, view breakdown">
+      <circle cx="${cx}" cy="${cy}" r="14" class="sh-hit"/>
+      <circle cx="${cx}" cy="${cy}" r="4" class="sh-dot"/>
+    </g>`;
+  }).join("");
+
+  return `<svg viewBox="0 0 ${W} ${H}" class="sh-chart" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Score progression chart">
+    ${grid}
+    ${areaPath ? `<path d="${areaPath}" class="sh-area"/>` : ""}
+    ${n > 1 ? `<path d="${linePath}" class="sh-line"/>` : ""}
+    ${dots}
+    <g class="sh-tip" style="display:none"><rect class="sh-tip-bg" rx="6"/><text class="sh-tip-tx"></text></g>
+  </svg>`;
 }

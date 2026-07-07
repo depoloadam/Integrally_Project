@@ -290,6 +290,42 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 .job-ta-item:hover, .job-ta-item.active { background:var(--in-bg); }
 .job-ta-title { font-size:14px; font-weight:600; color:var(--in-ink); }
 .job-ta-cat { font-size:11.5px; color:var(--in-muted); flex:none; }
+/* --- Remove-score controls --- */
+.in-btn.danger-ghost { background:transparent; color:var(--in-error); border:1px solid #f0c8c2; }
+.in-btn.danger-ghost:hover { background:#fdecea; border-color:var(--in-error); }
+.score-detail-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.bd-actions { margin-top:16px; padding-top:14px; border-top:1px solid var(--in-line); display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; }
+/* --- Score history page --- */
+.sh-hero { text-align:left; }
+.sh-eyebrow { font-size:12px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; color:var(--in-accent); }
+.sh-title { font-size:22px; font-weight:800; color:var(--in-ink); margin:2px 0 14px; }
+.sh-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+.sh-stat { padding:14px 16px; background:var(--in-bg); border:1px solid var(--in-line); border-radius:12px; text-align:center; transition:border-color .12s ease, box-shadow .12s ease; }
+.sh-stat:hover { border-color:var(--in-accent); box-shadow:0 2px 10px rgba(13,148,136,.08); }
+@media (max-width:560px){ .sh-stats { grid-template-columns:repeat(2,1fr); } }
+.sh-stat-v { font-size:26px; font-weight:800; color:var(--in-ink); line-height:1.1; }
+.sh-stat-v.up { color:var(--in-success); } .sh-stat-v.down { color:var(--in-error); }
+.sh-stat-l { font-size:11px; color:var(--in-muted); text-transform:uppercase; letter-spacing:.4px; margin-top:6px; }
+.sh-chart-wrap { width:100%; }
+.sh-chart { width:100%; height:auto; display:block; }
+.sh-grid { stroke:var(--in-line); stroke-width:1; }
+.sh-axis { fill:var(--in-muted); font-size:11px; font-family:inherit; }
+.sh-area { fill:rgba(13,148,136,.10); stroke:none; }
+.sh-line { fill:none; stroke:var(--in-accent); stroke-width:2.5; stroke-linejoin:round; stroke-linecap:round; }
+.sh-dot { fill:#fff; stroke:var(--in-accent); stroke-width:2.5; transition:r .12s ease, fill .12s ease; }
+.sh-hit { fill:transparent; }
+.sh-point { cursor:pointer; outline:none; }
+.sh-point:hover .sh-dot, .sh-point.active .sh-dot, .sh-point:focus-visible .sh-dot { r:6.5; fill:var(--in-accent); }
+.sh-point:focus-visible .sh-dot { stroke:var(--in-accent-d); }
+.sh-tip { pointer-events:none; }
+.sh-tip-bg { fill:var(--in-ink); opacity:.92; }
+.sh-tip-tx { fill:#fff; font-size:12px; font-family:inherit; text-anchor:middle; }
+.sh-list { display:flex; flex-direction:column; gap:8px; }
+.sh-row { display:flex; align-items:center; gap:12px; padding:10px 12px; background:var(--in-bg); border:1px solid var(--in-line); border-radius:10px; }
+.sh-row-badge { width:40px; height:40px; border-radius:9px; flex:none; display:grid; place-items:center; font-weight:800; font-size:15px; color:#fff; background:linear-gradient(135deg,var(--in-accent),var(--in-teal-bright)); }
+.sh-row-meta { flex:1; }
+.sh-row-date { font-size:13.5px; font-weight:600; color:var(--in-ink); }
+.sh-row-algo { font-size:11.5px; color:var(--in-muted); }
 .score-locked { display:flex; align-items:center; gap:10px; margin-top:14px; background:var(--in-bg); border:1px solid var(--in-line); border-radius:10px; padding:12px 14px; font-size:13.5px; color:var(--in-ink-soft); }
 .score-locked .lock { font-size:15px; }
 
@@ -359,6 +395,8 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 .in-set-toggle { display:flex; align-items:center; gap:16px; }
 .in-set-toggle-label { font-size:14px; font-weight:600; }
 .in-set-toggle-sub { font-size:12.5px; color:var(--in-muted); margin-top:2px; }
+.in-set-toggle.disabled { opacity:.55; }
+.in-soon-pill { display:inline-block; font-size:11px; font-weight:700; letter-spacing:.3px; text-transform:uppercase; color:var(--in-muted); background:var(--in-bg); border:1px solid var(--in-line); border-radius:999px; padding:2px 9px; margin-left:8px; vertical-align:middle; }
 .in-toggle {
   margin-left:auto; flex:none; width:46px; height:26px; border-radius:14px; border:none;
   background:var(--in-line); cursor:pointer; position:relative; transition:background .2s; padding:0;

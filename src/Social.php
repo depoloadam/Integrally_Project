@@ -49,6 +49,11 @@ class Social
         if ($recipientType === $actorType && $recipientId === $actorId) {
             return; // don't notify yourself
         }
+        // Respect the recipient's in-app notification preference for this
+        // type. Unset defaults to ON, so existing users keep current behavior.
+        if (!self::wantsNotification($recipientType, $recipientId, $type)) {
+            return;
+        }
         $pdo = Database::conn();
         $stmt = $pdo->prepare(
             'INSERT INTO notifications
@@ -56,6 +61,36 @@ class Social
              VALUES (?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([$recipientType, $recipientId, $actorType, $actorId, $type, $postId, $commentId]);
+    }
+
+    /**
+     * Does this recipient want in-app notifications of the given type?
+     * Reads the 'notify_<type>' key from the recipient's settings table
+     * (user_settings or company_settings). Missing/unrecognized => ON,
+     * so notifications are opt-out and default-on. Only known toggleable
+     * types are gated; anything else always notifies.
+     */
+    public static function wantsNotification(string $recipientType, int $recipientId, string $type): bool
+    {
+        $gated = ['like', 'comment', 'follow'];
+        if (!in_array($type, $gated, true)) {
+            return true; // ungated type -> always notify
+        }
+        $pdo = Database::conn();
+        $key = 'notify_' . $type;
+        if ($recipientType === 'company') {
+            $stmt = $pdo->prepare(
+                'SELECT setting_value FROM company_settings WHERE company_id = ? AND setting_key = ? LIMIT 1'
+            );
+        } else {
+            $stmt = $pdo->prepare(
+                'SELECT setting_value FROM user_settings WHERE user_id = ? AND setting_key = ? LIMIT 1'
+            );
+        }
+        $stmt->execute([$recipientId, $key]);
+        $val = $stmt->fetchColumn();
+        // Only an explicit '0' disables. Unset or anything else = ON.
+        return $val !== '0';
     }
 
     /**

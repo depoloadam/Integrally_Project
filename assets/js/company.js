@@ -691,3 +691,135 @@ async function renderCompanyProfile(uuid) {
     console.error("Company profile posts section failed:", err);
   }
 }
+
+// ===================================================================
+// VIEW: COMPANY SETTINGS  (#company-settings)
+// Mirrors the user settings layout: left nav + swappable panels.
+// Tabs: Details (wired to company/update.php), Notifications (shared
+// renderNotificationPrefs), and Account (sign out).
+// ===================================================================
+let CO_SETTINGS_TAB = "details";
+let CO_SETTINGS_DATA = null;
+
+async function renderCompanySettings() {
+  const view = $("view");
+  view.innerHTML = `<div class="in-loading">Loading settings…</div>`;
+
+  const [meRes, stRes] = await Promise.all([
+    api("/company/me.php"),
+    api("/company/settings-get.php"),
+  ]);
+  const me = meRes.data?.data || CO || {};
+  CO_SETTINGS_DATA = { me, st: stRes.data?.data || {} };
+
+  const tabs = [
+    { key: "details",       label: "Company details" },
+    { key: "notifications", label: "Notifications" },
+    { key: "account",       label: "Account" },
+  ];
+  if (!tabs.some(t => t.key === CO_SETTINGS_TAB)) CO_SETTINGS_TAB = "details";
+
+  view.innerHTML = "";
+  const wrap = el(`<div class="in-settings"></div>`);
+  view.appendChild(wrap);
+  const nav = el(`<div class="in-set-nav"></div>`);
+  wrap.appendChild(nav);
+  const panel = el(`<div class="in-set-panel"></div>`);
+  wrap.appendChild(panel);
+
+  const navButtons = {};
+  tabs.forEach(t => {
+    const b = el(`<button class="${t.key === CO_SETTINGS_TAB ? "active" : ""} ${t.key === "account" ? "danger" : ""}">${esc(t.label)}</button>`);
+    b.onclick = () => {
+      CO_SETTINGS_TAB = t.key;
+      Object.values(navButtons).forEach(x => x.classList.remove("active"));
+      b.classList.add("active");
+      paintCompanySettingsPanel(panel);
+    };
+    navButtons[t.key] = b;
+    nav.appendChild(b);
+  });
+
+  paintCompanySettingsPanel(panel);
+}
+
+function paintCompanySettingsPanel(panel) {
+  const { me, st } = CO_SETTINGS_DATA || { me: {}, st: {} };
+  panel.innerHTML = "";
+  if (CO_SETTINGS_TAB === "details")            renderCoSetDetails(panel, me);
+  else if (CO_SETTINGS_TAB === "notifications") renderCoSetNotifications(panel, st);
+  else if (CO_SETTINGS_TAB === "account")       renderCoSetAccount(panel);
+}
+
+function renderCoSetDetails(panel, me) {
+  panel.appendChild(el(`
+    <div class="in-set-section">
+      <h3>Company details</h3>
+      <label>Company name</label><input id="cos-name" value="${esc(me.name || "")}">
+      <label>Industry</label><input id="cos-industry" value="${esc(me.industry || "")}">
+      <div class="row" style="display:flex;gap:10px">
+        <div style="flex:1"><label>City</label><input id="cos-city" value="${esc(me.city || "")}"></div>
+        <div style="flex:1"><label>Country</label><select id="cos-country"></select></div>
+      </div>
+      <div id="cos-sub-wrap"></div>
+      <label>Website</label><input id="cos-website" value="${esc(me.website || "")}" placeholder="https://example.com">
+      <label>Email</label><input value="${esc(me.email || "")}" disabled title="Email changes require verification (coming soon)">
+      <div class="in-set-actions"><button class="in-btn primary" style="flex:none;padding:10px 20px" id="cos-save">Save changes</button></div>
+      <div class="in-set-msg" id="cos-msg"></div>
+    </div>`));
+  geoInitCountryModal($("cos-country"), $("cos-sub-wrap"), { subId: "cos-sub", preselect: { country: me.country || "", state: me.state || "" } });
+  $("cos-save").onclick = async () => {
+    const msg = $("cos-msg");
+    const name = $("cos-name").value.trim();
+    if (!name) { msg.className = "in-set-msg err"; msg.textContent = "Company name is required."; return; }
+    const r = await api("/company/update.php", "POST", {
+      name,
+      industry: $("cos-industry").value.trim(),
+      city: $("cos-city").value.trim(),
+      state: geoGetSubdivisionBy($("cos-sub-wrap"), "cos-sub"),
+      country: $("cos-country").value.trim(),
+      website: $("cos-website").value.trim(),
+    });
+    if (r.ok && r.data?.success) {
+      msg.className = "in-set-msg ok"; msg.textContent = "Saved.";
+      if (CO) { CO.name = name; CO.industry = $("cos-industry").value.trim(); }
+      if (CO_SETTINGS_DATA) CO_SETTINGS_DATA.me = { ...CO_SETTINGS_DATA.me, ...(r.data.data || {}) };
+      if (typeof updateCompanyNav === "function") updateCompanyNav();
+    } else {
+      msg.className = "in-set-msg err"; msg.textContent = r.data?.error || "Could not save.";
+    }
+  };
+}
+
+function renderCoSetNotifications(panel, st) {
+  // Reuse the shared preferences UI; companies save via their own endpoint.
+  renderNotificationPrefs(panel, {
+    settings: st,
+    save: (key, value) => api("/company/settings-set.php", "POST", { key, value }),
+  });
+}
+
+function renderCoSetAccount(panel) {
+  panel.appendChild(el(`
+    <div class="in-set-section change-account">
+      <h3>Account</h3>
+      <div class="in-danger-row">
+        <div>
+          <div class="in-set-toggle-label">Sign out</div>
+          <div class="in-set-toggle-sub">Sign out of this company account on this device.</div>
+        </div>
+        <button class="in-btn ghost" style="flex:none;padding:9px 18px" id="cos-signout">Sign out</button>
+      </div>
+      <div class="in-danger-row">
+        <div>
+          <div class="in-set-toggle-label">Delete company</div>
+          <div class="in-set-toggle-sub">Permanently delete this company and all its data. This can't be undone.</div>
+        </div>
+        <button class="in-btn" style="flex:none;padding:9px 18px;background:#fdecea;color:var(--in-error);border:1px solid #f5c6c0;opacity:.7;cursor:not-allowed" disabled title="Coming soon">Delete company</button>
+      </div>
+    </div>`));
+  $("cos-signout").onclick = async () => {
+    await api("/company/logout.php", "POST");
+    CO = null; location.hash = ""; location.reload();
+  };
+}
