@@ -617,6 +617,11 @@ function routeFromHash() {
     renderSettings();
     return;
   }
+  if (raw === "ai-skillset") {
+    document.querySelectorAll("[data-nav]").forEach(x => x.classList.remove("active"));
+    renderAiSkillset();
+    return;
+  }
   if (raw.startsWith("score-history/")) {
     document.querySelectorAll("[data-nav]").forEach(x => x.classList.remove("active"));
     renderScoreHistory(raw.slice("score-history/".length));

@@ -88,4 +88,29 @@ foreach ($stmt->fetchAll() as $row) {
 }
 $profile['attributes'] = $attributes;
 
+// --- AI Skillset (public when the user has enabled it) ----------------
+// Stored in user_settings: 'ai_box_enabled' and 'ai_skills' (JSON array).
+$aiStmt = $pdo->prepare(
+    "SELECT setting_key, setting_value FROM user_settings
+     WHERE user_id = ? AND setting_key IN ('ai_box_enabled', 'ai_skills')"
+);
+$aiStmt->execute([(int) $user['id']]);
+$aiEnabled = false;
+$aiSkills  = [];
+foreach ($aiStmt->fetchAll() as $row) {
+    if ($row['setting_key'] === 'ai_box_enabled') {
+        $aiEnabled = ($row['setting_value'] === '1');
+    } elseif ($row['setting_key'] === 'ai_skills') {
+        $decoded = json_decode((string) $row['setting_value'], true);
+        if (is_array($decoded)) $aiSkills = array_values(array_filter($decoded, 'is_string'));
+    }
+}
+// Owner always gets the raw state; visitors only when enabled.
+if ($isOwner || $aiEnabled) {
+    $profile['ai_skillset'] = [
+        'enabled' => $aiEnabled,
+        'skills'  => $aiSkills,
+    ];
+}
+
 Response::success($profile);

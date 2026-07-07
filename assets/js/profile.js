@@ -135,6 +135,15 @@ async function renderProfile() {
     e.stopPropagation(); pheadDrop.classList.remove("show"); editCore(p, headline, attrs);
   };
 
+  // Skills — moved to the left column, directly under the identity box.
+  chipSection(leftCol, "Skills", skills.data?.data, s => `
+    ${esc(s.name)} ${s.proficiency ? `<span class="lvl">L${s.proficiency}</span>` : ""}`,
+    addSkill, s => ({ id:s.id, kind:"skill" }), "skill");
+
+  // AI Skillset box (left column, below Skills). Owner sees it always so
+  // they can enable it; visitors see it only once it's enabled + saved.
+  leftCol.appendChild(renderAiBox(st, true));
+
   // bio — distinct shape from the standard section cards, sits at the
   // very top of the right column, above scores.
   rightCol.appendChild(renderBioBox(attrs, true));
@@ -186,9 +195,10 @@ async function renderProfile() {
     <div class="s">${esc(c.issuer || "")}${c.issue_date ? " · " + c.issue_date : ""}</div></div>`,
     "certs", addCert, c => c.id);
 
-  chipSection(rightCol, "Skills", skills.data?.data, s => `
-    ${esc(s.name)} ${s.proficiency ? `<span class="lvl">L${s.proficiency}</span>` : ""}`,
-    addSkill, s => ({ id:s.id, kind:"skill" }), "skill");
+  // AI Skillset display — sits under Certifications. Shown when the owner
+  // has enabled it; visitors see it only if enabled + has endorsed skills.
+  const aiBoxRight = renderAiSkillsDisplay(st, true);
+  if (aiBoxRight) rightCol.appendChild(aiBoxRight);
 
   chipSection(rightCol, "Interests", interests.data?.data, i => esc(i.name),
     addInterest, i => ({ id:i.id, kind:"interest" }), "interest");
@@ -403,6 +413,163 @@ function renderBioBox(attrs, isOwner) {
     box.querySelector(".in-bio-edit").onclick = () => editBio(bio);
   }
   return box;
+}
+
+// ---- AI Skillset: helpers -----------------------------------------------
+// State lives in user_settings: 'ai_box_enabled' ("1"/"0") and 'ai_skills'
+// (JSON array of endorsed skill names). No migration needed.
+function aiIsEnabled(st) { return (st && st.ai_box_enabled) === "1"; }
+function aiSkills(st) {
+  try { const a = JSON.parse((st && st.ai_skills) || "[]"); return Array.isArray(a) ? a : []; }
+  catch { return []; }
+}
+
+// Left-column box. Owner always sees it (to enable/manage); visitors never
+// see this control box — their view of AI skills is the right-column display.
+function renderAiBox(st, isOwner) {
+  if (!isOwner) return el(`<div style="display:none"></div>`);
+  const enabled = aiIsEnabled(st);
+  const count = aiSkills(st).length;
+  const box = el(`
+    <div class="in-card2 in-ai-box">
+      <h2>AI Skillset ${enabled ? `<span class="in-ai-on">On</span>` : `<span class="in-ai-off">Off</span>`}</h2>
+      <div class="in-ai-blurb">Showcase your AI proficiency — the skillset employers increasingly prioritise.</div>
+      <button class="in-btn primary in-ai-cta" style="flex:none;padding:9px 16px;margin-top:4px">${enabled ? (count ? "Manage AI skillset" : "Add AI Skillset") : "Add AI Skillset"}</button>
+    </div>`);
+  box.querySelector(".in-ai-cta").onclick = () => { location.hash = "ai-skillset"; };
+  return box;
+}
+
+// Right-column display box (under Certifications). Returns null when it
+// shouldn't render. Owner sees it once enabled (even if empty, as a prompt);
+// visitors see it only when enabled AND there are endorsed skills.
+function renderAiSkillsDisplay(st, isOwner) {
+  const enabled = aiIsEnabled(st);
+  const skills = aiSkills(st);
+  if (!enabled) return null;
+  if (!isOwner && !skills.length) return null;
+
+  const chips = skills.length
+    ? skills.map(s => `<span class="in-chip in-ai-chip">${esc(s)}</span>`).join("")
+    : `<div class="in-empty">No AI skills endorsed yet.</div>`;
+  const box = el(`
+    <div class="in-card2 in-ai-display">
+      <h2><span class="in-ai-spark">✦</span> AI Skillset ${isOwner ? `<button class="add in-ai-edit" title="Manage">✎</button>` : ""}</h2>
+      <div class="in-chips body">${chips}</div>
+    </div>`);
+  if (isOwner) box.querySelector(".in-ai-edit").onclick = () => { location.hash = "ai-skillset"; };
+  return box;
+}
+
+// ---- AI Skillset: full page (#ai-skillset) ------------------------------
+// A dedicated page to enable the box and endorse AI-related skills.
+const AI_SKILL_SUGGESTIONS = [
+  "Prompt engineering", "Working with ChatGPT / LLMs", "AI-assisted coding",
+  "Generative AI tools", "AI content creation", "Machine learning basics",
+  "Data analysis with AI", "AI image generation", "AI workflow automation",
+  "Fine-tuning & RAG", "AI ethics & governance", "AI product strategy",
+];
+
+async function renderAiSkillset() {
+  const view = $("view");
+  view.innerHTML = `<div class="in-loading">Loading…</div>`;
+  const res = await api("/settings/get.php");
+  const st = res.data?.data || {};
+  let enabled = aiIsEnabled(st);
+  let chosen = new Set(aiSkills(st));
+
+  view.innerHTML = "";
+  const wrap = el(`<div style="max-width:760px;margin:0 auto">
+    <div class="in-back"><button class="in-back-btn" onclick="location.hash='profile'">← Back to profile</button></div>
+
+    <div class="in-card2 in-ai-hero">
+      <div class="in-ai-hero-eyebrow"><span class="in-ai-spark">✦</span> AI Skillset</div>
+      <h1 class="in-ai-hero-title">Show the world you're AI-ready</h1>
+      <p class="in-ai-hero-p">Artificial intelligence has moved from novelty to necessity. Across nearly every industry, employers are actively seeking people who can work alongside AI tools — using them to write, analyse, build, and decide faster than ever before. Fluency with AI is quickly becoming as fundamental as knowing your way around a spreadsheet once was.</p>
+      <p class="in-ai-hero-p">Endorsing your AI skills tells recruiters and collaborators that you're not just keeping up — you're ahead of the curve. Turn on your AI Skillset below and highlight the tools and techniques you've genuinely worked with. Honest, specific endorsements carry the most weight.</p>
+    </div>
+
+    <div class="in-card2">
+      <div class="in-set-toggle">
+        <div>
+          <div class="in-set-toggle-label">Enable AI Skillset on my profile</div>
+          <div class="in-set-toggle-sub">When on, your endorsed AI skills appear publicly under Certifications. Off keeps everything private.</div>
+        </div>
+        <button class="in-toggle ${enabled ? "on" : ""}" id="ai-enable" role="switch" aria-checked="${enabled}"><span class="in-toggle-knob"></span></button>
+      </div>
+    </div>
+
+    <div class="in-card2">
+      <h2>Endorse your AI skills</h2>
+      <div class="in-set-toggle-sub" style="margin-bottom:12px">Tap the skills you've worked with, up to 10. Add your own if it's not listed.</div>
+      <div class="in-ai-pick" id="ai-pick"></div>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <input id="ai-custom" placeholder="Add a custom AI skill…" maxlength="60" style="flex:1">
+        <button class="in-btn ghost" style="flex:none;padding:9px 16px" id="ai-add">Add</button>
+      </div>
+    </div>
+
+    <div class="in-ai-save-row">
+      <button class="in-btn primary" style="flex:none;padding:11px 26px" id="ai-save">Save AI Skillset</button>
+      <span class="in-set-msg" id="ai-msg"></span>
+    </div>
+  </div>`);
+  view.appendChild(wrap);
+
+  const pick = $("ai-pick");
+  const paintChips = () => {
+    pick.innerHTML = "";
+    // suggestions + any custom already-chosen, de-duplicated
+    const all = [...new Set([...AI_SKILL_SUGGESTIONS, ...chosen])];
+    all.forEach(name => {
+      const on = chosen.has(name);
+      const chip = el(`<button class="in-ai-pill ${on ? "on" : ""}">${esc(name)}${on ? " ✓" : ""}</button>`);
+      chip.onclick = () => { on ? chosen.delete(name) : chosen.add(name); paintChips(); };
+      pick.appendChild(chip);
+    });
+  };
+  paintChips();
+
+  $("ai-add").onclick = () => {
+    const v = $("ai-custom").value.trim();
+    if (!v) return;
+    chosen.add(v); $("ai-custom").value = ""; paintChips();
+  };
+  $("ai-custom").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); $("ai-add").click(); } });
+
+  const enableBtn = $("ai-enable");
+  enableBtn.onclick = () => {
+    enabled = !enabled;
+    enableBtn.classList.toggle("on", enabled);
+    enableBtn.setAttribute("aria-checked", enabled);
+  };
+
+  $("ai-save").onclick = async () => {
+    const msg = $("ai-msg");
+    const list = [...chosen];
+    // setting_value is VARCHAR(255); guard against overflow/truncation.
+    if (list.length > 10) {
+      msg.className = "in-set-msg err"; msg.textContent = "Please choose up to 10 AI skills.";
+      return;
+    }
+    const payload = JSON.stringify(list);
+    if (payload.length > 250) {
+      msg.className = "in-set-msg err"; msg.textContent = "That's a bit too much text — try fewer or shorter skills.";
+      return;
+    }
+    const btn = $("ai-save"); btn.disabled = true; btn.textContent = "Saving…";
+    const r = await api("/settings/set.php", "POST", { settings: {
+      ai_box_enabled: enabled ? "1" : "0",
+      ai_skills: payload,
+    }});
+    btn.disabled = false; btn.textContent = "Save AI Skillset";
+    if (r.ok && r.data?.success) {
+      msg.className = "in-set-msg ok"; msg.textContent = "Saved.";
+      setTimeout(() => { location.hash = "profile"; }, 500);
+    } else {
+      msg.className = "in-set-msg err"; msg.textContent = r.data?.error || "Could not save.";
+    }
+  };
 }
 
 // ---- edit bio modal -----------------------------------------------------
@@ -967,6 +1134,9 @@ async function renderPublicProfile(uuid) {
     head.querySelector("#admin-edit").onclick = () => adminEditProfile(p, headline, uuid);
   }
 
+  // Skills in the left column (mirrors the owner layout).
+  roChips(leftCol, "Skills", skills.data?.data, s => `${esc(s.name)} ${s.proficiency ? `<span class="lvl">L${s.proficiency}</span>` : ""}`);
+
   // bio — same distinct box as the owner view, read-only here.
   rightCol.appendChild(renderBioBox(attrs, false));
 
@@ -980,7 +1150,12 @@ async function renderPublicProfile(uuid) {
   roSection(rightCol, "Experience", jobs.data?.data, j => `<div class="meta"><div class="t">${esc(j.title)}</div><div class="s">${esc(j.company_name || "")}${j.start_date ? " · " + j.start_date + (j.end_date ? " – " + j.end_date : " – Present") : ""}</div></div>`);
   roSection(rightCol, "Education", edu.data?.data, e => `<div class="meta"><div class="t">${esc(e.degree || e.institution)}</div><div class="s">${esc([e.institution, e.field].filter(Boolean).join(" · "))}${e.end_year ? " · " + e.end_year : ""}</div></div>`);
   roSection(rightCol, "Certifications", certs.data?.data, c => `<div class="meta"><div class="t">${esc(c.name)}</div><div class="s">${esc(c.issuer || "")}${c.issue_date ? " · " + c.issue_date : ""}</div></div>`);
-  roChips(rightCol, "Skills", skills.data?.data, s => `${esc(s.name)} ${s.proficiency ? `<span class="lvl">L${s.proficiency}</span>` : ""}`);
+  // AI Skillset display under Certifications — only if enabled with skills.
+  const pubAi = p.ai_skillset;
+  if (pubAi && pubAi.enabled && (pubAi.skills || []).length) {
+    const chips = pubAi.skills.map(s => `<span class="in-chip in-ai-chip">${esc(s)}</span>`).join("");
+    rightCol.appendChild(el(`<div class="in-card2 in-ai-display"><h2><span class="in-ai-spark">✦</span> AI Skillset</h2><div class="in-chips body">${chips}</div></div>`));
+  }
   roChips(rightCol, "Interests", interests.data?.data, i => esc(i.name));
 }
 function roSection(col, title, items, rowHtml) {
