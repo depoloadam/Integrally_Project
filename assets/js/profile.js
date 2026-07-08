@@ -137,7 +137,7 @@ async function renderProfile() {
 
   // Skills — moved to the left column, directly under the identity box.
   chipSection(leftCol, "Skills", skills.data?.data, s => `
-    ${esc(s.name)} ${s.proficiency ? `<span class="lvl">L${s.proficiency}</span>` : ""}`,
+    ${esc(s.name)}`,
     addSkill, s => ({ id:s.id, kind:"skill" }), "skill");
 
   // AI Skillset box (left column, below Skills). Owner sees it always so
@@ -387,6 +387,7 @@ function socialLinksHtml(attrs) {
 // Empty + visitor: nothing.
 function renderBioBox(attrs, isOwner) {
   const bio = (attrs.bio?.value || "").trim();
+  const motto = (attrs.motto?.value || "").trim();
   if (!bio && !isOwner) return el(`<div style="display:none"></div>`); // nothing to show a visitor
 
   if (!bio) {
@@ -397,20 +398,20 @@ function renderBioBox(attrs, isOwner) {
         <div class="in-bio-empty-sub">A short bio helps visitors get a feel for your background and what you're after.</div>
         <button class="in-btn ghost in-bio-add" style="flex:none;padding:8px 20px;margin:14px auto 0">Add a bio</button>
       </div>`);
-    box.querySelector(".in-bio-add").onclick = () => editBio("");
+    box.querySelector(".in-bio-add").onclick = () => editBio("", motto);
     return box;
   }
 
   const box = el(`
     <div class="in-bio-box">
       <div class="in-bio-inner">
-        <div class="in-bio-label">About</div>
+        <div class="in-bio-label ${motto ? "motto" : ""}">${esc(motto || "About")}</div>
         <div class="in-bio-text">${esc(bio)}</div>
       </div>
       ${isOwner ? `<button class="in-bio-edit" title="Edit bio">✎</button>` : ""}
     </div>`);
   if (isOwner) {
-    box.querySelector(".in-bio-edit").onclick = () => editBio(bio);
+    box.querySelector(".in-bio-edit").onclick = () => editBio(bio, motto);
   }
   return box;
 }
@@ -573,11 +574,13 @@ async function renderAiSkillset() {
 }
 
 // ---- edit bio modal -----------------------------------------------------
-function editBio(currentBio) {
+function editBio(currentBio, currentMotto) {
   openModal(`
     <h3>Bio</h3>
     <label>Tell people about yourself</label>
     <textarea id="bio-input" rows="6" maxlength="1000" placeholder="A sentence or two about your background, what you're working on, or what you're looking for…">${esc(currentBio || "")}</textarea>
+    <label>Motto <span class="ep-hint">(replaces "About" above your bio — leave blank to keep "About")</span></label>
+    <input id="bio-motto" maxlength="80" value="${esc(currentMotto || "")}" placeholder="e.g. Build things that matter">
     <div class="in-modal-actions">
       <button class="in-btn ghost" onclick="closeModal()">Cancel</button>
       <button class="in-btn primary" id="bio-save">Save</button>
@@ -585,6 +588,7 @@ function editBio(currentBio) {
   $("bio-save").onclick = async () => {
     const value = $("bio-input").value.trim();
     const r = await api("/profile/set-attribute.php", "POST", { key: "bio", value });
+    await api("/profile/set-attribute.php", "POST", { key: "motto", value: $("bio-motto").value.trim() });
     if (r.ok && r.data?.success) { closeModal(); renderProfile(); }
     else { alert(r.data?.error || "Could not save bio."); }
   };
@@ -625,7 +629,7 @@ async function refreshChipSection(kind) {
   const body = card.querySelector(".body");
   if (kind === "skill") {
     const res = await api("/profile/skills/list.php");
-    fillChips(body, res.data?.data, s => `${esc(s.name)} ${s.proficiency ? `<span class="lvl">L${s.proficiency}</span>` : ""}`, s => ({ id:s.id, kind:"skill" }));
+    fillChips(body, res.data?.data, s => `${esc(s.name)}`, s => ({ id:s.id, kind:"skill" }));
   } else {
     const res = await api("/profile/interests/list.php");
     fillChips(body, res.data?.data, i => esc(i.name), i => ({ id:i.id, kind:"interest" }));
@@ -683,6 +687,7 @@ function editCore(p, headline, attrs) {
         <div class="ep-identity">
           <label>Username</label><input id="f-username" value="${esc(p.username||"")}">
           <label>Headline</label><input id="f-headline" value="${esc(headline)}" placeholder="e.g. IT Automation Specialist">
+          <label>Motto <span class="ep-hint">(replaces "About" on your profile)</span></label><input id="f-motto-core" maxlength="80" value="${esc(attrs.motto?.value || "")}" placeholder="e.g. Build things that matter">
         </div>
       </div>
       <div class="ep-sep"><span>Location</span></div>
@@ -796,6 +801,7 @@ function editCore(p, headline, attrs) {
       profile_pic: avatarState.avatarUrl || "",
     });
     await api("/profile/set-attribute.php", "POST", { key:"headline", value:$("f-headline").value.trim() });
+    await api("/profile/set-attribute.php", "POST", { key:"motto", value:$("f-motto-core").value.trim() });
     await api("/profile/set-attribute.php", "POST", { key:"linkedin_url", value:$("f-linkedin").value.trim() });
     await api("/profile/set-attribute.php", "POST", { key:"twitter_url", value:$("f-twitter").value.trim() });
     await api("/profile/set-attribute.php", "POST", { key:"website_url", value:$("f-website").value.trim() });
@@ -932,11 +938,10 @@ function addSkill() {
   openModal(`
     <h3>Add skill</h3>
     <label>Skill name *</label><input id="s-name" placeholder="e.g. PowerShell">
-    <label>Proficiency (1–5, optional)</label><input id="s-prof" type="number" min="1" max="5">
     <div class="in-modal-actions"><button class="in-btn ghost" onclick="closeModal()">Cancel</button><button class="in-btn primary" id="save-skill">Add</button></div>`);
   $("save-skill").onclick = async () => {
     const name = $("s-name").value.trim(); if (!name) return;
-    await api("/profile/skills/add.php","POST",{ name, proficiency:$("s-prof").value });
+    await api("/profile/skills/add.php","POST",{ name });
     closeModal(); refreshChipSection("skill");
   };
 }
@@ -1236,7 +1241,7 @@ async function renderPublicProfile(uuid) {
   }
 
   // Skills in the left column (mirrors the owner layout).
-  roChips(leftCol, "Skills", skills.data?.data, s => `${esc(s.name)} ${s.proficiency ? `<span class="lvl">L${s.proficiency}</span>` : ""}`);
+  roChips(leftCol, "Skills", skills.data?.data, s => `${esc(s.name)}`);
 
   // bio — same distinct box as the owner view, read-only here.
   rightCol.appendChild(renderBioBox(attrs, false));

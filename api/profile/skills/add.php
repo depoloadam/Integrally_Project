@@ -3,9 +3,9 @@
 
 // =====================================================================
 // FILE: api/profile/skills/add.php
-// POST { name*, proficiency? }
+// POST { name* }
 // Find-or-create the skill by name, then link it to the user.
-// Idempotent: re-adding an existing skill just updates proficiency.
+// Idempotent: re-adding an existing skill is a silent no-op.
 // =====================================================================
 
 require_once __DIR__ . '/../../../src/Database.php';
@@ -24,14 +24,6 @@ $name = trim($in['name'] ?? '');
 if ($name === '') Response::error('Skill name is required.', 422);
 if (strlen($name) > 100) Response::error('Skill name is too long.', 422);
 
-// Optional 1–5 self-rating; null if absent/invalid.
-$proficiency = null;
-if (isset($in['proficiency']) && $in['proficiency'] !== '') {
-    $p = (int) $in['proficiency'];
-    if ($p < 1 || $p > 5) Response::error('Proficiency must be 1–5.', 422);
-    $proficiency = $p;
-}
-
 // Do the find-or-create + link as one transaction so a failure
 // can't leave a half-finished state.
 try {
@@ -49,13 +41,13 @@ try {
         $skillId = (int) $pdo->lastInsertId();
     }
 
-    // Link user -> skill. ON DUPLICATE handles "already have it"
-    // by updating the proficiency instead of erroring.
+    // Link user -> skill. ON DUPLICATE is a no-op so re-adding an
+    // existing skill succeeds silently instead of erroring.
     $pdo->prepare(
-        'INSERT INTO user_skills (user_id, skill_id, proficiency)
-         VALUES (?, ?, ?)
-         ON DUPLICATE KEY UPDATE proficiency = VALUES(proficiency)'
-    )->execute([$userId, $skillId, $proficiency]);
+        'INSERT INTO user_skills (user_id, skill_id)
+         VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE skill_id = VALUES(skill_id)'
+    )->execute([$userId, $skillId]);
 
     $pdo->commit();
 } catch (Throwable $e) {
@@ -63,4 +55,4 @@ try {
     throw $e;
 }
 
-Response::success(['skill_id' => $skillId, 'name' => $name, 'proficiency' => $proficiency], 201);
+Response::success(['skill_id' => $skillId, 'name' => $name], 201);

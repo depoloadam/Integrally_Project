@@ -247,7 +247,6 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 /* chips */
 .in-chips { display:flex; flex-wrap:wrap; gap:8px; }
 .in-chip { background:var(--in-bg); border:1px solid var(--in-line); border-radius:20px; padding:6px 12px; font-size:13px; display:flex; align-items:center; gap:8px; }
-.in-chip .lvl { color:var(--in-accent); font-weight:700; font-size:11px; }
 .in-chip .x { background:none; border:none; color:var(--in-muted); cursor:pointer; font-size:14px; padding:0; }
 .in-chip .x:hover { color:var(--in-error); }
 /* --- AI Skillset --- */
@@ -375,7 +374,7 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 .co-meta-row { display:flex; gap:6px; align-items:baseline; flex-wrap:wrap; }
 .co-meta-row .in-followcount { margin-top:10px; }
 .co-since { font-size:13px; color:var(--in-muted); margin-top:10px; }
-.in-follow-btn { margin-top:16px; width:100%; background:var(--in-accent); color:#fff; border:none; border-radius:8px; padding:10px 16px; font-family:inherit; font-weight:600; font-size:14px; cursor:pointer; }
+.in-follow-btn { margin-top:12px; width:100%; background:var(--in-accent); color:#fff; border:none; border-radius:7px; padding:6px 12px; font-family:inherit; font-weight:600; font-size:13px; cursor:pointer; }
 .in-follow-btn:hover { background:var(--in-accent-d); }
 .in-follow-btn.following { background:var(--in-card); color:var(--in-ink-soft); border:1px solid var(--in-line); }
 .in-follow-btn.following:hover { border-color:var(--in-error); color:var(--in-error); }
@@ -383,9 +382,9 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 
 /* admin edit button on public profiles */
 .in-admin-btn {
-  margin-top:10px; width:100%; background:var(--in-bg); color:var(--in-ink-soft);
-  border:1px solid var(--in-line); border-radius:8px; padding:9px 16px;
-  font-family:inherit; font-weight:600; font-size:13px; cursor:pointer;
+  margin-top:6px; width:100%; background:var(--in-bg); color:var(--in-ink-soft);
+  border:1px solid var(--in-line); border-radius:7px; padding:6px 12px;
+  font-family:inherit; font-weight:600; font-size:12px; cursor:pointer;
 }
 .in-admin-btn:hover { border-color:var(--in-accent); color:var(--in-accent); }
 
@@ -970,7 +969,7 @@ textarea.jf-input { resize:vertical; }
 }
 
 /* ==== private messaging (#messages) ================================= */
-.in-msg-btn { margin-top:8px; width:100%; background:var(--in-card); color:var(--in-accent); border:1px solid var(--in-accent); border-radius:8px; padding:10px 16px; font-family:inherit; font-weight:600; font-size:14px; cursor:pointer; }
+.in-msg-btn { margin-top:6px; width:100%; background:var(--in-card); color:var(--in-accent); border:1px solid var(--in-accent); border-radius:7px; padding:6px 12px; font-family:inherit; font-weight:600; font-size:13px; cursor:pointer; }
 .in-msg-btn:hover { background:var(--in-bg); }
 
 .in-msg-modal-hint { color:var(--in-muted); font-size:13px; margin:6px 0 12px; }
@@ -1027,3 +1026,7 @@ textarea.jf-input { resize:vertical; }
   .in-msgs.thread-open .in-msgs-thread { display:flex; }
   .in-msgs-back { display:inline-block; }
 }
+
+/* ==== motto (bio box label) ========================================= */
+.in-bio-label.motto { text-transform:none; letter-spacing:0; font-size:15px; font-weight:700; color:var(--in-ink); font-style:italic; }
+.ep-hint { font-weight:400; color:var(--in-muted); font-size:11px; }

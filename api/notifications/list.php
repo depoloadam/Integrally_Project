@@ -63,6 +63,33 @@ $getPostInfo = function (?int $postId) use ($pdo, &$postCache) {
     return $postCache[$postId] = ['id' => (int) $p['id'], 'snippet' => $text];
 };
 
+// For message_request notifications: resolve the conversation between
+// the actor and me plus a snippet of its first message, at read time.
+// No stored reference needed — if the request was declined (conversation
+// deleted), this returns null and the notification renders without it.
+require_once __DIR__ . '/../../src/Messaging.php';
+$msgCache = [];
+$getMessageInfo = function (string $actorType, int $actorId) use ($pdo, $actor, &$msgCache) {
+    $key = $actorType . ':' . $actorId;
+    if (array_key_exists($key, $msgCache)) return $msgCache[$key];
+    $conv = Messaging::findConversation($actorType, $actorId, $actor['type'], $actor['id']);
+    if (!$conv) return $msgCache[$key] = null;
+    $s = $pdo->prepare(
+        'SELECT body FROM messages
+         WHERE conversation_id = ? AND deleted_at IS NULL
+         ORDER BY id ASC LIMIT 1'
+    );
+    $s->execute([(int) $conv['id']]);
+    $body = $s->fetchColumn();
+    $text = $body !== false ? trim(preg_replace('/\s+/', ' ', (string) $body)) : '';
+    if (mb_strlen($text) > 80) $text = mb_substr($text, 0, 80) . '…';
+    return $msgCache[$key] = [
+        'conversation_id' => (int) $conv['id'],
+        'snippet'         => $text !== '' ? $text : null,
+        'status'          => $conv['status'],
+    ];
+};
+
 $out = [];
 foreach ($stmt->fetchAll() as $n) {
     $out[] = [
@@ -72,6 +99,9 @@ foreach ($stmt->fetchAll() as $n) {
         'created_at' => $n['created_at'],
         'actor'      => Social::actorInfo($n['actor_type'], (int) $n['actor_id']),
         'post'       => $getPostInfo($n['post_id'] !== null ? (int) $n['post_id'] : null),
+        'message'    => $n['type'] === 'message_request'
+                          ? $getMessageInfo($n['actor_type'], (int) $n['actor_id'])
+                          : null,
     ];
 }
 
