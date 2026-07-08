@@ -705,10 +705,10 @@ textarea.jf-input { resize:vertical; }
 .connect-ava { width:46px; height:46px; border-radius:50%; flex:none; display:grid; place-items:center; font-weight:700; font-size:18px; color:#fff; background:linear-gradient(135deg,var(--in-accent),var(--in-teal-bright)); overflow:hidden; }
 .connect-ava.company { border-radius:11px; background:linear-gradient(135deg,#0e3b4a,#0a8a8a); }
 .connect-ava img { width:100%; height:100%; object-fit:cover; }
-.connect-main { flex:1; min-width:0; }
+.connect-main { flex:0 1 200px; min-width:0; }
 .connect-title { font-weight:600; font-size:15px; color:var(--in-ink); }
 .connect-sub { font-size:13px; color:var(--in-muted); margin-top:2px; }
-.connect-follow { font-size:13.5px !important; }
+.connect-follow { font-size:13.5px !important; margin-left:auto; }
 
 /* ---------- avatars: image fill for any avatar container ---------- */
 /* Containers use display:grid + place-items:center to center the
@@ -1038,9 +1038,8 @@ textarea.jf-input { resize:vertical; }
 .ep-hint { font-weight:400; color:var(--in-muted); font-size:11px; }
 
 /* ==== connect: current job line + edit-profile headline options ===== */
-.connect-job { font-size:12px; color:var(--in-muted); font-weight:500; }
-.connect-title-row { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; }
-.connect-title-row .connect-job::before { content:"· "; }
+.connect-details { flex:1; min-width:0; align-self:center; text-align:left; font-size:12px; color:var(--in-muted); font-weight:400; line-height:1.4; padding:0 16px; }
+.connect-details b { color:var(--in-ink-soft); font-weight:600; }
 .ep-headline-opts { margin:10px 0 4px; display:flex; flex-direction:row; align-items:center; flex-wrap:wrap; gap:10px 22px; }
 /* .in-modal-scoped selectors out-specify the bare .in-modal label / .in-modal
    input rules, so these win regardless of source order (no !important needed). */

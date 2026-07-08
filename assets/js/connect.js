@@ -68,20 +68,31 @@ async function loadConnect() {
     const isSelfRow = !!CO && isCompany && res.uuid === CO.uuid;
     const canFollow = !!(ME || CO) && !isSelfRow;
     const avatarChar = (res.title || "?").charAt(0).toUpperCase();
-    const sub = [res.subtitle, res.location].filter(Boolean).join(" · ");
-    const jobLine = res.job ? (res.job.company ? [res.job.title, res.job.company].filter(Boolean).join(" at ") : (res.job.title || "")) : "";
+    const jobLine = res.job ? (res.job.company ? [res.job.title, res.job.company].filter(Boolean).join(" @ ") : (res.job.title || "")) : "";
     const verified = res.verified ? ` <span class="post-tag" style="vertical-align:middle">Verified</span>` : "";
+
+    // Users: full name is the main line (fallback to @username when no name),
+    // with the @username in smaller text beneath. Companies keep name/industry.
+    const mainLine = isCompany ? esc(res.title) : esc(res.subtitle || "@" + res.title);
+    const subLine  = isCompany
+      ? esc(res.subtitle || "Company")
+      : (res.subtitle ? "@" + esc(res.title) : "Member");
+    // Right-hand detail line: "**Title @ Company** - Location", vertically
+    // centered. Bold job, plain location, joined by " - " only when both exist.
+    const jobHtml = jobLine ? `<b>${esc(jobLine)}</b>` : "";
+    const locHtml = res.location ? esc(res.location) : "";
+    const detailHtml = isCompany
+      ? locHtml
+      : [jobHtml, locHtml].filter(Boolean).join(" - ");
 
     const row = el(`
       <div class="connect-row">
         <div class="connect-ava ${isCompany ? "company" : ""}">${res.image ? `<img src="${esc(res.image)}" alt="">` : esc(avatarChar)}</div>
         <div class="connect-main">
-          <div class="connect-title-row">
-            <span class="connect-title">${isCompany ? esc(res.title) : "@" + esc(res.title)}${verified}</span>
-            ${jobLine ? `<span class="connect-job">${esc(jobLine)}</span>` : ""}
-          </div>
-          <div class="connect-sub">${esc(sub || (isCompany ? "Company" : "Member"))}</div>
+          <div class="connect-title">${mainLine}${verified}</div>
+          <div class="connect-sub">${subLine}</div>
         </div>
+        ${detailHtml ? `<div class="connect-details">${detailHtml}</div>` : ""}
         ${canFollow ? `<button class="in-follow-btn connect-follow ${res.following ? "following" : ""}" style="width:auto;flex:none;margin-top:0;padding:8px 18px">${res.following ? "Following" : "Follow"}</button>` : ""}
       </div>`);
 
