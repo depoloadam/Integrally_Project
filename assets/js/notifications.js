@@ -11,6 +11,7 @@ function notifTarget(n) {
   if ((n.type === "like" || n.type === "comment") && n.post && n.post.id) {
     return "post/" + n.post.id;
   }
+  if (n.type === "message_request") return "messages";
   const who = n.actor || {};
   return who.type === "company" ? `company/${who.uuid}` : `user/${who.uuid}`;
 }
@@ -24,6 +25,7 @@ function notifText(n) {
   if (n.type === "follow")  verb = "started following you";
   else if (n.type === "like")    verb = "liked your post";
   else if (n.type === "comment") verb = "commented on your post";
+  else if (n.type === "message_request") verb = "sent you a message request";
   const snippet = n.post && n.post.snippet ? n.post.snippet : "";
   return { name, profHash, verb, snippet, avatar: who.avatar, isCompany: who.type === "company" };
 }

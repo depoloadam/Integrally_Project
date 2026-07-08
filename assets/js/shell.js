@@ -303,6 +303,7 @@ async function boot() {
     const adminBtn = document.querySelector('[data-nav="admin"]');
     if (adminBtn) adminBtn.style.display = (ME.role === "admin") ? "" : "none";
     if (typeof setupNotifications === "function") setupNotifications();
+    if (typeof setupMessaging === "function") setupMessaging();
     routeFromHash();
   } else if (CO) {
     // ---- COMPANY identity ---- (no user signed in)
@@ -317,6 +318,7 @@ async function boot() {
     });
     updateCompanyNav();
     if (typeof setupNotifications === "function") setupNotifications();
+    if (typeof hideMessaging === "function") hideMessaging();   // v1: users only
     const raw = location.hash.replace(/^#/, "");
     if (raw === "jobs" || raw === "notifications" || raw === "connect"
         || raw.startsWith("job/") || raw.startsWith("company")
@@ -328,6 +330,7 @@ async function boot() {
     $("profile-menu").style.display = "none";
     $("auth-menu").style.display = "";
     if (typeof hideNotifications === "function") hideNotifications();
+    if (typeof hideMessaging === "function") hideMessaging();
     renderSignedOut();
   }
 }
@@ -651,6 +654,11 @@ function routeFromHash() {
   }
   if (raw === "notifications") {
     renderNotificationsPage();
+    return;
+  }
+  if (raw === "messages" || raw.startsWith("messages/")) {
+    document.querySelectorAll("[data-nav]").forEach(x => x.classList.remove("active"));
+    renderMessagesPage(raw.startsWith("messages/") ? raw.slice("messages/".length) : null);
     return;
   }
   if (raw.startsWith("post/")) {

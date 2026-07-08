@@ -1211,9 +1211,12 @@ async function renderPublicProfile(uuid) {
       </div>
       ${socialLinksHtml(attrs)}
       ${canFollow ? `<button class="in-follow-btn ${isFollowing ? "following" : ""}" id="follow-toggle">${isFollowing ? "Following" : "Follow"}</button>` : ""}
+      ${ME && ME.uuid !== uuid ? `<button class="in-msg-btn" id="msg-user">✉️ Message</button>` : ""}
       ${ME && ME.role === "admin" ? `<button class="in-admin-btn" id="admin-edit">🛠 Edit (admin)</button>` : ""}
     </div>`);
   leftCol.appendChild(head);
+  const msgBtn = head.querySelector("#msg-user");
+  if (msgBtn) msgBtn.onclick = () => openMessageModal(uuid, p.username || "");
   const followBtn = head.querySelector("#follow-toggle");
   if (followBtn) {
     followBtn.onclick = async () => {
@@ -1442,6 +1445,7 @@ function renderNotificationPrefs(panel, opts) {
     { key: "like",    label: "Likes",     sub: "When someone likes your post." },
     { key: "comment", label: "Comments",  sub: "When someone comments on your post." },
     { key: "follow",  label: "New followers", sub: "When someone starts following you." },
+    { key: "message_request", label: "Message requests", sub: "When someone sends you a message request." },
   ];
   const futureTypes = [
     { key: "mention", label: "Mentions",       sub: "When someone mentions you. (Coming soon)" },
