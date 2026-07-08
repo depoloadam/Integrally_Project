@@ -9,6 +9,7 @@
 require_once __DIR__ . '/../../src/Database.php';
 require_once __DIR__ . '/../../src/Response.php';
 require_once __DIR__ . '/../../src/Auth.php';
+require_once __DIR__ . '/../../src/Applications.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     Response::error('Method not allowed.', 405);
@@ -38,6 +39,28 @@ if ($job['status'] !== 'open' && !$isOwner) {
     Response::error('Job not found.', 404);
 }
 
+// Normalized apply form (so the client can render the apply modal).
+$applyForm = Applications::normalizeForm($job['apply_form'] ?? null);
+
+// Has the current USER already applied? (Only relevant to signed-in users.)
+$hasApplied = false;
+$viewerUserId = Auth::userId();
+if ($viewerUserId !== null) {
+    $ck = $pdo->prepare(
+        'SELECT 1 FROM job_applications WHERE job_id = ? AND user_id = ? LIMIT 1'
+    );
+    $ck->execute([(int) $job['id'], $viewerUserId]);
+    $hasApplied = (bool) $ck->fetch();
+}
+
+// Owner sees a live applicant count.
+$applicantCount = null;
+if ($isOwner) {
+    $cnt = $pdo->prepare('SELECT COUNT(*) FROM job_applications WHERE job_id = ?');
+    $cnt->execute([(int) $job['id']]);
+    $applicantCount = (int) $cnt->fetchColumn();
+}
+
 Response::success([
     'uuid'            => $job['uuid'],
     'title'           => $job['title'],
@@ -49,9 +72,14 @@ Response::success([
     'salary_max'      => $job['salary_max'] !== null ? (int) $job['salary_max'] : null,
     'salary_currency' => $job['salary_currency'],
     'apply_url'       => $job['apply_url'],
+    'apply_method'    => $job['apply_method'] ?? 'native',
+    'apply_form'      => $applyForm,
+    'accept_until'    => $job['accept_until'] ?? null,
     'status'          => $job['status'],
     'created_at'      => $job['created_at'],
     'is_owner'        => $isOwner,
+    'has_applied'     => $hasApplied,
+    'applicant_count' => $applicantCount,
     'company' => [
         'uuid'        => $job['company_uuid'],
         'name'        => $job['company_name'],

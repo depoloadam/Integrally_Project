@@ -104,4 +104,49 @@ class ScoreEngine
             'breakdown' => $factors,
         ];
     }
+
+    /**
+     * Gather the profile data compute() needs for one user. Shared by
+     * Score Me and job applications so both score the same way. Kept
+     * here (next to compute) so the algorithm and its inputs evolve
+     * together.
+     */
+    public static function gatherProfile(PDO $pdo, int $userId): array
+    {
+        $skills = $pdo->prepare(
+            'SELECT s.name, us.proficiency
+             FROM user_skills us JOIN skills s ON s.id = us.skill_id
+             WHERE us.user_id = ?'
+        );
+        $skills->execute([$userId]);
+
+        $jobs = $pdo->prepare(
+            'SELECT title, company_name, start_date, end_date FROM job_history WHERE user_id = ?'
+        );
+        $jobs->execute([$userId]);
+
+        $edu = $pdo->prepare(
+            'SELECT institution, degree, field FROM education WHERE user_id = ?'
+        );
+        $edu->execute([$userId]);
+
+        $certs = $pdo->prepare(
+            'SELECT name, issuer FROM certifications WHERE user_id = ?'
+        );
+        $certs->execute([$userId]);
+
+        $interests = $pdo->prepare(
+            'SELECT i.name FROM user_interests ui JOIN interests i ON i.id = ui.interest_id
+             WHERE ui.user_id = ?'
+        );
+        $interests->execute([$userId]);
+
+        return [
+            'skills'         => $skills->fetchAll(),
+            'jobs'           => $jobs->fetchAll(),
+            'education'      => $edu->fetchAll(),
+            'certifications' => $certs->fetchAll(),
+            'interests'      => $interests->fetchAll(),
+        ];
+    }
 }

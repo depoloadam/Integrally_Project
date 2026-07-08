@@ -10,7 +10,7 @@
   --in-font:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
 }
 * { box-sizing:border-box; }
-html { height:100%; }
+html { height:100%; scrollbar-gutter:stable; overflow-y:scroll; }
 body { margin:0; min-height:100%; display:flex; flex-direction:column; font-family:var(--in-font); background:var(--in-bg); color:var(--in-ink); -webkit-font-smoothing:antialiased; }
 
 /* ---------- top nav (shell) ---------- */
@@ -1024,6 +1024,27 @@ textarea.jf-input { resize:vertical; }
 .in-msgs-composer textarea:focus { outline:none; border-color:var(--in-accent); }
 .in-msgs-composer textarea:disabled { background:var(--in-bg); color:var(--in-muted); }
 
+/* ---- thread overflow menu (mute / block) ---- */
+.in-msgs-menu-wrap { position:relative; margin-left:auto; }
+.in-msgs-menu-btn { background:none; border:none; font-size:20px; line-height:1; cursor:pointer; color:var(--in-ink-soft); padding:4px 10px; border-radius:8px; }
+.in-msgs-menu-btn:hover { background:var(--in-bg); color:var(--in-ink); }
+.in-msgs-menu { position:absolute; right:0; top:calc(100% + 4px); z-index:60; min-width:190px; background:var(--in-card); border:1px solid var(--in-line); border-radius:10px; box-shadow:0 8px 24px rgba(11,31,42,.14); padding:5px; }
+.in-msgs-menu[hidden] { display:none; }
+.in-msgs-menu-item { display:block; width:100%; text-align:left; background:none; border:none; padding:9px 12px; font-family:inherit; font-size:13.5px; color:var(--in-ink); border-radius:7px; cursor:pointer; }
+.in-msgs-menu-item:hover { background:var(--in-bg); }
+.in-msgs-menu-item.danger { color:var(--in-error); }
+
+/* ---- delete-own-message ---- */
+.in-msg-del { align-self:center; margin-right:6px; background:none; border:none; cursor:pointer; font-size:13px; line-height:1; padding:4px; border-radius:6px; color:var(--in-muted); opacity:0; transition:opacity .12s; }
+.in-msg-bubble-row.mine:hover .in-msg-del { opacity:.85; }
+.in-msg-del:hover { opacity:1; background:var(--in-bg); color:var(--in-error); }
+
+/* ---- read receipt ---- */
+.in-msg-receipt { text-align:right; font-size:11px; color:var(--in-muted); margin:-4px 2px 0 0; }
+
+/* ---- muted conversation indicator (list) ---- */
+.in-msgs-row-muted { font-size:11px; opacity:.75; }
+
 @media (max-width:900px) {
   .in-msgs { grid-template-columns:1fr; height:calc(100vh - 150px); }
   .in-msgs-list { border-right:none; }
@@ -1031,6 +1052,7 @@ textarea.jf-input { resize:vertical; }
   .in-msgs.thread-open .in-msgs-list { display:none; }
   .in-msgs.thread-open .in-msgs-thread { display:flex; }
   .in-msgs-back { display:inline-block; }
+  .in-msg-del { opacity:.6; }
 }
 
 /* ==== motto (bio box label) ========================================= */
@@ -1045,3 +1067,33 @@ textarea.jf-input { resize:vertical; }
    input rules, so these win regardless of source order (no !important needed). */
 .in-modal label.ep-check { display:inline-flex; align-items:center; gap:8px; margin:0; font-size:13px; line-height:1; color:var(--in-ink-soft); font-weight:500; cursor:pointer; }
 .in-modal .ep-check input[type="checkbox"] { width:16px; height:16px; min-width:16px; flex:none; margin:0; padding:0; accent-color:var(--in-accent); cursor:pointer; }
+
+/* =====================================================================
+   Job applications
+   ===================================================================== */
+
+/* Candidate: "My applications" rows (Job Search tab) */
+.ap-row { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--in-line); }
+.ap-row:last-child { border-bottom:none; }
+.ap-row-main { flex:1; min-width:0; }
+.ap-title { font-weight:600; font-size:14px; color:var(--in-ink); text-decoration:none; }
+a.ap-title:hover { color:var(--in-accent); }
+.ap-meta { font-size:12.5px; color:var(--in-muted); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ap-score { flex:none; width:34px; height:34px; border-radius:50%; display:grid; place-items:center; font-weight:700; font-size:13px; color:#fff; background:linear-gradient(135deg,var(--in-accent),var(--in-teal-bright)); }
+
+/* Company: ranked applicant rows */
+.ja-row { display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--in-line); }
+.ja-row:last-child { border-bottom:none; }
+.ja-rank { flex:none; width:22px; text-align:center; font-weight:700; font-size:14px; color:var(--in-muted); }
+.ja-score { flex:none; width:40px; height:40px; border-radius:10px; display:grid; place-items:center; font-weight:800; font-size:16px; color:#fff; background:linear-gradient(135deg,#0e3b4a,#0a8a8a); }
+.ja-score.none { background:var(--in-bg); color:var(--in-muted); border:1px solid var(--in-line); }
+.ja-main { flex:1; min-width:0; }
+.ja-name { font-weight:600; font-size:14.5px; color:var(--in-ink); }
+.ja-sub { font-size:12.5px; color:var(--in-muted); margin-top:2px; }
+
+/* Company: applicant detail score block */
+.ja-detail-score { display:flex; gap:16px; align-items:flex-start; padding:12px; background:var(--in-bg); border-radius:12px; margin-bottom:6px; }
+.ja-detail-score-num { flex:none; width:52px; height:52px; border-radius:12px; display:grid; place-items:center; font-weight:800; font-size:22px; color:#fff; background:linear-gradient(135deg,#0e3b4a,#0a8a8a); }
+
+/* Job editor: question builder rows share jf-input styling already */
+.jf-qrow .jf-input { margin:0; }

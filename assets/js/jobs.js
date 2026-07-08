@@ -172,13 +172,154 @@ async function renderJobDetail(uuid) {
     </div>`);
 
   const applyRow = card.querySelector(".job-apply-row");
-  if (j.apply_url) {
-    const btn = el(`<a class="in-follow-btn" style="display:inline-block;width:auto;padding:11px 28px;text-decoration:none;text-align:center" href="${esc(j.apply_url)}" target="_blank" rel="noopener noreferrer">Apply ↗</a>`);
-    applyRow.appendChild(btn);
-  } else {
-    applyRow.appendChild(el(`<div class="in-empty">To apply, visit the company's website or contact them directly.</div>`));
-  }
+  renderApplyRow(applyRow, j);
 
   wrap.appendChild(card);
   view.appendChild(wrap);
+}
+
+// Apply controls: depend on apply_method, whether the viewer is a
+// signed-in user, the owner, or has already applied.
+function renderApplyRow(applyRow, j) {
+  const method = j.apply_method || "native";
+  const canNative = method === "native" || method === "both";
+  const canExternal = (method === "external" || method === "both") && j.apply_url;
+
+  // Owner viewing their own posting: show applicant count + link, no apply.
+  if (j.is_owner) {
+    const n = j.applicant_count || 0;
+    applyRow.appendChild(el(
+      `<a class="in-follow-btn" style="display:inline-block;width:auto;padding:11px 28px;text-decoration:none;text-align:center"
+          href="#company-dashboard">View ${n} applicant${n === 1 ? "" : "s"} →</a>`));
+    return;
+  }
+
+  if (j.status !== "open") {
+    applyRow.appendChild(el(`<div class="in-empty">This job is no longer accepting applications.</div>`));
+    return;
+  }
+
+  // Native quick-apply (users only).
+  if (canNative) {
+    if (!ME && !CO) {
+      applyRow.appendChild(el(`<div class="in-empty">Sign in to apply on Integrally.</div>`));
+    } else if (CO) {
+      applyRow.appendChild(el(`<div class="in-empty">Applications come from personal accounts.</div>`));
+    } else if (j.has_applied) {
+      applyRow.appendChild(el(`<span class="in-follow-btn following" style="display:inline-block;width:auto;padding:11px 28px;text-align:center">✓ Applied</span>`));
+    } else {
+      const btn = el(`<button class="in-follow-btn" style="width:auto;padding:11px 28px">Quick apply</button>`);
+      btn.onclick = () => openApplyModal(j);
+      applyRow.appendChild(btn);
+    }
+  }
+
+  // External link (in addition to, or instead of, native).
+  if (canExternal) {
+    const label = canNative ? "Apply on company site ↗" : "Apply ↗";
+    const style = canNative
+      ? "display:inline-block;width:auto;padding:11px 28px;margin-left:10px;text-decoration:none;text-align:center;background:none;color:var(--in-accent);border:1px solid var(--in-accent)"
+      : "display:inline-block;width:auto;padding:11px 28px;text-decoration:none;text-align:center";
+    applyRow.appendChild(el(
+      `<a class="in-follow-btn" style="${style}" href="${esc(j.apply_url)}" target="_blank" rel="noopener noreferrer">${label}</a>`));
+  }
+
+  if (!canNative && !canExternal) {
+    applyRow.appendChild(el(`<div class="in-empty">To apply, visit the company's website or contact them directly.</div>`));
+  }
+}
+
+// ---- native quick-apply modal -----------------------------------------
+function openApplyModal(j) {
+  const form = j.apply_form || { collect_resume: false, collect_score: true, questions: [] };
+  const questions = form.questions || [];
+
+  const qHtml = questions.map((q, i) => {
+    const req = q.required ? ` <span style="color:var(--in-error)">*</span>` : "";
+    const field = q.type === "long_text"
+      ? `<textarea id="ap-q${i}" rows="3" maxlength="5000" class="in-msg-compose"></textarea>`
+      : `<input id="ap-q${i}" type="${q.type === "url" ? "url" : "text"}" maxlength="5000" placeholder="${q.type === "url" ? "https://…" : ""}">`;
+    return `<div style="margin-bottom:12px"><label>${esc(q.label)}${req}</label>${field}</div>`;
+  }).join("");
+
+  const resumeHtml = form.collect_resume ? `
+    <div style="margin-bottom:12px">
+      <label>Resume</label>
+      <div class="ep-check-group" style="display:flex;flex-direction:column;gap:6px">
+        <label class="ep-check"><input type="radio" name="ap-resume" value="current" checked> Use my current resume</label>
+        <label class="ep-check"><input type="radio" name="ap-resume" value="upload"> Upload a different file</label>
+        <label class="ep-check"><input type="radio" name="ap-resume" value="none"> Don't include a resume</label>
+      </div>
+      <input type="file" id="ap-resume-file" accept=".pdf,.doc,.docx" style="display:none;margin-top:8px">
+    </div>` : "";
+
+  openModal(`
+    <h2>Apply — ${esc(j.title)}</h2>
+    ${form.collect_score ? `<p class="in-msg-modal-hint">Your Integrally score for this role will be included with your application.</p>` : ""}
+    ${qHtml || (!form.collect_resume ? `<p class="in-msg-modal-hint">This is a one-click application. The company will see your profile${form.collect_score ? " and score" : ""}.</p>` : "")}
+    ${resumeHtml}
+    <div class="in-set-msg" id="ap-err"></div>
+    <div class="in-modal-actions">
+      <button class="in-btn ghost" onclick="closeModal()">Cancel</button>
+      <button class="in-btn primary" id="ap-submit">Submit application</button>
+    </div>`);
+
+  // Show the file picker only when "upload" is chosen.
+  if (form.collect_resume) {
+    document.querySelectorAll('input[name="ap-resume"]').forEach(radio => {
+      radio.onchange = () => {
+        const fileInput = $("ap-resume-file");
+        if (fileInput) fileInput.style.display = (radio.value === "upload" && radio.checked) ? "block" : "none";
+      };
+    });
+  }
+
+  $("ap-submit").onclick = async () => {
+    const errEl = $("ap-err");
+    errEl.textContent = "";
+
+    // Collect answers.
+    const answers = {};
+    for (let i = 0; i < questions.length; i++) {
+      const q = questions[i];
+      const v = ($("ap-q" + i)?.value || "").trim();
+      if (q.required && !v) { errEl.textContent = `Please answer: "${q.label}".`; return; }
+      if (v) answers[q.key] = v;
+    }
+
+    const btn = $("ap-submit");
+    btn.disabled = true;
+
+    let resumeSource = "none";
+    if (form.collect_resume) {
+      const picked = document.querySelector('input[name="ap-resume"]:checked');
+      resumeSource = picked ? picked.value : "current";
+    }
+
+    let r;
+    if (resumeSource === "upload") {
+      const file = $("ap-resume-file").files[0];
+      if (!file) { errEl.textContent = "Choose a file to upload, or pick another resume option."; btn.disabled = false; return; }
+      const fd = new FormData();
+      fd.append("job_uuid", j.uuid);
+      fd.append("answers", JSON.stringify(answers));
+      fd.append("resume_source", "upload");
+      fd.append("resume", file);
+      try {
+        const res = await fetch(API_BASE + "/applications/apply.php", { method: "POST", credentials: "include", body: fd });
+        r = { ok: res.ok, data: await res.json() };
+      } catch (e) { r = { ok: false, data: { error: "Upload failed." } }; }
+    } else {
+      r = await api("/applications/apply.php", "POST",
+        { job_uuid: j.uuid, answers, resume_source: resumeSource });
+    }
+
+    btn.disabled = false;
+    if (r.ok && r.data?.success) {
+      closeModal();
+      renderJobDetail(j.uuid);   // repaint -> shows "✓ Applied"
+    } else {
+      errEl.textContent = r.data?.error || "Could not submit your application.";
+    }
+  };
 }

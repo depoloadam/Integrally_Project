@@ -702,6 +702,7 @@ function editCore(p, headline, attrs) {
     <h3>Edit profile</h3>
     <div class="in-modal-tabs">
       <button class="in-modal-tab active" data-etab="profile">Profile</button>
+      <button class="in-modal-tab" data-etab="social">Social</button>
       <button class="in-modal-tab" data-etab="jobsearch">Job Search</button>
     </div>
     <div data-epanel="profile">
@@ -723,6 +724,8 @@ function editCore(p, headline, attrs) {
         <div><label>Country</label><select id="f-country"></select></div>
         <div class="ep-span" id="f-sub-wrap"></div>
       </div>
+    </div>
+    <div data-epanel="social" style="display:none">
       <div class="ep-sep"><span>Links</span></div>
       <div class="ep-grid">
         <div><label>LinkedIn URL</label><input id="f-linkedin" value="${esc(linkedin)}" placeholder="linkedin.com/in/yourname"></div>
@@ -737,6 +740,8 @@ function editCore(p, headline, attrs) {
       <div class="in-resume-row" id="f-resume-row"></div>
       <input type="file" id="f-resume-file" accept=".pdf,.doc,.docx" style="display:none">
       <div class="in-set-msg" id="f-resume-msg"></div>
+      <div class="ep-sep"><span>My applications</span></div>
+      <div id="f-applications"><div class="in-loading" style="padding:14px">Loading…</div></div>
     </div>
     <div class="in-modal-actions">
       <button class="in-btn ghost" onclick="closeModal()">Cancel</button>
@@ -809,6 +814,7 @@ function editCore(p, headline, attrs) {
     }
   };
   paintResume();
+  loadMyApplications();
 
   $("f-resume-file").onchange = async () => {
     const file = $("f-resume-file").files[0];
@@ -860,6 +866,56 @@ function editCore(p, headline, attrs) {
     }
     closeModal(); renderProfile();
   };
+}
+
+// ---- My applications (inside the Job Search tab) ----------------------
+async function loadMyApplications() {
+  const box = $("f-applications");
+  if (!box) return;
+  const r = await api("/applications/mine.php");
+  if (!r.ok || !r.data?.success) {
+    box.innerHTML = `<div class="in-empty" style="padding:14px">Could not load your applications.</div>`;
+    return;
+  }
+  const apps = r.data.data.applications || [];
+  if (!apps.length) {
+    box.innerHTML = `<div class="in-empty" style="padding:14px">You haven't applied to any jobs yet. Browse the <a href="#jobs" onclick="closeModal()">jobs board</a> to get started.</div>`;
+    return;
+  }
+
+  const statusClass = { submitted: "ok", withdrawn: "off", expired: "off", job_unavailable: "off" };
+  box.innerHTML = apps.map(a => {
+    const job = a.job;
+    const co = a.company;
+    const title = job ? esc(job.title) : "Job removed";
+    const coName = co ? esc(co.name) : "";
+    const score = a.score_value != null ? `<span class="ap-score" title="Your score at apply time">${Math.round(a.score_value)}</span>` : "";
+    const meta = [coName, job?.location].filter(Boolean).join(" · ");
+    const link = job ? `href="#job/${esc(job.uuid)}"` : "";
+    const withdrawBtn = a.can_withdraw
+      ? `<button class="in-btn ghost ap-withdraw" data-uuid="${esc(a.uuid)}" style="flex:none;padding:6px 12px;font-size:12.5px">Withdraw</button>`
+      : "";
+    return `
+      <div class="ap-row">
+        <div class="ap-row-main">
+          ${job ? `<a class="ap-title" ${link}>${title}</a>` : `<span class="ap-title">${title}</span>`}
+          <div class="ap-meta">${meta}</div>
+        </div>
+        ${score}
+        <span class="in-set-msg ${statusClass[a.status] || ""}" style="margin:0;flex:none">${esc(a.status_label)}</span>
+        ${withdrawBtn}
+      </div>`;
+  }).join("");
+
+  box.querySelectorAll(".ap-withdraw").forEach(btn => {
+    btn.onclick = async () => {
+      if (!confirm("Withdraw this application? This can't be undone.")) return;
+      btn.disabled = true;
+      const r2 = await api("/applications/withdraw.php", "POST", { uuid: btn.dataset.uuid });
+      if (r2.ok && r2.data?.success) loadMyApplications();
+      else { btn.disabled = false; alert(r2.data?.error || "Could not withdraw."); }
+    };
+  });
 }
 
 function addJob(existing) {

@@ -137,7 +137,7 @@ async function loadConversationList(activeId) {
         <div class="in-notif-ava">${av}</div>
         <div class="in-msgs-row-body">
           <div class="in-msgs-row-top">
-            <span class="in-msgs-row-name">${esc(name)}</span>
+            <span class="in-msgs-row-name">${esc(name)}${c.muted ? ` <span class="in-msgs-row-muted" title="Muted">🔕</span>` : ""}</span>
             <span class="in-msgs-row-when">${esc(timeAgo(c.last_message_at))}</span>
           </div>
           <div class="in-msgs-row-prev">${tag || prev}</div>
@@ -192,11 +192,25 @@ async function renderThread(convId) {
   const pendingTheirs = conv.status === "pending" && !conv.i_started;
   const composerDisabled = pendingMine || conv.blocked;
 
+  // Blocked notice text depends on whether the block is mine to lift.
+  const blockedNotice = conv.blocked
+    ? (conv.i_blocked
+        ? `You've blocked this user. Unblock from the menu above to message again.`
+        : `Messaging is unavailable with this user.`)
+    : "";
+
   box.innerHTML = `
     <div class="in-msgs-thread-head">
       <button class="in-msgs-back" id="msgs-back" title="Back">←</button>
       <div class="in-notif-ava">${av}</div>
       <a class="in-msgs-thread-name" href="#${esc(profHash)}">${esc(name)}</a>
+      <div class="in-msgs-menu-wrap">
+        <button class="in-msgs-menu-btn" id="msgs-menu-btn" title="Conversation options" aria-label="Conversation options">⋯</button>
+        <div class="in-msgs-menu" id="msgs-menu" hidden>
+          <button class="in-msgs-menu-item" data-act="mute">${conv.muted ? "Unmute conversation" : "Mute conversation"}</button>
+          <button class="in-msgs-menu-item ${conv.i_blocked ? "" : "danger"}" data-act="block">${conv.i_blocked ? "Unblock user" : "Block user"}</button>
+        </div>
+      </div>
     </div>
     ${pendingTheirs ? `
       <div class="in-msgs-banner">
@@ -209,7 +223,7 @@ async function renderThread(convId) {
     ${pendingMine ? `
       <div class="in-msgs-banner muted">Request pending — you can send more messages once they accept.
       Replying to you also counts as accepting.</div>` : ""}
-    ${conv.blocked ? `<div class="in-msgs-banner muted">Messaging is unavailable with this user.</div>` : ""}
+    ${conv.blocked ? `<div class="in-msgs-banner muted">${esc(blockedNotice)}</div>` : ""}
     <div class="in-msgs-scroll" id="msgs-scroll"></div>
     <div class="in-msgs-composer">
       <textarea id="msgs-input" rows="1" maxlength="5000"
@@ -218,9 +232,10 @@ async function renderThread(convId) {
       <button class="in-btn primary" id="msgs-send" ${composerDisabled ? "disabled" : ""}>Send</button>
     </div>`;
 
-  renderThreadMessages(d.messages);
+  renderThreadMessages(d.messages, d.peer_last_read_id || 0, convId);
 
   $("msgs-back").onclick = () => { location.hash = "messages"; };
+  wireThreadMenu(convId, conv);
 
   const acceptBtn = $("msgs-accept");
   if (acceptBtn) acceptBtn.onclick = async () => {
@@ -261,15 +276,53 @@ async function renderThread(convId) {
   MSG_THREAD_POLL = setInterval(() => refreshOpenThread(convId, true), 15000);
 }
 
-function renderThreadMessages(messages) {
+function renderThreadMessages(messages, peerLastReadId, convId) {
   const scroll = $("msgs-scroll");
   if (!scroll) return;
+
+  peerLastReadId = peerLastReadId || 0;
+
+  // The "Seen" receipt hangs off the newest message I sent that the peer
+  // has actually read — but not if that message was since deleted.
+  let seenAfterId = 0;
+  for (const m of messages) {
+    if (m.mine && !m.deleted && m.id <= peerLastReadId) seenAfterId = m.id;
+  }
+
   scroll.innerHTML = messages.length
-    ? messages.map(m => `
-        <div class="in-msg-bubble-row ${m.mine ? "mine" : ""}">
-          <div class="in-msg-bubble ${m.deleted ? "deleted" : ""}">${m.deleted ? "<em>Message deleted</em>" : esc(m.body)}<span class="in-msg-time">${esc(timeAgo(m.created_at))}</span></div>
-        </div>`).join("")
+    ? messages.map(m => {
+        const canDelete = m.mine && !m.deleted;
+        const bubble = m.deleted
+          ? `<div class="in-msg-bubble deleted"><em>Message deleted</em><span class="in-msg-time">${esc(timeAgo(m.created_at))}</span></div>`
+          : `<div class="in-msg-bubble">${esc(m.body)}<span class="in-msg-time">${esc(timeAgo(m.created_at))}</span></div>`;
+        const del = canDelete
+          ? `<button class="in-msg-del" data-msg="${m.id}" title="Delete message" aria-label="Delete message">🗑</button>`
+          : "";
+        const seen = (m.id === seenAfterId)
+          ? `<div class="in-msg-receipt">Seen</div>` : "";
+        return `
+          <div class="in-msg-bubble-row ${m.mine ? "mine" : ""}">
+            ${m.mine ? del + bubble : bubble}
+          </div>${seen}`;
+      }).join("")
     : `<div class="in-empty" style="padding:24px;text-align:center">No messages yet.</div>`;
+
+  // Wire delete buttons.
+  scroll.querySelectorAll(".in-msg-del").forEach(btn => {
+    btn.onclick = async () => {
+      if (!confirm("Delete this message? This can't be undone.")) return;
+      const msgId = Number(btn.dataset.msg);
+      btn.disabled = true;
+      const r = await api("/messages/delete.php", "POST", { message_id: msgId });
+      if (r.ok && r.data?.success) {
+        if (typeof convId === "number") { refreshOpenThread(convId); loadConversationList(convId); }
+      } else {
+        btn.disabled = false;
+        alert(r.data?.error || "Could not delete the message.");
+      }
+    };
+  });
+
   scroll.scrollTop = scroll.scrollHeight;
 }
 
@@ -286,6 +339,57 @@ async function refreshOpenThread(convId, fromPoll) {
     renderThread(convId);
     return;
   }
-  renderThreadMessages(d.messages);
+  // A block/unblock can land from either side between polls; if the
+  // composer-disabled state no longer matches, rebuild the whole pane.
+  const composerNowDisabled = !!(d.conversation.blocked);
+  const composerWasDisabled = !!($("msgs-input") && $("msgs-input").disabled);
+  if (fromPoll && composerNowDisabled !== composerWasDisabled) {
+    renderThread(convId);
+    return;
+  }
+  renderThreadMessages(d.messages, d.peer_last_read_id || 0, convId);
   api("/messages/mark-read.php", "POST", { conversation_id: convId }).then(refreshMsgBadge);
+}
+
+// ---- thread overflow menu (mute / block) ------------------------------
+
+function wireThreadMenu(convId, conv) {
+  const btn  = $("msgs-menu-btn");
+  const menu = $("msgs-menu");
+  if (!btn || !menu) return;
+
+  const closeMenu = () => { menu.hidden = true; };
+  const onDocClick = (e) => {
+    if (!menu.hidden && !menu.contains(e.target) && e.target !== btn) closeMenu();
+  };
+
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    menu.hidden = !menu.hidden;
+    if (!menu.hidden) document.addEventListener("click", onDocClick, { once: true });
+  };
+
+  menu.querySelectorAll(".in-msgs-menu-item").forEach(item => {
+    item.onclick = async () => {
+      closeMenu();
+      const act = item.dataset.act;
+      if (act === "mute") {
+        const r = await api("/messages/mute.php", "POST",
+          { conversation_id: convId, muted: conv.muted ? "0" : "1" });
+        if (r.ok && r.data?.success) { renderThread(convId); loadConversationList(convId); }
+        else alert(r.data?.error || "Could not update mute setting.");
+      } else if (act === "block") {
+        if (conv.i_blocked) {
+          const r = await api("/messages/unblock.php", "POST", { conversation_id: convId });
+          if (r.ok && r.data?.success) { renderThread(convId); loadConversationList(convId); }
+          else alert(r.data?.error || "Could not unblock this user.");
+        } else {
+          if (!confirm(`Block this user? Neither of you will be able to send messages until you unblock them.`)) return;
+          const r = await api("/messages/block.php", "POST", { conversation_id: convId });
+          if (r.ok && r.data?.success) { renderThread(convId); loadConversationList(convId); }
+          else alert(r.data?.error || "Could not block this user.");
+        }
+      }
+    };
+  });
 }

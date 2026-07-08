@@ -25,7 +25,8 @@ Messaging::requireUserActor($actor);
 $pdo = Database::conn();
 
 // Unread = messages newer than my read marker, not sent by me,
-// not deleted, in accepted conversations only.
+// not deleted, in accepted conversations only. Muted conversations
+// don't ping the nav envelope (they still show unread in the list).
 $stmt = $pdo->prepare(
     "SELECT COUNT(*) FROM messages m
      JOIN conversation_participants cp
@@ -34,7 +35,8 @@ $stmt = $pdo->prepare(
      JOIN conversations c ON c.id = m.conversation_id AND c.status = 'accepted'
      WHERE m.id > COALESCE(cp.last_read_message_id, 0)
        AND NOT (m.sender_type = cp.actor_type AND m.sender_id = cp.actor_id)
-       AND m.deleted_at IS NULL"
+       AND m.deleted_at IS NULL
+       AND cp.muted = 0"
 );
 $stmt->execute([$actor['type'], $actor['id']]);
 $unread = (int) $stmt->fetchColumn();

@@ -43,10 +43,29 @@ if ($peerRef) {
 }
 
 // Blocked either way? Thread stays readable, but tell the client so it
-// can disable the composer.
-$blocked = $peerRef
-    ? Messaging::isBlockedEitherWay($actor['type'], $actor['id'], $peerRef['type'], $peerRef['id'])
-    : false;
+// can disable the composer. Also report whether *I* am the blocker, so
+// the UI can show "Unblock" (mine to lift) vs a passive blocked notice.
+$blocked  = false;
+$iBlocked = false;
+if ($peerRef) {
+    $blocked = Messaging::isBlockedEitherWay(
+        $actor['type'], $actor['id'], $peerRef['type'], $peerRef['id']);
+    $st = $pdo->prepare(
+        'SELECT 1 FROM blocks
+         WHERE blocker_type = ? AND blocker_id = ?
+           AND blocked_type = ? AND blocked_id = ? LIMIT 1'
+    );
+    $st->execute([$actor['type'], $actor['id'], $peerRef['type'], $peerRef['id']]);
+    $iBlocked = (bool) $st->fetch();
+}
+
+// My own mute state for this conversation.
+$st = $pdo->prepare(
+    'SELECT muted FROM conversation_participants
+     WHERE conversation_id = ? AND actor_type = ? AND actor_id = ? LIMIT 1'
+);
+$st->execute([$convId, $actor['type'], $actor['id']]);
+$muted = (bool) $st->fetchColumn();
 
 // ---- Messages, newest page first, returned oldest-first --------------
 $beforeId = (int) ($_GET['before_id'] ?? 0);
@@ -88,6 +107,8 @@ Response::success([
         'i_started' => $iStarted,
         'peer'      => $peer,
         'blocked'   => $blocked,
+        'i_blocked' => $iBlocked,
+        'muted'     => $muted,
     ],
     'messages'            => $messages,
     'has_more'            => count($page) === 50,

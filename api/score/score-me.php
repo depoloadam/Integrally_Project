@@ -80,44 +80,10 @@ Response::success([
 
 /**
  * Gather the profile data the scoring algorithm needs.
- * Kept as a plain function so ScoreEngine stays pure (no DB inside it),
- * which makes the algorithm easy to test in isolation later.
+ * Now lives on ScoreEngine so Score Me and job applications share one
+ * copy. This thin wrapper keeps the existing call site above working.
  */
 function gatherProfile(PDO $pdo, int $userId): array
 {
-    $skills = $pdo->prepare(
-        'SELECT s.name, us.proficiency
-         FROM user_skills us JOIN skills s ON s.id = us.skill_id
-         WHERE us.user_id = ?'
-    );
-    $skills->execute([$userId]);
-
-    $jobs = $pdo->prepare(
-        'SELECT title, company_name, start_date, end_date FROM job_history WHERE user_id = ?'
-    );
-    $jobs->execute([$userId]);
-
-    $edu = $pdo->prepare(
-        'SELECT institution, degree, field FROM education WHERE user_id = ?'
-    );
-    $edu->execute([$userId]);
-
-    $certs = $pdo->prepare(
-        'SELECT name, issuer FROM certifications WHERE user_id = ?'
-    );
-    $certs->execute([$userId]);
-
-    $interests = $pdo->prepare(
-        'SELECT i.name FROM user_interests ui JOIN interests i ON i.id = ui.interest_id
-         WHERE ui.user_id = ?'
-    );
-    $interests->execute([$userId]);
-
-    return [
-        'skills'         => $skills->fetchAll(),
-        'jobs'           => $jobs->fetchAll(),
-        'education'      => $edu->fetchAll(),
-        'certifications' => $certs->fetchAll(),
-        'interests'      => $interests->fetchAll(),
-    ];
+    return ScoreEngine::gatherProfile($pdo, $userId);
 }

@@ -11,6 +11,7 @@ require_once __DIR__ . '/../../src/Database.php';
 require_once __DIR__ . '/../../src/Response.php';
 require_once __DIR__ . '/../../src/Auth.php';
 require_once __DIR__ . '/../../src/RichText.php';
+require_once __DIR__ . '/../../src/Applications.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     Response::error('Method not allowed.', 405);
@@ -55,12 +56,39 @@ if ($applyUrl !== '' && !preg_match('#^https?://#i', $applyUrl)) {
     Response::error('apply_url must start with http:// or https://', 422);
 }
 
+// ---- Application settings --------------------------------------------
+$applyMethods = ['native', 'external', 'both'];
+$applyMethod  = trim($in['apply_method'] ?? 'native');
+if (!in_array($applyMethod, $applyMethods, true)) {
+    Response::error('Invalid apply_method.', 422);
+}
+// An external / both job needs a link to point at.
+if (in_array($applyMethod, ['external', 'both'], true) && $applyUrl === '') {
+    Response::error('An external application link is required for this apply method.', 422);
+}
+// Store a normalized form only when native applications are possible.
+$applyForm = null;
+if (in_array($applyMethod, ['native', 'both'], true) && isset($in['apply_form'])) {
+    $applyForm = json_encode(Applications::normalizeForm($in['apply_form']));
+}
+
+$acceptUntil = trim($in['accept_until'] ?? '');
+if ($acceptUntil !== '') {
+    $d = DateTime::createFromFormat('Y-m-d', $acceptUntil);
+    if (!$d || $d->format('Y-m-d') !== $acceptUntil) {
+        Response::error('accept_until must be a valid YYYY-MM-DD date.', 422);
+    }
+} else {
+    $acceptUntil = null;
+}
+
 $uuid = Auth::uuid();
 $stmt = $pdo->prepare(
     'INSERT INTO jobs
        (uuid, company_id, title, description, location, employment_type,
-        remote_policy, salary_min, salary_max, salary_currency, apply_url, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        remote_policy, salary_min, salary_max, salary_currency, apply_url,
+        apply_method, apply_form, accept_until, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
 );
 $stmt->execute([
     $uuid, $companyId, $title,
@@ -70,6 +98,7 @@ $stmt->execute([
     $remotePolicy ?: null,
     $salaryMin, $salaryMax, $currency,
     $applyUrl ?: null,
+    $applyMethod, $applyForm, $acceptUntil,
     $status,
 ]);
 

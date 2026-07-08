@@ -358,6 +358,7 @@ async function loadCompanyJobs() {
         <div class="job-actions">
           <button class="job-actions-btn" title="Actions" aria-label="Actions">⋮</button>
           <div class="job-actions-menu">
+            <button data-act="applicants">View applicants</button>
             <button data-act="edit">Edit</button>
             ${j.status !== "closed" ? `<button data-act="close" class="danger">Close</button>` : ""}
           </div>
@@ -374,6 +375,9 @@ async function loadCompanyJobs() {
     };
     document.addEventListener("click", () => menu.classList.remove("show"));
 
+    menu.querySelector('[data-act="applicants"]').onclick = (e) => {
+      e.stopPropagation(); menu.classList.remove("show"); renderJobApplicants(j.uuid);
+    };
     menu.querySelector('[data-act="edit"]').onclick = (e) => {
       e.stopPropagation(); menu.classList.remove("show"); openJobEditor(j.uuid);
     };
@@ -389,6 +393,120 @@ async function loadCompanyJobs() {
     }
     box.appendChild(row);
   });
+}
+
+// ---- applicants PAGE (ranked by score) ------------------------------
+async function renderJobApplicants(jobUuid) {
+  const view = $("view");
+  view.innerHTML = `<div class="in-loading">Loading applicants…</div>`;
+
+  const r = await api("/applications/for-job.php?job_uuid=" + encodeURIComponent(jobUuid));
+  if (!r.ok || !r.data?.success) {
+    view.innerHTML = `<div class="in-admin"><div class="in-back"><button class="in-back-btn" onclick="location.hash='company-dashboard'">‹ Back to dashboard</button></div><div class="in-empty">${esc(r.data?.error || "Could not load applicants.")}</div></div>`;
+    return;
+  }
+  const d = r.data.data;
+  const c = d.counts || {};
+
+  view.innerHTML = "";
+  const wrap = el(`<div class="in-admin"></div>`);
+  wrap.appendChild(el(`<div class="in-back"><button class="in-back-btn" id="ja-back">‹ Back to dashboard</button></div>`));
+
+  const card = el(`
+    <div class="in-card2">
+      <h2 style="text-transform:none;font-size:18px;letter-spacing:-0.2px;margin-bottom:4px">Applicants — ${esc(d.job.title)}</h2>
+      <div class="s" style="color:var(--in-muted);font-size:13px;margin-bottom:16px">
+        ${c.submitted || 0} active · ${c.withdrawn || 0} withdrawn${c.expired ? ` · ${c.expired} expired` : ""}
+      </div>
+      <div id="ja-list"></div>
+    </div>`);
+  wrap.appendChild(card);
+  view.appendChild(wrap);
+  $("ja-back").onclick = () => renderCompanyDashboard();
+
+  const list = card.querySelector("#ja-list");
+  const apps = d.applicants || [];
+  if (!apps.length) {
+    list.innerHTML = `<div class="in-empty">No applications yet.</div>`;
+    return;
+  }
+
+  apps.forEach((a, idx) => {
+    const cand = a.candidate || {};
+    const name = cand.full_name || cand.username || "Candidate";
+    const av = cand.avatar ? `<img src="${esc(cand.avatar)}" alt="">` : esc(name.charAt(0).toUpperCase());
+    const score = a.score_value != null
+      ? `<div class="ja-score" title="Score at apply time">${Math.round(a.score_value)}</div>`
+      : `<div class="ja-score none" title="No score">—</div>`;
+    const dim = a.status !== "submitted" ? ' style="opacity:.55"' : "";
+    const row = el(`
+      <div class="ja-row"${dim}>
+        <div class="ja-rank">${idx + 1}</div>
+        ${score}
+        <div class="connect-ava" style="width:40px;height:40px">${av}</div>
+        <div class="ja-main">
+          <div class="ja-name">${esc(name)} ${a.status !== "submitted" ? `<span class="in-admin-badge off" style="margin-left:6px">${esc(a.status_label)}</span>` : ""}</div>
+          <div class="ja-sub">@${esc(cand.username || "")}${a.has_resume ? " · 📎 resume" : ""}</div>
+        </div>
+        <button class="in-btn ghost" style="flex:none;padding:7px 14px;font-size:13px">View</button>
+      </div>`);
+    row.querySelector("button").onclick = () => openApplicantDetail(a.uuid);
+    list.appendChild(row);
+  });
+}
+
+async function openApplicantDetail(appUuid) {
+  openModal(`<div class="in-loading" style="padding:24px">Loading…</div>`, { wide: true });
+  const r = await api("/applications/detail.php?uuid=" + encodeURIComponent(appUuid));
+  const modal = $("modal");
+  if (!r.ok || !r.data?.success) {
+    modal.innerHTML = `<div class="in-empty" style="padding:24px">${esc(r.data?.error || "Could not load this application.")}</div>
+      <div class="in-modal-actions"><button class="in-btn ghost" onclick="closeModal()">Close</button></div>`;
+    return;
+  }
+  const a = r.data.data;
+  const cand = a.candidate || {};
+  const name = cand.full_name || cand.username || "Candidate";
+
+  const answersHtml = (a.answers || []).length
+    ? a.answers.map(qa => `
+        <div style="margin-bottom:12px">
+          <div style="font-weight:600;font-size:13px;color:var(--in-ink)">${esc(qa.label)}</div>
+          <div style="font-size:14px;color:var(--in-ink-soft);white-space:pre-wrap">${qa.answer ? esc(qa.answer) : "<em style='color:var(--in-muted)'>No answer</em>"}</div>
+        </div>`).join("")
+    : `<div class="in-empty" style="padding:10px">No application questions.</div>`;
+
+  const breakdown = a.score?.breakdown || [];
+  const scoreHtml = a.score?.value != null ? `
+    <div class="ja-detail-score">
+      <div class="ja-detail-score-num">${Math.round(a.score.value)}</div>
+      <div style="flex:1">
+        ${breakdown.map(f => `<div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--in-ink-soft);margin-bottom:2px"><span>${esc(f.detail || f.factor)}</span><span style="font-weight:600">+${f.points}</span></div>`).join("")}
+      </div>
+    </div>` : `<div class="in-empty" style="padding:10px">No score snapshot.</div>`;
+
+  const resumeHtml = a.resume?.has
+    ? `<a class="in-btn ghost" style="flex:none;padding:8px 16px;text-decoration:none;display:inline-block" href="${API_BASE}/applications/resume.php?uuid=${encodeURIComponent(a.uuid)}" target="_blank">📎 Download resume (${esc(a.resume.name || "file")})</a>`
+    : `<div class="in-empty" style="padding:8px">No resume attached.</div>`;
+
+  modal.innerHTML = `
+    <h2 style="margin-bottom:2px">${esc(name)}</h2>
+    <div style="color:var(--in-muted);font-size:13px;margin-bottom:4px">
+      <a href="#user/${esc(cand.uuid)}" onclick="closeModal()" style="color:var(--in-accent);text-decoration:none">@${esc(cand.username || "")}</a>${cand.location ? " · " + esc(cand.location) : ""}
+    </div>
+    <div style="color:var(--in-muted);font-size:12px;margin-bottom:16px">Applied ${esc(timeAgo(a.applied_at))} · ${esc(a.status_label)}</div>
+
+    <div class="ep-sep"><span>Integrally score</span></div>
+    ${scoreHtml}
+    <div class="ep-sep"><span>Responses</span></div>
+    ${answersHtml}
+    <div class="ep-sep"><span>Resume</span></div>
+    ${resumeHtml}
+
+    <div class="in-modal-actions">
+      <button class="in-btn ghost" onclick="closeModal()">Close</button>
+      <a class="in-btn primary" href="#user/${esc(cand.uuid)}" onclick="closeModal()" style="text-decoration:none">View full profile</a>
+    </div>`;
 }
 
 // ---- job editor PAGE (create + edit) --------------------------------
@@ -445,6 +563,26 @@ async function openJobEditor(uuid = null) {
         <div><label class="jf-label">Salary min</label><input class="jf-input" id="job-smin" type="number" value="${j.salary_min ?? ""}" placeholder="80000"></div>
         <div><label class="jf-label">Salary max</label><input class="jf-input" id="job-smax" type="number" value="${j.salary_max ?? ""}" placeholder="120000"></div>
       </div>
+      <div class="ep-sep"><span>Applications</span></div>
+      <div class="jf-row">
+        <div><label class="jf-label">How candidates apply</label>
+          <select class="jf-input" id="job-apply-method">
+            <option value="native">On Integrally (Quick apply)</option>
+            <option value="external">External link only</option>
+            <option value="both">Both</option>
+          </select>
+        </div>
+        <div><label class="jf-label">Accept applications until <span class="ep-hint">(optional)</span></label>
+          <input class="jf-input" id="job-accept-until" type="date" value="${esc(j.accept_until || "")}">
+        </div>
+      </div>
+      <div id="job-native-opts">
+        <label class="jf-checkrow"><input type="checkbox" id="job-collect-resume"> Ask candidates for a resume</label>
+        <label class="jf-checkrow"><input type="checkbox" id="job-collect-score" checked> Include each applicant's Integrally score</label>
+        <label class="jf-label" style="margin-top:12px">Application questions <span class="ep-hint">(optional, up to 10)</span></label>
+        <div id="job-questions"></div>
+        <button type="button" class="in-btn ghost" id="job-add-q" style="flex:none;padding:7px 14px;font-size:13px;margin-top:6px">+ Add question</button>
+      </div>
       <div class="jf-row">
         <div><label class="jf-label">Status</label>
           <select class="jf-input" id="job-status">
@@ -480,6 +618,62 @@ async function openJobEditor(uuid = null) {
     html: j.description || "",
   });
 
+  // ---- Applications settings ----
+  const applyMethodSel = $("job-apply-method");
+  applyMethodSel.value = j.apply_method || "native";
+  const nativeOpts = $("job-native-opts");
+  const syncApplyMethod = () => {
+    nativeOpts.style.display = (applyMethodSel.value === "external") ? "none" : "";
+  };
+  syncApplyMethod();
+  applyMethodSel.onchange = syncApplyMethod;
+
+  // Seed resume/score toggles + questions from the normalized form.
+  const seedForm = j.apply_form || { collect_resume: false, collect_score: true, questions: [] };
+  $("job-collect-resume").checked = !!seedForm.collect_resume;
+  $("job-collect-score").checked = seedForm.collect_score !== false;
+
+  const qBox = $("job-questions");
+  const addQuestionRow = (q = { label: "", type: "short_text", required: false }) => {
+    if (qBox.children.length >= 10) return;
+    const row = el(`
+      <div class="jf-qrow" style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <input class="jf-input jf-q-label" style="flex:1" maxlength="160" placeholder="Question label" value="${esc(q.label || "")}">
+        <select class="jf-input jf-q-type" style="flex:none;width:130px">
+          <option value="short_text">Short text</option>
+          <option value="long_text">Long text</option>
+          <option value="url">URL</option>
+        </select>
+        <label class="jf-checkrow" style="flex:none;margin:0;white-space:nowrap"><input type="checkbox" class="jf-q-req"> Required</label>
+        <button type="button" class="in-btn ghost jf-q-del" style="flex:none;padding:6px 10px">✕</button>
+      </div>`);
+    row.querySelector(".jf-q-type").value = q.type || "short_text";
+    row.querySelector(".jf-q-req").checked = !!q.required;
+    row.querySelector(".jf-q-del").onclick = () => row.remove();
+    qBox.appendChild(row);
+  };
+  (seedForm.questions || []).forEach(addQuestionRow);
+  $("job-add-q").onclick = () => addQuestionRow();
+
+  // Build the apply_form payload object from the current controls.
+  const collectApplyForm = () => {
+    const questions = [];
+    qBox.querySelectorAll(".jf-qrow").forEach(row => {
+      const label = row.querySelector(".jf-q-label").value.trim();
+      if (!label) return; // skip blank rows
+      questions.push({
+        label,
+        type: row.querySelector(".jf-q-type").value,
+        required: row.querySelector(".jf-q-req").checked,
+      });
+    });
+    return {
+      collect_resume: $("job-collect-resume").checked,
+      collect_score: $("job-collect-score").checked,
+      questions,
+    };
+  };
+
   const back = () => renderCompanyDashboard();
   $("job-back").onclick = back;
   $("job-cancel").onclick = back;
@@ -498,8 +692,15 @@ async function openJobEditor(uuid = null) {
       salary_min: salaryOn ? $("job-smin").value : "",
       salary_max: salaryOn ? $("job-smax").value : "",
       status: $("job-status").value,
+      apply_method: applyMethodSel.value,
+      accept_until: $("job-accept-until").value || "",
+      // apply_form only meaningful when native applications are possible.
+      apply_form: (applyMethodSel.value === "external") ? "" : JSON.stringify(collectApplyForm()),
     };
     if (!payload.title) { msg.textContent = "A job title is required."; msg.className = "in-set-msg err"; return; }
+    if ((payload.apply_method === "external" || payload.apply_method === "both") && !payload.apply_url) {
+      msg.textContent = "An external apply URL is required for that apply method."; msg.className = "in-set-msg err"; return;
+    }
 
     const btn = $("job-save"); btn.disabled = true; btn.textContent = "Saving…";
     let r;
