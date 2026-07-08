@@ -240,6 +240,9 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 .in-item .meta { flex:1; }
 .in-item .t { font-weight:600; font-size:14.5px; }
 .in-item .s { color:var(--in-muted); font-size:13px; margin-top:2px; }
+.in-item-actions { display:flex; align-items:center; gap:2px; flex:none; margin-left:auto; }
+.in-item .edit { background:none; border:none; color:var(--in-muted); cursor:pointer; font-size:13px; align-self:center; padding:4px 8px; border-radius:6px; }
+.in-item .edit:hover { color:var(--in-accent); background:var(--in-bg); }
 .in-item .del { background:none; border:none; color:var(--in-muted); cursor:pointer; font-size:13px; align-self:center; padding:4px 8px; border-radius:6px; }
 .in-item .del:hover { color:var(--in-error); background:#fdecea; }
 .in-empty { color:var(--in-muted); font-size:13.5px; font-style:italic; padding:6px 0; }
@@ -773,6 +776,9 @@ textarea.jf-input { resize:vertical; }
 .emp-result-logo img { width:100%; height:100%; object-fit:cover; }
 .emp-result-name { display:block; font-size:14px; font-weight:600; color:var(--in-ink); }
 .emp-result-ind { display:block; font-size:12px; color:var(--in-muted); }
+.emp-results-head { font-size:11px; font-weight:600; color:var(--in-muted); padding:6px 10px 4px; text-transform:none; }
+.emp-result-dismiss { font-size:13px; color:var(--in-muted); font-weight:500; border-top:1px solid var(--in-line); border-radius:0; margin-top:4px; padding-top:10px; }
+.emp-result-dismiss:hover { color:var(--in-ink); background:var(--in-bg); }
 .emp-linked { display:flex; align-items:center; gap:8px; margin-top:8px; }
 .emp-linked-tag { font-size:13px; font-weight:600; color:var(--in-accent); background:var(--in-bg); border:1px solid var(--in-line); border-radius:20px; padding:5px 12px; }
 .emp-unlink { background:none; border:none; color:var(--in-muted); cursor:pointer; font-size:13px; padding:2px 6px; border-radius:6px; }
@@ -1030,3 +1036,13 @@ textarea.jf-input { resize:vertical; }
 /* ==== motto (bio box label) ========================================= */
 .in-bio-label.motto { text-transform:none; letter-spacing:0; font-size:15px; font-weight:700; color:var(--in-ink); font-style:italic; }
 .ep-hint { font-weight:400; color:var(--in-muted); font-size:11px; }
+
+/* ==== connect: current job line + edit-profile headline options ===== */
+.connect-job { font-size:12px; color:var(--in-muted); font-weight:500; }
+.connect-title-row { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; }
+.connect-title-row .connect-job::before { content:"· "; }
+.ep-headline-opts { margin:10px 0 4px; display:flex; flex-direction:row; align-items:center; flex-wrap:wrap; gap:10px 22px; }
+/* .in-modal-scoped selectors out-specify the bare .in-modal label / .in-modal
+   input rules, so these win regardless of source order (no !important needed). */
+.in-modal label.ep-check { display:inline-flex; align-items:center; gap:8px; margin:0; font-size:13px; line-height:1; color:var(--in-ink-soft); font-weight:500; cursor:pointer; }
+.in-modal .ep-check input[type="checkbox"] { width:16px; height:16px; min-width:16px; flex:none; margin:0; padding:0; accent-color:var(--in-accent); cursor:pointer; }

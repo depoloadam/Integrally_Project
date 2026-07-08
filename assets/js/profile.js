@@ -24,7 +24,7 @@ async function renderProfile() {
 
   const p = prof.data?.data || {};
   const attrs = p.attributes || {};
-  const headline = attrs.headline?.value || "";
+  const headline = effectiveHeadline(attrs, jobs.data?.data);
   const initial = (p.username || "?").charAt(0).toUpperCase();
   const loc = [p.city, p.state, p.country].filter(Boolean).join(", ");
 
@@ -183,17 +183,17 @@ async function renderProfile() {
     return `
     <div class="meta"><div class="t">${esc(j.title)}</div>
     <div class="s">${companyDisplay}${j.start_date ? " · " + j.start_date + (j.end_date ? " – " + j.end_date : " – Present") : ""}</div></div>`;
-  }, "jobs", addJob, j => j.id);
+  }, "jobs", addJob, j => j.id, j => addJob(j));
 
   section(rightCol, "Education", edu.data?.data, e => `
     <div class="meta"><div class="t">${esc(e.degree || e.institution)}</div>
     <div class="s">${esc([e.institution, e.field].filter(Boolean).join(" · "))}${e.end_year ? " · " + e.end_year : ""}</div></div>`,
-    "education", addEdu, e => e.id);
+    "education", addEdu, e => e.id, e => addEdu(e));
 
   section(rightCol, "Certifications", certs.data?.data, c => `
     <div class="meta"><div class="t">${esc(c.name)}</div>
     <div class="s">${esc(c.issuer || "")}${c.issue_date ? " · " + c.issue_date : ""}</div></div>`,
-    "certs", addCert, c => c.id);
+    "certs", addCert, c => c.id, c => addCert(c));
 
   // AI Skillset display — sits under Certifications. Shown when the owner
   // has enabled it; visitors see it only if enabled + has endorsed skills.
@@ -385,6 +385,24 @@ function socialLinksHtml(attrs) {
 // Filled: white card with a teal accent bar, "About" label, and a small
 // pencil button (owner only). Empty + owner: a dashed invitation card.
 // Empty + visitor: nothing.
+// ---- headline display logic ---------------------------------------------
+// Two attrs control what shows under the username (no migration):
+//   headline_enabled: "0" hides the headline entirely; anything else = on
+//   headline_source:  "job" shows the current job ("Title at Company")
+//                     instead of the custom headline text
+// A "current job" is the newest job_history row with no end date (the
+// jobs list endpoint already orders current-first).
+function effectiveHeadline(attrs, jobsList) {
+  if ((attrs.headline_enabled?.value ?? "1") === "0") return "";
+  if ((attrs.headline_source?.value || "custom") === "job") {
+    const list = Array.isArray(jobsList) ? jobsList : [];
+    const cur = list.find(j => !j.end_date);
+    if (!cur) return "";
+    return cur.company_name ? `${cur.title} at ${cur.company_name}` : (cur.title || "");
+  }
+  return (attrs.headline?.value || "").trim();
+}
+
 function renderBioBox(attrs, isOwner) {
   const bio = (attrs.bio?.value || "").trim();
   const motto = (attrs.motto?.value || "").trim();
@@ -595,14 +613,15 @@ function editBio(currentBio, currentMotto) {
 }
 
 // ---- list + chip section renderers -----------------------------------
-function section(view, title, items, rowHtml, kind, onAdd, idOf) {
+function section(view, title, items, rowHtml, kind, onAdd, idOf, onEdit) {
   const card = el(`<div class="in-card2"><h2>${title}<button class="add" title="Add">+</button></h2><div class="body"></div></div>`);
   view.appendChild(card);
   card.querySelector(".add").onclick = onAdd;
   const body = card.querySelector(".body");
   if (!items || !items.length) { body.appendChild(el(`<div class="in-empty">Nothing added yet.</div>`)); return; }
   items.forEach(it => {
-    const row = el(`<div class="in-item">${rowHtml(it)}<button class="del">Remove</button></div>`);
+    const row = el(`<div class="in-item">${rowHtml(it)}<div class="in-item-actions">${onEdit ? `<button class="edit">Edit</button>` : ""}<button class="del">Remove</button></div></div>`);
+    if (onEdit) row.querySelector(".edit").onclick = () => onEdit(it);
     row.querySelector(".del").onclick = () => removeRecord(kind, idOf(it));
     body.appendChild(row);
   });
@@ -668,6 +687,10 @@ function adminEditProfile(p, headline, uuid) {
 // ---- edit core (own profile) -----------------------------------------
 function editCore(p, headline, attrs) {
   attrs = attrs || {};
+  // The passed `headline` is the *effective* display value (may be the
+  // current-job string, or "" when the headline is disabled). The input
+  // must show the raw custom text so saving never clobbers it.
+  const customHeadline = (attrs.headline?.value || "").trim();
   const avatarState = { avatarUrl: p.profile_pic || null };
   const linkedin = attrs.linkedin_url?.value || "";
   const twitter  = attrs.twitter_url?.value || "";
@@ -686,7 +709,11 @@ function editCore(p, headline, attrs) {
         <div class="ep-avatar"><div id="f-avatar"></div></div>
         <div class="ep-identity">
           <label>Username</label><input id="f-username" value="${esc(p.username||"")}">
-          <label>Headline</label><input id="f-headline" value="${esc(headline)}" placeholder="e.g. IT Automation Specialist">
+          <label>Headline</label><input id="f-headline" value="${esc(customHeadline)}" placeholder="e.g. IT Automation Specialist">
+          <div class="ep-headline-opts">
+            <label class="ep-check"><input type="checkbox" id="f-headline-enabled" ${(attrs.headline_enabled?.value ?? "1") !== "0" ? "checked" : ""}> Show headline on my profile</label>
+            <label class="ep-check" id="f-headline-job-wrap"><input type="checkbox" id="f-headline-job" ${(attrs.headline_source?.value || "custom") === "job" ? "checked" : ""}> Use my current job instead</label>
+          </div>
           <label>Motto <span class="ep-hint">(replaces "About" on your profile)</span></label><input id="f-motto-core" maxlength="80" value="${esc(attrs.motto?.value || "")}" placeholder="e.g. Build things that matter">
         </div>
       </div>
@@ -718,6 +745,21 @@ function editCore(p, headline, attrs) {
 
   // ---- tabs ----
   const modal = $("modal");
+
+  // ---- headline display options ----
+  // The "current job" option only applies while the headline is shown,
+  // and the custom text input dims when job mode takes over.
+  const syncHeadlineOpts = () => {
+    const enabled = $("f-headline-enabled").checked;
+    const useJob  = $("f-headline-job").checked;
+    $("f-headline-job-wrap").style.display = enabled ? "" : "none";
+    $("f-headline").disabled = !enabled || useJob;
+    $("f-headline").style.opacity = (!enabled || useJob) ? ".5" : "";
+  };
+  $("f-headline-enabled").onchange = syncHeadlineOpts;
+  $("f-headline-job").onchange = syncHeadlineOpts;
+  syncHeadlineOpts();
+
   modal.querySelectorAll(".in-modal-tab").forEach(t => {
     t.onclick = () => {
       modal.querySelectorAll(".in-modal-tab").forEach(x => x.classList.toggle("active", x === t));
@@ -801,6 +843,8 @@ function editCore(p, headline, attrs) {
       profile_pic: avatarState.avatarUrl || "",
     });
     await api("/profile/set-attribute.php", "POST", { key:"headline", value:$("f-headline").value.trim() });
+    await api("/profile/set-attribute.php", "POST", { key:"headline_enabled", value:$("f-headline-enabled").checked ? "1" : "0" });
+    await api("/profile/set-attribute.php", "POST", { key:"headline_source", value:$("f-headline-job").checked ? "job" : "custom" });
     await api("/profile/set-attribute.php", "POST", { key:"motto", value:$("f-motto-core").value.trim() });
     await api("/profile/set-attribute.php", "POST", { key:"linkedin_url", value:$("f-linkedin").value.trim() });
     await api("/profile/set-attribute.php", "POST", { key:"twitter_url", value:$("f-twitter").value.trim() });
@@ -818,29 +862,32 @@ function editCore(p, headline, attrs) {
   };
 }
 
-function addJob() {
+function addJob(existing) {
+  const isEdit = !!(existing && existing.id);
+  const linkedInit = (existing && existing.company_uuid)
+    ? { uuid: existing.company_uuid, name: existing.company_name || "" } : null;
   openModal(`
-    <h3>Add experience</h3>
-    <label>Title *</label><input id="j-title">
+    <h3>${isEdit ? "Edit experience" : "Add experience"}</h3>
+    <label>Title *</label><input id="j-title" value="${isEdit ? esc(existing.title || "") : ""}">
     <label>Company</label>
     <div class="emp-search">
-      <input id="j-company" autocomplete="off" placeholder="Type to search company accounts…">
+      <input id="j-company" autocomplete="off" placeholder="Type to search company accounts…" value="${isEdit ? esc(existing.company_name || "") : ""}">
       <div class="emp-results" id="j-company-results"></div>
       <div class="emp-linked" id="j-company-linked" style="display:none"></div>
     </div>
-    <div class="row"><div><label>Start date</label><input id="j-start" type="date"></div><div><label>End date</label><input id="j-end" type="date"></div></div>
+    <div class="row"><div><label>Start date</label><input id="j-start" type="date" value="${isEdit ? esc(existing.start_date || "") : ""}"></div><div><label>End date</label><input id="j-end" type="date" value="${isEdit && existing.end_date ? esc(existing.end_date) : ""}"></div></div>
     <label class="jf-checkrow" style="margin-top:4px">
-      <input type="checkbox" id="j-current"> I currently work here
+      <input type="checkbox" id="j-current" ${isEdit && !existing.end_date && existing.start_date ? "checked" : ""}> I currently work here
     </label>
-    <label>Description</label><textarea id="j-desc" rows="3"></textarea>
+    <label>Description</label><textarea id="j-desc" rows="3">${isEdit ? esc(existing.description || "") : ""}</textarea>
     <div class="in-modal-actions">
-      <button class="in-btn ghost" id="j-none">No job history</button>
-      <button class="in-btn primary" id="save-job">Add</button>
+      ${isEdit ? `<button class="in-btn ghost" onclick="closeModal()">Cancel</button>` : `<button class="in-btn ghost" id="j-none">No job history</button>`}
+      <button class="in-btn primary" id="save-job">${isEdit ? "Save" : "Add"}</button>
     </div>`);
 
   // Live employer search: as the user types, look up company accounts that
   // allow being listed. Selecting one links it (stores company_uuid).
-  let linkedCompany = null;   // { uuid, name } when a company account is chosen
+  let linkedCompany = linkedInit;   // { uuid, name } when a company account is chosen
   const cInput = $("j-company");
   const cResults = $("j-company-results");
   const cLinked = $("j-company-linked");
@@ -863,12 +910,21 @@ function addJob() {
     const r = await api("/company/search-employers.php?q=" + encodeURIComponent(q));
     const list = (r.ok && r.data?.success) ? r.data.data.companies : [];
     if (!list.length) { cResults.style.display = "none"; cResults.innerHTML = ""; return; }
-    cResults.innerHTML = list.map(c =>
+    cResults.innerHTML =
+      `<div class="emp-results-head">Company accounts — pick one to link, or keep typing to leave unlinked</div>` +
+      list.map(c =>
       `<button type="button" class="emp-result" data-uuid="${esc(c.uuid)}" data-name="${esc(c.name)}">
         <span class="emp-result-logo">${c.logo ? `<img src="${esc(c.logo)}" alt="">` : esc((c.name||"?").charAt(0).toUpperCase())}</span>
         <span><span class="emp-result-name">${esc(c.name)}</span>${c.industry ? `<span class="emp-result-ind">${esc(c.industry)}</span>` : ""}</span>
-      </button>`).join("");
+      </button>`).join("") +
+      `<button type="button" class="emp-result emp-result-dismiss" id="emp-keep-text">✕ Keep "${esc(q)}" as plain text (don't link)</button>`;
     cResults.style.display = "block";
+    const keepBtn = cResults.querySelector("#emp-keep-text");
+    if (keepBtn) keepBtn.onclick = () => {
+      linkedCompany = null;
+      cResults.style.display = "none"; cResults.innerHTML = "";
+      showLinked();
+    };
     cResults.querySelectorAll(".emp-result").forEach(btn => {
       btn.onclick = () => {
         linkedCompany = { uuid: btn.dataset.uuid, name: btn.dataset.name };
@@ -889,48 +945,71 @@ function addJob() {
     if (currentCb.checked) { endInput.value = ""; endInput.disabled = true; endInput.style.opacity = ".5"; }
     else { endInput.disabled = false; endInput.style.opacity = ""; }
   };
+  showLinked();          // reflect any pre-linked company (edit mode)
+  currentCb.onchange();  // reflect initial current-job state (edit mode)
 
-  $("j-none").onclick = async () => { await api("/settings/set.php","POST",{key:"step_experience_done",value:"1"}); closeModal(); renderProfile(); };
+  const noneBtn = $("j-none");
+  if (noneBtn) noneBtn.onclick = async () => { await api("/settings/set.php","POST",{key:"step_experience_done",value:"1"}); closeModal(); renderProfile(); };
   $("save-job").onclick = async () => {
     const title = $("j-title").value.trim(); if (!title) return;
     const company = $("j-company").value.trim();
-    await api("/profile/jobs/add.php","POST",{
-      title, company_name:company,
-      company_uuid: linkedCompany ? linkedCompany.uuid : null,
-      start_date:$("j-start").value,
-      end_date: currentCb.checked ? "" : $("j-end").value,   // current job -> no end date
-      description:$("j-desc").value.trim()
-    });
-    closeModal(); offerShare(`💼 Excited to share a new role: ${title}${company ? " at " + company : ""}!`); renderProfile();
+    if (isEdit) {
+      await api("/profile/jobs/update.php","POST",{
+        id: existing.id,
+        title, company_name:company,
+        // Send the uuid so the backend can (re)link; empty string unlinks.
+        // Guard: only treat as linked if the typed name still matches the
+        // linked company, so editing the name to free text unlinks too.
+        company_uuid: (linkedCompany && company === linkedCompany.name) ? linkedCompany.uuid : "",
+        start_date:$("j-start").value,
+        end_date: currentCb.checked ? "" : $("j-end").value,
+        description:$("j-desc").value.trim()
+      });
+      closeModal(); renderProfile();
+    } else {
+      await api("/profile/jobs/add.php","POST",{
+        title, company_name:company,
+        company_uuid: (linkedCompany && company === linkedCompany.name) ? linkedCompany.uuid : null,
+        start_date:$("j-start").value,
+        end_date: currentCb.checked ? "" : $("j-end").value,   // current job -> no end date
+        description:$("j-desc").value.trim()
+      });
+      closeModal(); offerShare(`💼 Excited to share a new role: ${title}${company ? " at " + company : ""}!`); renderProfile();
+    }
   };
 }
 
-function addEdu() {
+function addEdu(existing) {
+  const isEdit = !!(existing && existing.id);
   openModal(`
-    <h3>Add education</h3>
-    <label>Institution</label><input id="e-inst">
-    <label>Degree</label><input id="e-deg">
-    <label>Field</label><input id="e-field">
-    <div class="row"><div><label>Start year</label><input id="e-start" type="number"></div><div><label>End year</label><input id="e-end" type="number"></div></div>
-    <div class="in-modal-actions"><button class="in-btn ghost" onclick="closeModal()">Cancel</button><button class="in-btn primary" id="save-edu">Add</button></div>`);
+    <h3>${isEdit ? "Edit education" : "Add education"}</h3>
+    <label>Institution</label><input id="e-inst" value="${isEdit ? esc(existing.institution || "") : ""}">
+    <label>Degree</label><input id="e-deg" value="${isEdit ? esc(existing.degree || "") : ""}">
+    <label>Field</label><input id="e-field" value="${isEdit ? esc(existing.field || "") : ""}">
+    <div class="row"><div><label>Start year</label><input id="e-start" type="number" value="${isEdit && existing.start_year ? esc(String(existing.start_year)) : ""}"></div><div><label>End year</label><input id="e-end" type="number" value="${isEdit && existing.end_year ? esc(String(existing.end_year)) : ""}"></div></div>
+    <div class="in-modal-actions"><button class="in-btn ghost" onclick="closeModal()">Cancel</button><button class="in-btn primary" id="save-edu">${isEdit ? "Save" : "Add"}</button></div>`);
   $("save-edu").onclick = async () => {
-    await api("/profile/education/add.php","POST",{ institution:$("e-inst").value.trim(), degree:$("e-deg").value.trim(), field:$("e-field").value.trim(), start_year:$("e-start").value, end_year:$("e-end").value });
+    const payload = { institution:$("e-inst").value.trim(), degree:$("e-deg").value.trim(), field:$("e-field").value.trim(), start_year:$("e-start").value, end_year:$("e-end").value };
+    if (isEdit) await api("/profile/education/update.php","POST",{ id:existing.id, ...payload });
+    else        await api("/profile/education/add.php","POST", payload);
     closeModal(); renderProfile();
   };
 }
 
-function addCert() {
+function addCert(existing) {
+  const isEdit = !!(existing && existing.id);
   openModal(`
-    <h3>Add certification</h3>
-    <label>Name *</label><input id="c-name">
-    <label>Issuer</label><input id="c-issuer">
-    <div class="row"><div><label>Issued</label><input id="c-issue" type="date"></div><div><label>Expires</label><input id="c-exp" type="date"></div></div>
-    <div class="in-modal-actions"><button class="in-btn ghost" onclick="closeModal()">Cancel</button><button class="in-btn primary" id="save-cert">Add</button></div>`);
+    <h3>${isEdit ? "Edit certification" : "Add certification"}</h3>
+    <label>Name *</label><input id="c-name" value="${isEdit ? esc(existing.name || "") : ""}">
+    <label>Issuer</label><input id="c-issuer" value="${isEdit ? esc(existing.issuer || "") : ""}">
+    <div class="row"><div><label>Issued</label><input id="c-issue" type="date" value="${isEdit ? esc(existing.issue_date || "") : ""}"></div><div><label>Expires</label><input id="c-exp" type="date" value="${isEdit ? esc(existing.expiry_date || "") : ""}"></div></div>
+    <div class="in-modal-actions"><button class="in-btn ghost" onclick="closeModal()">Cancel</button><button class="in-btn primary" id="save-cert">${isEdit ? "Save" : "Add"}</button></div>`);
   $("save-cert").onclick = async () => {
     const name = $("c-name").value.trim(); if (!name) return;
     const issuer = $("c-issuer").value.trim();
-    await api("/profile/certs/add.php","POST",{ name, issuer, issue_date:$("c-issue").value, expiry_date:$("c-exp").value });
-    closeModal(); offerShareCert(name, issuer); renderProfile();
+    const payload = { name, issuer, issue_date:$("c-issue").value, expiry_date:$("c-exp").value };
+    if (isEdit) { await api("/profile/certs/update.php","POST",{ id:existing.id, ...payload }); closeModal(); renderProfile(); }
+    else        { await api("/profile/certs/add.php","POST", payload); closeModal(); offerShareCert(name, issuer); renderProfile(); }
   };
 }
 
@@ -1191,7 +1270,7 @@ async function renderPublicProfile(uuid) {
   }
   if (p.is_owner) { location.hash = "profile"; return; }
   const attrs = p.attributes || {};
-  const headline = attrs.headline?.value || "";
+  const headline = effectiveHeadline(attrs, jobs.data?.data);
   const initial = (p.username || "?").charAt(0).toUpperCase();
   const loc = [p.city, p.state, p.country].filter(Boolean).join(", ");
   // Follow state + counts.

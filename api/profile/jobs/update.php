@@ -3,7 +3,7 @@
 
 // =====================================================================
 // FILE: api/profile/jobs/update.php
-// POST { id*, title?, company_name?, company_id?, start_date?, end_date?, description? }
+// POST { id*, title?, company_name?, company_uuid?, start_date?, end_date?, description? }
 // =====================================================================
 
 require_once __DIR__ . '/../../../src/Database.php';
@@ -28,7 +28,7 @@ if (!$check->fetch()) {
     Response::error('Record not found.', 404);   // generic: don't reveal others' IDs
 }
 
-$allowed = ['title', 'company_name', 'company_id', 'start_date', 'end_date', 'description'];
+$allowed = ['title', 'company_name', 'start_date', 'end_date', 'description'];
 $sets = []; $params = [];
 foreach ($allowed as $f) {
     if (array_key_exists($f, $in)) {
@@ -36,15 +36,34 @@ foreach ($allowed as $f) {
             $v = trim((string) $in[$f]);
             if ($v === '') Response::error('Title cannot be empty.', 422);
             $sets[] = 'title = ?'; $params[] = $v;
-        } elseif ($f === 'company_id') {
-            $sets[] = 'company_id = ?';
-            $params[] = !empty($in[$f]) ? (int) $in[$f] : null;
         } else {
             $v = trim((string) $in[$f]);
             $sets[] = "$f = ?"; $params[] = ($v === '' ? null : $v);
         }
     }
 }
+
+// Employer link. If company_uuid is present in the payload, resolve it:
+//   non-empty + valid + still allows listing -> set company_id
+//   empty string ("")                        -> unlink (company_id = NULL)
+// This lets the edit modal remove a link by clearing it. Only a company
+// that currently allows being listed can be linked.
+if (array_key_exists('company_uuid', $in)) {
+    $companyUuid = trim((string) $in['company_uuid']);
+    $companyId = null;
+    if ($companyUuid !== '') {
+        $cstmt = $pdo->prepare(
+            'SELECT id FROM companies
+             WHERE uuid = ? AND is_active = 1 AND allow_employee_listing = 1
+             LIMIT 1'
+        );
+        $cstmt->execute([$companyUuid]);
+        $crow = $cstmt->fetch();
+        if ($crow) $companyId = (int) $crow['id'];
+    }
+    $sets[] = 'company_id = ?'; $params[] = $companyId;
+}
+
 if (!$sets) Response::error('No fields to update.', 422);
 
 $params[] = $id;

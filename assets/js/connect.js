@@ -69,13 +69,17 @@ async function loadConnect() {
     const canFollow = !!(ME || CO) && !isSelfRow;
     const avatarChar = (res.title || "?").charAt(0).toUpperCase();
     const sub = [res.subtitle, res.location].filter(Boolean).join(" · ");
+    const jobLine = res.job ? (res.job.company ? [res.job.title, res.job.company].filter(Boolean).join(" at ") : (res.job.title || "")) : "";
     const verified = res.verified ? ` <span class="post-tag" style="vertical-align:middle">Verified</span>` : "";
 
     const row = el(`
       <div class="connect-row">
         <div class="connect-ava ${isCompany ? "company" : ""}">${res.image ? `<img src="${esc(res.image)}" alt="">` : esc(avatarChar)}</div>
         <div class="connect-main">
-          <div class="connect-title">${isCompany ? esc(res.title) : "@" + esc(res.title)}${verified}</div>
+          <div class="connect-title-row">
+            <span class="connect-title">${isCompany ? esc(res.title) : "@" + esc(res.title)}${verified}</span>
+            ${jobLine ? `<span class="connect-job">${esc(jobLine)}</span>` : ""}
+          </div>
           <div class="connect-sub">${esc(sub || (isCompany ? "Company" : "Member"))}</div>
         </div>
         ${canFollow ? `<button class="in-follow-btn connect-follow ${res.following ? "following" : ""}" style="width:auto;flex:none;margin-top:0;padding:8px 18px">${res.following ? "Following" : "Follow"}</button>` : ""}

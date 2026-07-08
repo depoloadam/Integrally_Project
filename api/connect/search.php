@@ -45,7 +45,7 @@ if ($type === 'all' || $type === 'users') {
     if ($q === '') {
         // No query: surface some recent active users (excluding self).
         $stmt = $pdo->prepare(
-            "SELECT uuid, username, first_name, last_name, city, state, profile_pic, is_verified
+            "SELECT id, uuid, username, first_name, last_name, city, state, profile_pic, is_verified
              FROM users
              WHERE is_active = 1 AND id <> ?
              ORDER BY created_at DESC
@@ -54,7 +54,7 @@ if ($type === 'all' || $type === 'users') {
         $stmt->execute([$excludeUserId]);
     } else {
         $stmt = $pdo->prepare(
-            "SELECT uuid, username, first_name, last_name, city, state, profile_pic, is_verified
+            "SELECT id, uuid, username, first_name, last_name, city, state, profile_pic, is_verified
              FROM users
              WHERE is_active = 1 AND id <> ?
                AND (username LIKE ? OR first_name LIKE ? OR last_name LIKE ?
@@ -64,7 +64,33 @@ if ($type === 'all' || $type === 'users') {
         );
         $stmt->execute([$excludeUserId, $like, $like, $like, $like, $like]);
     }
-    foreach ($stmt->fetchAll() as $u) {
+    $userRows = $stmt->fetchAll();
+
+    // Batch-resolve each user's CURRENT job (newest job_history row with
+    // no end date) so the Connect list can show "Title · Company".
+    $currentJobs = [];
+    if ($userRows) {
+        $ids = array_map(fn($u) => (int) $u['id'], $userRows);
+        $ph  = implode(',', array_fill(0, count($ids), '?'));
+        $js  = $pdo->prepare(
+            "SELECT user_id, title, company_name
+             FROM job_history
+             WHERE user_id IN ($ph) AND end_date IS NULL
+             ORDER BY start_date DESC"
+        );
+        $js->execute($ids);
+        foreach ($js->fetchAll() as $j) {
+            $uid = (int) $j['user_id'];
+            if (!isset($currentJobs[$uid])) {   // newest current job wins
+                $currentJobs[$uid] = [
+                    'title'   => $j['title'] ?: null,
+                    'company' => $j['company_name'] ?: null,
+                ];
+            }
+        }
+    }
+
+    foreach ($userRows as $u) {
         $name = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
         $results[] = [
             'kind'      => 'user',
@@ -74,6 +100,7 @@ if ($type === 'all' || $type === 'users') {
             'location'  => trim(($u['city'] ?? '') . ($u['state'] ? ', ' . $u['state'] : ''), ', ') ?: null,
             'image'     => $u['profile_pic'] ?: null,
             'verified'  => (bool) $u['is_verified'],
+            'job'       => $currentJobs[(int) $u['id']] ?? null,
         ];
     }
 }
