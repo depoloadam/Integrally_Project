@@ -35,7 +35,16 @@ function openModal(html, opts) {
   $("overlay").classList.add("show");
 }
 function closeModal() { $("overlay").classList.remove("show"); const m = $("modal"); m.innerHTML = ""; m.classList.remove("wide"); }
-$("overlay").addEventListener("click", e => { if (e.target.id === "overlay") closeModal(); });
+// Close on overlay click, but ONLY when the press started on the overlay
+// itself. Without the mousedown guard, selecting text inside the modal and
+// releasing the mouse outside it registers as an overlay click and closes
+// the window — a very easy accidental dismiss.
+let overlayPressOnBackdrop = false;
+$("overlay").addEventListener("mousedown", e => { overlayPressOnBackdrop = (e.target.id === "overlay"); });
+$("overlay").addEventListener("click", e => {
+  if (e.target.id === "overlay" && overlayPressOnBackdrop) closeModal();
+  overlayPressOnBackdrop = false;
+});
 window.closeModal = closeModal;   // for inline onclick handlers
 
 // ---- image upload helper (multipart, not JSON) -----------------------
