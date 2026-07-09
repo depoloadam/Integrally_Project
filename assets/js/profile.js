@@ -1113,6 +1113,11 @@ function addEdu(existing) {
   // engine can map to job categories) but allows any free text.
   if (typeof jobMountTypeahead === "function" && typeof eduCatalogSearch === "function") {
     jobMountTypeahead($("e-field"), { search: eduCatalogSearch, minChars: 2, limit: 8 });
+  } else {
+    console.warn("[education typeahead] not mounted:",
+      "jobMountTypeahead=" + typeof jobMountTypeahead,
+      "eduCatalogSearch=" + typeof eduCatalogSearch,
+      "- check that assets/js/education-catalog.js is loaded (app.html script tag / 404) and jobs-catalog.js is current.");
   }
   $("save-edu").onclick = async () => {
     const payload = { institution:$("e-inst").value.trim(), degree:$("e-deg").value.trim(), field:$("e-field").value.trim(), start_year:$("e-start").value, end_year:$("e-end").value };
@@ -1347,6 +1352,10 @@ function openExtrasFlow() {
     row.querySelector(".bulk-row-x").onclick = () => row.remove(); eduWrap.appendChild(row);
     if (typeof jobMountTypeahead === "function" && typeof eduCatalogSearch === "function") {
       jobMountTypeahead(row.querySelector(".ee-field"), { search: eduCatalogSearch, minChars: 2, limit: 8 });
+    } else {
+      console.warn("[education typeahead] not mounted (bulk row):",
+        "jobMountTypeahead=" + typeof jobMountTypeahead,
+        "eduCatalogSearch=" + typeof eduCatalogSearch);
     }
   };
   const certWrap = $("ex-cert-rows");
