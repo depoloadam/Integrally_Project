@@ -255,6 +255,9 @@ function jobMountTypeahead(input, opts) {
   opts = opts || {};
   const minChars = opts.minChars != null ? opts.minChars : 2;
   const limit    = opts.limit || 8;
+  // Pluggable suggestion source: any (q, limit) -> [{title, category}].
+  // Defaults to the job catalog; education-catalog.js passes its own.
+  const search   = opts.search || jobCatalogSearch;
 
   const wrap = input.parentElement;
   if (wrap && !wrap.classList.contains("job-ta-wrap")) {
@@ -274,7 +277,7 @@ function jobMountTypeahead(input, opts) {
   const render = () => {
     const q = input.value;
     if (q.trim().length < minChars) { close(); return; }
-    items = jobCatalogSearch(q, limit);
+    items = search(q, limit);
     if (!items.length) { close(); return; }
     menu.innerHTML = items.map((it, i) => `
       <div class="job-ta-item${i === active ? " active" : ""}" data-i="${i}">

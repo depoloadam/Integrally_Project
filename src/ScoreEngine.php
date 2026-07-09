@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/JobCatalog.php';
+require_once __DIR__ . '/EducationCatalog.php';
 
 // =====================================================================
 // FILE: src/ScoreEngine.php
@@ -19,7 +20,7 @@ require_once __DIR__ . '/JobCatalog.php';
 
 class ScoreEngine
 {
-    const VERSION = 'category-relevance-v2';
+    const VERSION = 'category-relevance-v2.1';
 
     // ------------------------------------------------------------------
     // Tunable weights (must sum to 100). Adjust ratios here — the logic
@@ -157,8 +158,26 @@ class ScoreEngine
         foreach ($profile['education'] as $e) {
             $text = trim(($e['field'] ?? '') . ' ' . ($e['degree'] ?? ''));
             if ($text === '') continue;
-            $rel = JobCatalog::titleSimilarity($text, $target);
+
+            // 1) Deterministic: the field resolves through the education
+            //    catalog to job categories (full credit on a direct hit,
+            //    half on an adjacent category).
+            $rel = 0.0;
+            if ($catId !== null) {
+                $fieldCats = EducationCatalog::categoriesForField($e['field'] ?? '');
+                if ($fieldCats !== null && count($fieldCats)) {
+                    if (in_array($catId, $fieldCats, true)) {
+                        $rel = 1.0;
+                    } elseif (array_intersect($fieldCats, JobCatalog::ADJACENCY[$catId] ?? [])) {
+                        $rel = 0.5;
+                    }
+                }
+            }
+
+            // 2) Fuzzy fallback / supplement: token relevance + similarity.
+            $rel = max($rel, JobCatalog::titleSimilarity($text, $target));
             if ($catId !== null) $rel = max($rel, JobCatalog::tokenRelevance($text, $catId));
+
             if ($rel > $bestEduRel) { $bestEduRel = $rel; $bestEduField = $e['field'] ?: $e['degree']; }
         }
         $eduRelPts = self::W_EDU_RELEVANCE * $bestEduRel;

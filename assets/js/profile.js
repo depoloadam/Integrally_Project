@@ -1105,10 +1105,15 @@ function addEdu(existing) {
   openModal(`
     <h3>${isEdit ? "Edit education" : "Add education"}</h3>
     <label>Institution</label><input id="e-inst" value="${isEdit ? esc(existing.institution || "") : ""}">
-    <label>Degree</label><input id="e-deg" value="${isEdit ? esc(existing.degree || "") : ""}">
-    <label>Field</label><input id="e-field" value="${isEdit ? esc(existing.field || "") : ""}">
+    <label>Degree</label><input id="e-deg" value="${isEdit ? esc(existing.degree || "") : ""}" placeholder="e.g. BS, MBA">
+    <label>Field</label><div class="job-ta-wrap"><input id="e-field" value="${isEdit ? esc(existing.field || "") : ""}" placeholder="e.g. Computer Science" autocomplete="off"></div>
     <div class="row"><div><label>Start year</label><input id="e-start" type="number" value="${isEdit && existing.start_year ? esc(String(existing.start_year)) : ""}"></div><div><label>End year</label><input id="e-end" type="number" value="${isEdit && existing.end_year ? esc(String(existing.end_year)) : ""}"></div></div>
     <div class="in-modal-actions"><button class="in-btn ghost" onclick="closeModal()">Cancel</button><button class="in-btn primary" id="save-edu">${isEdit ? "Save" : "Add"}</button></div>`);
+  // Field-of-study typeahead: recommends catalog fields (which the score
+  // engine can map to job categories) but allows any free text.
+  if (typeof jobMountTypeahead === "function" && typeof eduCatalogSearch === "function") {
+    jobMountTypeahead($("e-field"), { search: eduCatalogSearch, minChars: 2, limit: 8 });
+  }
   $("save-edu").onclick = async () => {
     const payload = { institution:$("e-inst").value.trim(), degree:$("e-deg").value.trim(), field:$("e-field").value.trim(), start_year:$("e-start").value, end_year:$("e-end").value };
     if (isEdit) await api("/profile/education/update.php","POST",{ id:existing.id, ...payload });
@@ -1338,8 +1343,11 @@ function openExtrasFlow() {
   intField.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); addInt(); } });
   const eduWrap = $("ex-edu-rows");
   $("ex-edu-add").onclick = () => {
-    const row = el(`<div class="bulk-row"><button class="bulk-row-x">✕</button><input class="ee-inst" placeholder="Institution"><input class="ee-deg" placeholder="Degree"><input class="ee-field" placeholder="Field of study"><div class="bulk-dates"><div class="bulk-date-field"><label>Start year</label><input class="ee-start" type="number" placeholder="2018"></div><div class="bulk-date-field"><label>End year</label><input class="ee-end" type="number" placeholder="2022"></div></div></div>`);
+    const row = el(`<div class="bulk-row"><button class="bulk-row-x">✕</button><input class="ee-inst" placeholder="Institution"><input class="ee-deg" placeholder="Degree"><div class="job-ta-wrap"><input class="ee-field" placeholder="Field of study" autocomplete="off"></div><div class="bulk-dates"><div class="bulk-date-field"><label>Start year</label><input class="ee-start" type="number" placeholder="2018"></div><div class="bulk-date-field"><label>End year</label><input class="ee-end" type="number" placeholder="2022"></div></div></div>`);
     row.querySelector(".bulk-row-x").onclick = () => row.remove(); eduWrap.appendChild(row);
+    if (typeof jobMountTypeahead === "function" && typeof eduCatalogSearch === "function") {
+      jobMountTypeahead(row.querySelector(".ee-field"), { search: eduCatalogSearch, minChars: 2, limit: 8 });
+    }
   };
   const certWrap = $("ex-cert-rows");
   $("ex-cert-add").onclick = () => {
