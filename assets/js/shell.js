@@ -305,6 +305,7 @@ async function boot() {
     setNavAvatar(ME.profile_pic, initial);
     $("profile-menu").style.display = "";
     $("auth-menu").style.display = "none";
+    if ($("search-trigger")) $("search-trigger").style.display = "inline-flex";
     document.querySelectorAll("[data-nav]").forEach(b => b.style.display = "");
     // The company-only Feed button stays hidden for users (they have their own).
     const coFeedBtn = document.querySelector('[data-nav="company-feed"]');
@@ -318,6 +319,7 @@ async function boot() {
     // ---- COMPANY identity ---- (no user signed in)
     $("profile-menu").style.display = "none";
     $("auth-menu").style.display = "none";   // hide user sign in/up to avoid confusion
+    if ($("search-trigger")) $("search-trigger").style.display = "inline-flex";
     setupCompanyIdentityNav();               // company avatar + sign-out menu
     // Company sees: Feed, Jobs, Connect (to follow people/companies for
     // its Following feed), and its Company dashboard.
@@ -338,6 +340,7 @@ async function boot() {
     // ---- SIGNED OUT ----
     $("profile-menu").style.display = "none";
     $("auth-menu").style.display = "";
+    if ($("search-trigger")) $("search-trigger").style.display = "none";
     if (typeof hideNotifications === "function") hideNotifications();
     if (typeof hideMessaging === "function") hideMessaging();
     renderSignedOut();
@@ -620,6 +623,15 @@ function setupFooter() {
 
 function routeFromHash() {
   const raw = location.hash.replace(/^#/, "");
+  // Leaving the search page unpins (and closes) the search bar.
+  if (!(raw === "search" || raw.startsWith("search/"))) {
+    if (typeof setSearchbarPinned === "function") {
+      setSearchbarPinned(false);
+      const bar = $("searchbar"), trig = $("search-trigger");
+      if (bar) { bar.classList.remove("open"); bar.setAttribute("aria-hidden", "true"); }
+      if (trig) { trig.classList.remove("open"); trig.setAttribute("aria-expanded", "false"); }
+    }
+  }
   if (FOOTER_PAGES[raw]) {
     renderFooterPage(raw);
     return;
@@ -663,6 +675,10 @@ function routeFromHash() {
   }
   if (raw === "notifications") {
     renderNotificationsPage();
+    return;
+  }
+  if (raw === "search" || raw.startsWith("search/")) {
+    renderSearchPage(raw.startsWith("search/") ? raw.slice("search/".length) : null);
     return;
   }
   if (raw === "messages" || raw.startsWith("messages/")) {

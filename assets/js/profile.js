@@ -872,6 +872,22 @@ function editCore(p, headline, attrs) {
 async function loadMyApplications() {
   const box = $("f-applications");
   if (!box) return;
+  await renderApplicationsInto(box, {
+    empty: `You haven't applied to any jobs yet. Browse the <a href="#jobs" onclick="closeModal()">jobs board</a> to get started.`,
+    onWithdraw: loadMyApplications,
+  });
+}
+
+// Shared renderer: draws the current user's applications into `box`.
+// Used by the profile Job Search tab AND the Jobs page "My applications"
+// view, so the two stay in sync. opts.empty is HTML for the empty state;
+// opts.onWithdraw is called to re-render after a successful withdraw.
+async function renderApplicationsInto(box, opts = {}) {
+  if (!box) return;
+  const onWithdraw = opts.onWithdraw || (() => renderApplicationsInto(box, opts));
+  const emptyHtml = opts.empty || "You haven't applied to any jobs yet.";
+  box.innerHTML = `<div class="in-loading">Loading your applications…</div>`;
+
   const r = await api("/applications/mine.php");
   if (!r.ok || !r.data?.success) {
     box.innerHTML = `<div class="in-empty" style="padding:14px">Could not load your applications.</div>`;
@@ -879,7 +895,7 @@ async function loadMyApplications() {
   }
   const apps = r.data.data.applications || [];
   if (!apps.length) {
-    box.innerHTML = `<div class="in-empty" style="padding:14px">You haven't applied to any jobs yet. Browse the <a href="#jobs" onclick="closeModal()">jobs board</a> to get started.</div>`;
+    box.innerHTML = `<div class="in-empty" style="padding:14px">${emptyHtml}</div>`;
     return;
   }
 
@@ -912,7 +928,7 @@ async function loadMyApplications() {
       if (!confirm("Withdraw this application? This can't be undone.")) return;
       btn.disabled = true;
       const r2 = await api("/applications/withdraw.php", "POST", { uuid: btn.dataset.uuid });
-      if (r2.ok && r2.data?.success) loadMyApplications();
+      if (r2.ok && r2.data?.success) onWithdraw();
       else { btn.disabled = false; alert(r2.data?.error || "Could not withdraw."); }
     };
   });
@@ -1030,7 +1046,13 @@ function addJob(existing) {
         end_date: currentCb.checked ? "" : $("j-end").value,   // current job -> no end date
         description:$("j-desc").value.trim()
       });
-      closeModal(); offerShare(`💼 Excited to share a new role: ${title}${company ? " at " + company : ""}!`); renderProfile();
+      closeModal();
+      // Only prompt to post to the feed for a CURRENT role — sharing a
+      // past job to the feed doesn't make sense.
+      if (currentCb.checked) {
+        offerShare(`💼 Excited to share a new role: ${title}${company ? " at " + company : ""}!`);
+      }
+      renderProfile();
     }
   };
 }

@@ -31,6 +31,11 @@
       <button data-nav="jobs">Jobs</button>
       <button class="active" data-nav="profile">Profile</button>
       <button data-nav="admin" style="display:none">Admin</button>
+      <!-- search (signed-in): grouped with nav items, styled distinctly -->
+      <button id="search-trigger" class="in-navsearch" title="Search" aria-label="Search" aria-expanded="false" style="display:none">
+        <span class="in-navsearch-ico" aria-hidden="true">🔍</span>
+        <span class="in-navsearch-label">Search</span>
+      </button>
     </div>
     <div class="in-nav-right">
       <!-- messages envelope (signed-in users) -->
@@ -88,6 +93,18 @@
   </div>
 </nav>
 
+<!-- search drop-down bar (revealed by the nav search icon) -->
+<div class="in-searchbar" id="searchbar" aria-hidden="true">
+  <div class="in-searchbar-inner">
+    <span class="in-searchbar-ico" aria-hidden="true">🔍</span>
+    <input type="text" id="searchbar-input" class="in-searchbar-input"
+           placeholder="Search people, companies, and jobs…"
+           autocomplete="off" spellcheck="false">
+    <button class="in-searchbar-go" id="searchbar-go">Search</button>
+    <button class="in-searchbar-close" id="searchbar-close" aria-label="Close search">✕</button>
+  </div>
+</div>
+
 <div class="in-main" id="view"><div class="in-loading">Loading…</div></div>
 
 <!-- ===================== SHELL: FOOTER ===================== -->
@@ -121,6 +138,7 @@
 <script src="assets/js/admin.js"></script>
 <script src="assets/js/jobs.js"></script>
 <script src="assets/js/connect.js"></script>
+<script src="assets/js/search.js"></script>
 <script src="assets/js/notifications.js"></script>
 <script src="assets/js/messages.js"></script>
 <script src="assets/js/company.js"></script>

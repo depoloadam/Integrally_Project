@@ -25,41 +25,51 @@ async function renderJobs() {
   const wrap = el(`<div class="in-admin"></div>`);
   view.appendChild(wrap);
 
-  // CTA: route to dashboard if already a company, else open signup.
-  const cta = el(`
-    <div class="in-announce" style="background:linear-gradient(135deg,#0e3b4a,#0a8a8a)">
-      <span>Hiring? Post your roles and reach candidates on Integrally.</span>
-      <button class="in-btn" id="jobs-cta" style="flex:none;margin-left:auto;background:#fff;color:var(--in-accent);padding:8px 16px">${CO ? "Go to dashboard" : "Post a job →"}</button>
-    </div>`);
-  wrap.appendChild(cta);
-  cta.querySelector("#jobs-cta").onclick = () => {
-    if (CO) { location.hash = "company-dashboard"; return; }
-    goCompanyAuth(true);   // navigates to company.html#register (confirms if a user is signed in)
-  };
+  // CTA "Hiring?" box: shown to companies and logged-out visitors, but
+  // NOT to signed-in end users (a job seeker doesn't need a post-a-job pitch).
+  if (!ME) {
+    const cta = el(`
+      <div class="in-announce" style="background:linear-gradient(135deg,#0e3b4a,#0a8a8a)">
+        <span>Hiring? Post your roles and reach candidates on Integrally.</span>
+        <button class="in-btn" id="jobs-cta" style="flex:none;margin-left:auto;background:#fff;color:var(--in-accent);padding:8px 16px">${CO ? "Go to dashboard" : "Post a job →"}</button>
+      </div>`);
+    wrap.appendChild(cta);
+    cta.querySelector("#jobs-cta").onclick = () => {
+      if (CO) { location.hash = "company-dashboard"; return; }
+      goCompanyAuth(true);   // navigates to company.html#register (confirms if a user is signed in)
+    };
+  }
 
   wrap.appendChild(el(`
     <div class="in-card2">
       <h2 style="text-transform:none;font-size:18px;letter-spacing:-0.2px">Jobs</h2>
-      <div class="in-admin-toolbar" style="flex-wrap:wrap">
-        <input type="text" id="jobs-q" placeholder="Search title, company, keyword…" value="${esc(JOBS_STATE.q)}" style="min-width:200px">
-        <input type="text" id="jobs-loc" placeholder="Location" value="${esc(JOBS_STATE.location)}" style="max-width:160px;flex:none">
-        <select id="jobs-emp">
-          <option value="">Any type</option>
-          <option value="full_time">Full-time</option>
-          <option value="part_time">Part-time</option>
-          <option value="contract">Contract</option>
-          <option value="internship">Internship</option>
-          <option value="temporary">Temporary</option>
-        </select>
-        <select id="jobs-remote">
-          <option value="">Anywhere</option>
-          <option value="onsite">On-site</option>
-          <option value="hybrid">Hybrid</option>
-          <option value="remote">Remote</option>
-        </select>
+      ${ME ? `<div class="in-feedtabs" id="jobs-tabs" style="margin-bottom:14px">
+        <button data-jtab="browse" class="active">Browse jobs</button>
+        <button data-jtab="mine">My applications</button>
+      </div>` : ""}
+      <div id="jobs-browse">
+        <div class="in-admin-toolbar" style="flex-wrap:wrap">
+          <input type="text" id="jobs-q" placeholder="Search title, company, keyword…" value="${esc(JOBS_STATE.q)}" style="min-width:200px">
+          <input type="text" id="jobs-loc" placeholder="Location" value="${esc(JOBS_STATE.location)}" style="max-width:160px;flex:none">
+          <select id="jobs-emp">
+            <option value="">Any type</option>
+            <option value="full_time">Full-time</option>
+            <option value="part_time">Part-time</option>
+            <option value="contract">Contract</option>
+            <option value="internship">Internship</option>
+            <option value="temporary">Temporary</option>
+          </select>
+          <select id="jobs-remote">
+            <option value="">Anywhere</option>
+            <option value="onsite">On-site</option>
+            <option value="hybrid">Hybrid</option>
+            <option value="remote">Remote</option>
+          </select>
+        </div>
+        <div id="jobs-list"></div>
+        <div class="in-admin-pager" id="jobs-pager"></div>
       </div>
-      <div id="jobs-list"></div>
-      <div class="in-admin-pager" id="jobs-pager"></div>
+      <div id="jobs-mine" style="display:none"></div>
     </div>`));
 
   $("jobs-emp").value = JOBS_STATE.employment_type;
@@ -70,6 +80,26 @@ async function renderJobs() {
   $("jobs-loc").addEventListener("input", debounce(() => { JOBS_STATE.location = $("jobs-loc").value.trim(); reload(); }, 350));
   $("jobs-emp").onchange = () => { JOBS_STATE.employment_type = $("jobs-emp").value; reload(); };
   $("jobs-remote").onchange = () => { JOBS_STATE.remote_policy = $("jobs-remote").value; reload(); };
+
+  // Browse / My applications tab switch (signed-in end users only).
+  const tabs = $("jobs-tabs");
+  if (tabs) {
+    tabs.querySelectorAll("[data-jtab]").forEach(b => {
+      b.onclick = () => {
+        tabs.querySelectorAll("[data-jtab]").forEach(x => x.classList.toggle("active", x === b));
+        const browse = b.dataset.jtab === "browse";
+        $("jobs-browse").style.display = browse ? "" : "none";
+        $("jobs-mine").style.display = browse ? "none" : "";
+        if (!browse && typeof renderApplicationsInto === "function") {
+          // Reload each time so statuses (expired etc.) stay fresh.
+          renderApplicationsInto($("jobs-mine"), {
+            empty: `You haven't applied to any jobs yet. Switch to <b>Browse jobs</b> to get started.`,
+            onWithdraw: () => renderApplicationsInto($("jobs-mine"), { empty: `You haven't applied to any jobs yet. Switch to <b>Browse jobs</b> to get started.` }),
+          });
+        }
+      };
+    });
+  }
 
   loadJobs();
 }

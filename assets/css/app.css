@@ -824,6 +824,76 @@ textarea.jf-input { resize:vertical; }
 .in-notif-seeall { width:100%; border:none; border-top:1px solid var(--in-line); background:var(--in-card); color:var(--in-accent); font-family:inherit; font-weight:600; font-size:13.5px; padding:11px; cursor:pointer; }
 .in-notif-seeall:hover { background:var(--in-bg); }
 
+/* ---------- nav search trigger (grouped with nav items) ---------- */
+/* A muted pill that reads as "search", deliberately unlike the round
+   ✉️/🔔 icon buttons on the right. */
+.in-navsearch {
+  display:inline-flex; align-items:center; gap:6px; margin-left:6px;
+  font-family:inherit; font-size:13px; font-weight:600; color:var(--in-muted);
+  background:var(--in-bg); border:1px solid var(--in-line); border-radius:16px;
+  padding:6px 12px 6px 11px; cursor:pointer; line-height:1;
+}
+.in-navsearch:hover { color:var(--in-ink); border-color:var(--in-muted); }
+.in-navsearch.open { color:var(--in-accent); border-color:var(--in-accent); background:var(--in-card); }
+.in-navsearch-ico { font-size:13px; line-height:1; }
+.in-navsearch-label { letter-spacing:.1px; }
+
+/* ---------- search drop-down bar (compact) ---------- */
+.in-searchbar {
+  position:sticky; top:58px; z-index:49;
+  background:var(--in-card); border-bottom:1px solid var(--in-line);
+  max-height:0; overflow:hidden; opacity:0;
+  transition:max-height .2s ease, opacity .16s ease;
+}
+.in-searchbar.open { max-height:60px; opacity:1; }
+.in-searchbar-inner {
+  max-width:980px; margin:0 auto; padding:9px 20px;
+  display:flex; align-items:center; gap:8px;
+}
+.in-searchbar-ico { font-size:13px; color:var(--in-muted); flex:none; }
+/* Constrain the field so the bar feels smaller than full-width. */
+.in-searchbar-input {
+  flex:1; min-width:0; max-width:520px; font-family:inherit; font-size:14px; color:var(--in-ink);
+  border:1px solid var(--in-line); border-radius:8px; padding:7px 12px; background:var(--in-bg);
+  outline:none;
+}
+.in-searchbar-input:focus { border-color:var(--in-accent); background:var(--in-card); }
+.in-searchbar-input::placeholder { color:var(--in-muted); }
+.in-searchbar-go {
+  flex:none; font-family:inherit; font-size:13px; font-weight:600; color:#fff;
+  background:var(--in-accent); border:none; border-radius:8px; padding:7px 16px; cursor:pointer;
+}
+.in-searchbar-go:hover { background:var(--in-accent-d); }
+.in-searchbar-close {
+  flex:none; background:none; border:none; color:var(--in-muted);
+  font-size:14px; cursor:pointer; padding:5px 7px; border-radius:7px; line-height:1;
+}
+.in-searchbar-close:hover { background:var(--in-bg); color:var(--in-ink); }
+
+/* ---------- search results page ---------- */
+.in-search-head { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:4px; }
+.in-search-head h1 { font-size:22px; margin:0; letter-spacing:-0.3px; }
+.in-search-head .in-search-q { color:var(--in-muted); font-size:15px; }
+.in-search-tabs { display:flex; gap:6px; margin:14px 0 18px; flex-wrap:wrap; }
+.in-search-tab {
+  font-family:inherit; font-size:13.5px; font-weight:600; color:var(--in-muted);
+  background:var(--in-card); border:1px solid var(--in-line); border-radius:20px;
+  padding:7px 15px; cursor:pointer;
+}
+.in-search-tab:hover { border-color:var(--in-muted); color:var(--in-ink); }
+.in-search-tab.active { background:var(--in-accent); border-color:var(--in-accent); color:#fff; }
+.in-search-tab .in-search-tabn { opacity:.75; margin-left:5px; font-weight:700; }
+.in-search-group-label {
+  font-size:12px; font-weight:700; letter-spacing:.4px; text-transform:uppercase;
+  color:var(--in-muted); margin:18px 2px 8px;
+}
+.in-search-group-label:first-child { margin-top:0; }
+
+/* job result card (reuses connect-row layout, adds job chips) */
+.connect-row .in-jobchips { display:flex; gap:6px; flex-wrap:wrap; margin-top:3px; }
+.in-jobchip { font-size:11.5px; font-weight:600; color:var(--in-ink-soft); background:var(--in-bg); border:1px solid var(--in-line); border-radius:6px; padding:2px 8px; }
+.in-jobchip.salary { color:var(--in-accent-d); }
+
 /* ---------- post actions (like / comment) ---------- */
 .post-actions { display:flex; gap:6px; margin-top:12px; padding-top:10px; border-top:1px solid var(--in-line); }
 .post-act { display:flex; align-items:center; gap:6px; background:none; border:none; font-family:inherit; font-size:13.5px; font-weight:600; color:var(--in-muted); padding:6px 12px; border-radius:8px; cursor:pointer; }
