@@ -107,9 +107,9 @@ async function loadJobs() {
         <div class="job-main">
           <div class="job-title">${esc(j.title)}</div>
           <div class="job-company">${esc(j.company_name)}${j.company_industry ? " · " + esc(j.company_industry) : ""}</div>
+          ${salary ? `<div class="job-salary-sm">${esc(salary)}</div>` : ""}
           <div class="job-tags">${tags.map(t => `<span class="job-tag">${esc(t)}</span>`).join("")}</div>
         </div>
-        ${salary ? `<div class="job-salary">${esc(salary)}</div>` : ""}
       </div>`);
     const go = () => { location.hash = "job/" + j.uuid; };
     row.addEventListener("click", go);
@@ -162,11 +162,11 @@ async function renderJobDetail(uuid) {
           <div class="job-company" style="font-size:14.5px">
             <a href="#company/${esc(c.uuid)}" style="color:var(--in-accent);font-weight:600;text-decoration:none">${esc(c.name)}</a>${c.industry ? " · " + esc(c.industry) : ""}
           </div>
+          ${salary ? `<div class="job-salary-sm">${esc(salary)}</div>` : ""}
           ${j.status !== "open" ? `<span class="in-admin-badge off" style="margin-top:8px;display:inline-block">${esc(j.status)}</span>` : ""}
         </div>
       </div>
       <div class="job-tags" style="margin:14px 0">${tags.map(t => `<span class="job-tag">${esc(t)}</span>`).join("")}</div>
-      ${salary ? `<div class="job-salary-lg">${esc(salary)}</div>` : ""}
       ${j.description ? `<div class="job-desc">${esc(j.description).replace(/\n/g, "<br>")}</div>` : `<div class="in-empty">No description provided.</div>`}
       <div class="job-apply-row"></div>
     </div>`);

@@ -349,12 +349,15 @@ async function loadCompanyJobs() {
     const badge = j.status === "open"
       ? `<span class="in-admin-badge ok">Open</span>`
       : `<span class="in-admin-badge off">${esc(j.status)}</span>`;
+    const n = j.applicant_count || 0;
+    const applicants = `<button class="co-applicant-pill" title="View applicants">${n} applicant${n === 1 ? "" : "s"}</button>`;
     const row = el(`
       <div class="in-item">
         <div class="meta">
           <div class="t">${esc(j.title)} ${badge}</div>
           <div class="s">${esc(meta)}</div>
         </div>
+        ${applicants}
         <div class="job-actions">
           <button class="job-actions-btn" title="Actions" aria-label="Actions">⋮</button>
           <div class="job-actions-menu">
@@ -364,6 +367,11 @@ async function loadCompanyJobs() {
           </div>
         </div>
       </div>`);
+
+    // The count pill jumps straight to the applicant list.
+    row.querySelector(".co-applicant-pill").onclick = (e) => {
+      e.stopPropagation(); renderJobApplicants(j.uuid);
+    };
 
     const menuBtn = row.querySelector(".job-actions-btn");
     const menu = row.querySelector(".job-actions-menu");

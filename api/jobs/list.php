@@ -76,11 +76,16 @@ $countStmt = $pdo->prepare(
 $countStmt->execute($params);
 $total = (int) $countStmt->fetch()['c'];
 
+// Owners get a live applicant count per job (public listing skips it).
+$applicantSelect = $mine
+    ? ', (SELECT COUNT(*) FROM job_applications a WHERE a.job_id = j.id) AS applicant_count'
+    : '';
+
 $stmt = $pdo->prepare(
     "SELECT j.uuid, j.title, j.location, j.employment_type, j.remote_policy,
             j.salary_min, j.salary_max, j.salary_currency, j.status, j.created_at,
             c.uuid AS company_uuid, c.name AS company_name, c.logo AS company_logo,
-            c.industry AS company_industry
+            c.industry AS company_industry{$applicantSelect}
      FROM jobs j
      JOIN companies c ON c.id = j.company_id
      {$whereSql}
@@ -92,6 +97,9 @@ $stmt->execute($params);
 $jobs = array_map(function ($r) {
     $r['salary_min'] = $r['salary_min'] !== null ? (int) $r['salary_min'] : null;
     $r['salary_max'] = $r['salary_max'] !== null ? (int) $r['salary_max'] : null;
+    if (array_key_exists('applicant_count', $r)) {
+        $r['applicant_count'] = (int) $r['applicant_count'];
+    }
     return $r;
 }, $stmt->fetchAll());
 
