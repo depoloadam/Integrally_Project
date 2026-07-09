@@ -42,21 +42,33 @@ if ($job['status'] !== 'open' && !$isOwner) {
 // Normalized apply form (so the client can render the apply modal).
 $applyForm = Applications::normalizeForm($job['apply_form'] ?? null);
 
-// Has the current USER already applied? (Only relevant to signed-in users.)
+// Has the current USER already applied? We track the two channels
+// separately: has_applied = native Integrally submission (drives the
+// Quick-apply button); has_marked_external = the "applied on company
+// site" tracking mark (drives the external button state).
 $hasApplied = false;
+$hasMarkedExternal = false;
 $viewerUserId = Auth::userId();
 if ($viewerUserId !== null) {
     $ck = $pdo->prepare(
-        'SELECT 1 FROM job_applications WHERE job_id = ? AND user_id = ? LIMIT 1'
+        'SELECT apply_channel FROM job_applications
+         WHERE job_id = ? AND user_id = ?'
     );
     $ck->execute([(int) $job['id'], $viewerUserId]);
-    $hasApplied = (bool) $ck->fetch();
+    foreach ($ck->fetchAll() as $row) {
+        if (($row['apply_channel'] ?? 'native') === 'external') $hasMarkedExternal = true;
+        else $hasApplied = true;
+    }
 }
 
-// Owner sees a live applicant count.
+// Owner sees a live applicant count — NATIVE only. External marks are
+// personal tracking records the company never receives.
 $applicantCount = null;
 if ($isOwner) {
-    $cnt = $pdo->prepare('SELECT COUNT(*) FROM job_applications WHERE job_id = ?');
+    $cnt = $pdo->prepare(
+        "SELECT COUNT(*) FROM job_applications
+         WHERE job_id = ? AND apply_channel = 'native'"
+    );
     $cnt->execute([(int) $job['id']]);
     $applicantCount = (int) $cnt->fetchColumn();
 }
@@ -79,6 +91,7 @@ Response::success([
     'created_at'      => $job['created_at'],
     'is_owner'        => $isOwner,
     'has_applied'     => $hasApplied,
+    'has_marked_external' => $hasMarkedExternal,
     'applicant_count' => $applicantCount,
     'company' => [
         'uuid'        => $job['company_uuid'],

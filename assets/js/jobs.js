@@ -250,8 +250,39 @@ function renderApplyRow(applyRow, j) {
     const style = canNative
       ? "display:inline-block;width:auto;padding:11px 28px;margin-left:10px;text-decoration:none;text-align:center;background:none;color:var(--in-accent);border:1px solid var(--in-accent)"
       : "display:inline-block;width:auto;padding:11px 28px;text-decoration:none;text-align:center";
-    applyRow.appendChild(el(
-      `<a class="in-follow-btn" style="${style}" href="${esc(j.apply_url)}" target="_blank" rel="noopener noreferrer">${label}</a>`));
+    const extLink = el(
+      `<a class="in-follow-btn" style="${style}" href="${esc(j.apply_url)}" target="_blank" rel="noopener noreferrer">${label}</a>`);
+    applyRow.appendChild(extLink);
+
+    // A small "mark as applied" affordance, so the candidate can track
+    // an off-platform application. Only meaningful for signed-in users.
+    if (ME) {
+      const markWrap = el(`<div class="job-extmark" style="margin-top:10px"></div>`);
+      applyRow.appendChild(markWrap);
+
+      const renderMarked = () => {
+        markWrap.innerHTML = `<span class="in-set-msg ok" style="margin:0">✓ Marked as applied on the company site. See it under <a href="#jobs" style="color:var(--in-accent)">My applications</a>.</span>`;
+      };
+      const renderPrompt = (visible) => {
+        markWrap.innerHTML = "";
+        const q = el(`<button class="job-extmark-btn" style="background:none;border:none;color:var(--in-muted);font-family:inherit;font-size:13px;cursor:pointer;padding:0;text-decoration:underline">Applied there? Mark it as applied</button>`);
+        q.style.opacity = visible ? "1" : ".65";
+        q.onclick = async () => {
+          q.disabled = true;
+          const r = await api("/applications/apply.php", "POST", { job_uuid: j.uuid, apply_channel: "external" });
+          if (r.ok && r.data?.success) renderMarked();
+          else { q.disabled = false; alert(r.data?.error || "Could not mark as applied."); }
+        };
+        markWrap.appendChild(q);
+      };
+
+      if (j.has_marked_external) renderMarked();
+      else {
+        renderPrompt(false);
+        // Clicking the external link surfaces the prompt more prominently.
+        extLink.addEventListener("click", () => { if (!j.has_marked_external) renderPrompt(true); });
+      }
+    }
   }
 
   if (!canNative && !canExternal) {

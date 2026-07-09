@@ -900,36 +900,79 @@ async function renderApplicationsInto(box, opts = {}) {
   }
 
   const statusClass = { submitted: "ok", withdrawn: "off", expired: "off", job_unavailable: "off" };
-  box.innerHTML = apps.map(a => {
+
+  // A job can have up to TWO records: a native Quick apply AND an external
+  // "applied on company site" mark. Group by job so both show on one row,
+  // each contributing its own badge + action button.
+  const groups = [];
+  const byJob = new Map();
+  apps.forEach(a => {
+    // Job-removed rows have no job.uuid — key them individually so they
+    // don't collapse together.
+    const key = a.job?.uuid || ("__" + a.uuid);
+    if (!byJob.has(key)) { const g = { key, native: null, external: null, any: a }; byJob.set(key, g); groups.push(g); }
+    const g = byJob.get(key);
+    if (a.apply_channel === "external") g.external = a; else g.native = a;
+  });
+
+  box.innerHTML = groups.map(g => {
+    const a = g.native || g.external;   // representative record for job/company info
     const job = a.job;
     const co = a.company;
     const title = job ? esc(job.title) : "Job removed";
     const coName = co ? esc(co.name) : "";
-    const score = a.score_value != null ? `<span class="ap-score" title="Your score at apply time">${Math.round(a.score_value)}</span>` : "";
     const meta = [coName, job?.location].filter(Boolean).join(" · ");
     const link = job ? `href="#job/${esc(job.uuid)}"` : "";
-    const withdrawBtn = a.can_withdraw
-      ? `<button class="in-btn ghost ap-withdraw" data-uuid="${esc(a.uuid)}" style="flex:none;padding:6px 12px;font-size:12.5px">Withdraw</button>`
-      : "";
+
+    // Score comes from the native application only.
+    const scoreVal = g.native?.score_value;
+    const score = scoreVal != null ? `<span class="ap-score" title="Your score at apply time">${Math.round(scoreVal)}</span>` : "";
+
+    // One badge per channel present.
+    const chips = [];
+    if (g.native)   chips.push(`<span class="ap-channel native">${esc(g.native.channel_label || "Quick applied")}</span>`);
+    if (g.external) chips.push(`<span class="ap-channel ext">${esc(g.external.channel_label || "Applied on company site")}</span>`);
+    const chipsHtml = chips.join(" ");
+
+    // Status pill: the native application is the real submission, so its
+    // status leads. If there's only an external mark, show that as tracked.
+    const statusRec = g.native || g.external;
+    const statusPill = `<span class="in-set-msg ${statusClass[statusRec.status] || ""}" style="margin:0;flex:none">${esc(statusRec.status_label)}</span>`;
+
+    // One action button per present channel.
+    const btns = [];
+    if (g.native && g.native.can_withdraw) {
+      btns.push(`<button class="in-btn ghost ap-withdraw" data-uuid="${esc(g.native.uuid)}" data-kind="native" style="flex:none;padding:6px 12px;font-size:12.5px">Withdraw</button>`);
+    }
+    if (g.external) {
+      btns.push(`<button class="in-btn ghost ap-withdraw" data-uuid="${esc(g.external.uuid)}" data-kind="external" style="flex:none;padding:6px 12px;font-size:12.5px">Remove</button>`);
+    }
+    const btnsHtml = btns.length ? `<div class="ap-actions">${btns.join("")}</div>` : "";
+
     return `
       <div class="ap-row">
         <div class="ap-row-main">
           ${job ? `<a class="ap-title" ${link}>${title}</a>` : `<span class="ap-title">${title}</span>`}
           <div class="ap-meta">${meta}</div>
+          <div class="ap-tags">${chipsHtml}</div>
         </div>
         ${score}
-        <span class="in-set-msg ${statusClass[a.status] || ""}" style="margin:0;flex:none">${esc(a.status_label)}</span>
-        ${withdrawBtn}
+        ${statusPill}
+        ${btnsHtml}
       </div>`;
   }).join("");
 
   box.querySelectorAll(".ap-withdraw").forEach(btn => {
     btn.onclick = async () => {
-      if (!confirm("Withdraw this application? This can't be undone.")) return;
+      const isExt = btn.dataset.kind === "external";
+      const msg = isExt
+        ? "Remove this tracking entry? It only affects your own applications list."
+        : "Withdraw this application? This can't be undone.";
+      if (!confirm(msg)) return;
       btn.disabled = true;
       const r2 = await api("/applications/withdraw.php", "POST", { uuid: btn.dataset.uuid });
       if (r2.ok && r2.data?.success) onWithdraw();
-      else { btn.disabled = false; alert(r2.data?.error || "Could not withdraw."); }
+      else { btn.disabled = false; alert(r2.data?.error || "Could not update."); }
     };
   });
 }

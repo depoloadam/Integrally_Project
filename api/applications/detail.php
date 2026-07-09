@@ -40,6 +40,10 @@ if (!$a) Response::error('Application not found.', 404);
 if ((int) $a['company_id'] !== $companyId) {
     Response::error('You do not own this application.', 403);
 }
+// External marks are candidate-only tracking records — never company-viewable.
+if (($a['apply_channel'] ?? 'native') === 'external') {
+    Response::error('Application not found.', 404);
+}
 
 // Pair up the job's form questions with the snapshotted answers.
 $form    = Applications::normalizeForm($a['apply_form']);

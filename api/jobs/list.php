@@ -78,7 +78,7 @@ $total = (int) $countStmt->fetch()['c'];
 
 // Owners get a live applicant count per job (public listing skips it).
 $applicantSelect = $mine
-    ? ', (SELECT COUNT(*) FROM job_applications a WHERE a.job_id = j.id) AS applicant_count'
+    ? ", (SELECT COUNT(*) FROM job_applications a WHERE a.job_id = j.id AND a.apply_channel = 'native') AS applicant_count"
     : '';
 
 $stmt = $pdo->prepare(

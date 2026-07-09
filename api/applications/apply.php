@@ -33,9 +33,17 @@ $in = $isMultipart ? $_POST : Response::input();
 $jobUuid = trim($in['job_uuid'] ?? '');
 if ($jobUuid === '') Response::error('A job_uuid is required.', 422);
 
+// Channel: 'native' (real Integrally submission, default) or 'external'
+// (candidate marking that they applied on the company's own site — a
+// personal tracking record with no snapshots, never shown to companies).
+$channel = trim($in['apply_channel'] ?? 'native');
+if (!in_array($channel, ['native', 'external'], true)) {
+    Response::error("apply_channel must be 'native' or 'external'.", 422);
+}
+
 // ---- Load the job + its application settings -------------------------
 $stmt = $pdo->prepare(
-    'SELECT id, title, status, apply_method, apply_form, accept_until
+    'SELECT id, title, status, apply_method, apply_form, accept_until, apply_url
      FROM jobs WHERE uuid = ? LIMIT 1'
 );
 $stmt->execute([$jobUuid]);
@@ -45,6 +53,42 @@ if (!$job) Response::error('Job not found.', 404);
 if ($job['status'] !== 'open') {
     Response::error('This job is no longer accepting applications.', 403);
 }
+
+// =====================================================================
+// EXTERNAL mark — short, simple path. The candidate says "I applied on
+// the company site." We only record the fact (one per job/user). No
+// answers, resume, or score are captured, and it never surfaces to the
+// company. Requires the job to actually offer an external apply link.
+// =====================================================================
+if ($channel === 'external') {
+    if (!in_array($job['apply_method'], ['external', 'both'], true) || empty($job['apply_url'])) {
+        Response::error('This job has no external application link.', 403);
+    }
+    $dupe = $pdo->prepare(
+        "SELECT uuid FROM job_applications
+         WHERE job_id = ? AND user_id = ? AND apply_channel = 'external' LIMIT 1"
+    );
+    $dupe->execute([(int) $job['id'], $userId]);
+    if ($dupe->fetch()) {
+        Response::error('You have already marked this job as applied.', 409);
+    }
+    $uuid = Auth::uuid();
+    $ins = $pdo->prepare(
+        "INSERT INTO job_applications (uuid, job_id, user_id, apply_channel)
+         VALUES (?, ?, ?, 'external')"
+    );
+    $ins->execute([$uuid, (int) $job['id'], $userId]);
+    Response::success([
+        'uuid'          => $uuid,
+        'job_uuid'      => $jobUuid,
+        'status'        => 'submitted',
+        'apply_channel' => 'external',
+    ], 201);
+}
+
+// =====================================================================
+// NATIVE submission — the full snapshotting path (unchanged behavior).
+// =====================================================================
 if (!in_array($job['apply_method'], ['native', 'both'], true)) {
     Response::error('This job does not accept applications on Integrally.', 403);
 }
@@ -58,9 +102,10 @@ if (!empty($job['accept_until'])) {
     }
 }
 
-// ---- Already applied? ------------------------------------------------
+// ---- Already applied? (native channel only) --------------------------
 $dupe = $pdo->prepare(
-    'SELECT uuid, status FROM job_applications WHERE job_id = ? AND user_id = ? LIMIT 1'
+    "SELECT uuid, status FROM job_applications
+     WHERE job_id = ? AND user_id = ? AND apply_channel = 'native' LIMIT 1"
 );
 $dupe->execute([(int) $job['id'], $userId]);
 if ($existing = $dupe->fetch()) {
@@ -147,10 +192,10 @@ if ($form['collect_score']) {
 // ---- Insert ----------------------------------------------------------
 $uuid = Auth::uuid();
 $stmt = $pdo->prepare(
-    'INSERT INTO job_applications
-       (uuid, job_id, user_id, answers, resume_file, resume_name,
+    "INSERT INTO job_applications
+       (uuid, job_id, user_id, apply_channel, answers, resume_file, resume_name,
         score_value, score_breakdown, score_algo)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+     VALUES (?, ?, ?, 'native', ?, ?, ?, ?, ?, ?)"
 );
 $stmt->execute([
     $uuid, (int) $job['id'], $userId,
@@ -162,8 +207,9 @@ $stmt->execute([
 ]);
 
 Response::success([
-    'uuid'        => $uuid,
-    'job_uuid'    => $jobUuid,
-    'status'      => 'submitted',
-    'score_value' => $score['value'] ?? null,
+    'uuid'          => $uuid,
+    'job_uuid'      => $jobUuid,
+    'status'        => 'submitted',
+    'apply_channel' => 'native',
+    'score_value'   => $score['value'] ?? null,
 ], 201);

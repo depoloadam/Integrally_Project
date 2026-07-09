@@ -35,16 +35,18 @@ if ((int) $job['company_id'] !== $companyId) {
     Response::error('You do not own this job posting.', 403);
 }
 
-// Applicants + candidate display info.
+// Applicants + candidate display info. NATIVE channel only — external
+// marks are the candidate's personal off-platform tracking records and
+// are never surfaced to the company.
 $stmt = $pdo->prepare(
-    'SELECT a.uuid, a.status, a.created_at, a.withdrawn_at,
+    "SELECT a.uuid, a.status, a.created_at, a.withdrawn_at,
             a.score_value, a.resume_file, a.resume_name,
             u.uuid AS user_uuid, u.username, u.first_name, u.last_name,
             u.profile_pic
      FROM job_applications a
      JOIN users u ON u.id = a.user_id
-     WHERE a.job_id = ?
-     ORDER BY (a.score_value IS NULL), a.score_value DESC, a.created_at ASC'
+     WHERE a.job_id = ? AND a.apply_channel = 'native'
+     ORDER BY (a.score_value IS NULL), a.score_value DESC, a.created_at ASC"
 );
 $stmt->execute([(int) $job['id']]);
 
