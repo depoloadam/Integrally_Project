@@ -1,108 +1,230 @@
 <?php
 
+require_once __DIR__ . '/JobCatalog.php';
 
 // =====================================================================
 // FILE: src/ScoreEngine.php
 // ---------------------------------------------------------------------
-// Isolated scoring logic. Replace compute() with your real algorithm
-// when ready. Keep the SAME signature and return shape and none of the
-// endpoints need to change.
+// Isolated scoring logic. compute() keeps a stable signature and return
+// shape so endpoints never change when the algorithm evolves. Every
+// stored score records ScoreEngine::VERSION (scores.algo_version /
+// job_applications.score_algo), so historical results stay
+// interpretable across algorithm revisions.
+//
+// FUTURE (noted 2026-07): multiple selectable algorithms, letting
+// companies re-sort applicants under different weightings. When that
+// lands, compute() gains an algorithm identifier and each variant keeps
+// its own version string.
 // =====================================================================
 
 class ScoreEngine
 {
-    // Bump this when you change the algorithm. Stored with each score
-    // so old results stay interpretable (the scores.algo_version column).
-    const VERSION = 'placeholder-v1';
+    const VERSION = 'category-relevance-v2';
+
+    // ------------------------------------------------------------------
+    // Tunable weights (must sum to 100). Adjust ratios here — the logic
+    // below scales automatically.
+    // ------------------------------------------------------------------
+    const W_EXPERIENCE_RELEVANT = 32;  // years in the job's category (adjacent = half credit)
+    const W_EXPERIENCE_GENERAL  = 8;   // any work history at all (small floor)
+    const W_SKILLS              = 20;  // relevant skills (with experience backfill floor)
+    const W_EDU_PRESENCE        = 6;   // has degree(s)
+    const W_EDU_RELEVANCE       = 9;   // degree field related to the job's category
+    const W_CERTS               = 10;  // certifications, relevance-weighted
+    const W_PROFILE_STRENGTH    = 15;  // general completeness
+
+    // Relevant years that earn full experience points.
+    const FULL_RELEVANT_YEARS = 8.0;
+    // Total years that earn the full general-experience floor.
+    const FULL_GENERAL_YEARS = 4.0;
+    // Relevant-skill "mass" (relevance x proficiency summed) for full skill points.
+    const FULL_SKILL_MASS = 3.0;
+    // Skill floor: experienced candidates imply skills. Fraction of the
+    // (scaled) experience factor that the skill factor can never drop below.
+    const SKILL_BACKFILL_FRACTION = 0.5;
+    // Text-relevance threshold for counting a cert as "relevant".
+    const RELEVANT_THRESHOLD = 0.34;
 
     /**
      * Compute a score for a user against a target.
      *
-     * @param array  $profile  Gathered user data (see gatherProfile()).
+     * @param array  $profile     Gathered user data (see gatherProfile()).
      * @param string $targetType  'job_title' | 'skill' | 'field'
      * @param string $targetValue The thing being scored against.
      *
-     * @return array {
-     *   score:     float  // 0–100
-     *   breakdown: array  // per-factor detail, shown to the user
-     * }
-     *
-     * ----------------------------------------------------------------
-     * PLACEHOLDER IMPLEMENTATION
-     * ----------------------------------------------------------------
-     * This is NOT a real scoring algorithm. It produces a transparent,
-     * deterministic number from simple profile-completeness signals so
-     * the whole feature can be built and tested end to end. Replace the
-     * body with your real logic later; keep the return shape.
+     * @return array { score: float (0-100), breakdown: array }
      */
     public static function compute(array $profile, string $targetType, string $targetValue): array
     {
         $factors = [];
+        $target  = trim($targetValue);
 
-        // --- Each factor contributes some points (illustrative only) ---
+        // Resolve the target to a catalog category where possible. For
+        // 'job_title' targets this is the anchor of all relevance math.
+        // 'skill' / 'field' targets resolve through the same token map.
+        $catId   = JobCatalog::categoryForTitle($target);
+        $catName = $catId !== null ? JobCatalog::CATEGORIES[$catId] : null;
 
-        // Skills present (up to 30).
-        $skillCount = count($profile['skills']);
-        $skillPts   = min(30, $skillCount * 6);
+        // ---- 1) Experience (relevant + general) ----------------------
+        $relevantYears = 0.0;
+        $totalYears    = 0.0;
+        foreach ($profile['jobs'] as $j) {
+            $years = self::yearsBetween($j['start_date'] ?? null, $j['end_date'] ?? null);
+            if ($years <= 0) continue;
+            $totalYears += $years;
+
+            $credit = 0.0;
+            if ($catId !== null) {
+                $jobCat = JobCatalog::categoryForTitle($j['title'] ?? '');
+                if ($jobCat === $catId) {
+                    $credit = 1.0;
+                } elseif ($jobCat !== null && in_array($jobCat, JobCatalog::ADJACENCY[$catId] ?? [], true)) {
+                    $credit = 0.5;
+                } else {
+                    // Same-category resolution failed — try direct title text.
+                    $credit = 0.6 * JobCatalog::titleSimilarity($j['title'] ?? '', $target);
+                }
+            } else {
+                // Off-catalog target: fall back to plain title similarity.
+                $credit = JobCatalog::titleSimilarity($j['title'] ?? '', $target);
+            }
+            $relevantYears += $years * $credit;
+        }
+
+        $relPts = self::W_EXPERIENCE_RELEVANT * min(1.0, $relevantYears / self::FULL_RELEVANT_YEARS);
+        $genPts = self::W_EXPERIENCE_GENERAL  * min(1.0, $totalYears / self::FULL_GENERAL_YEARS);
         $factors[] = [
-            'factor' => 'skills_listed',
-            'detail' => "$skillCount skill(s) on profile",
-            'points' => $skillPts,
+            'factor' => 'relevant_experience',
+            'detail' => sprintf(
+                '%.1f relevant year(s)%s out of %.1f total',
+                $relevantYears,
+                $catName ? " in/near \"$catName\"" : ' (by title similarity)',
+                $totalYears
+            ),
+            'points' => round($relPts, 1),
+        ];
+        $factors[] = [
+            'factor' => 'general_experience',
+            'detail' => sprintf('%.1f total year(s) of work history', $totalYears),
+            'points' => round($genPts, 1),
+        ];
+        $experiencePts = $relPts + $genPts;
+
+        // ---- 2) Skills (relevance x proficiency, experience backfill) -
+        $skillMass = 0.0;
+        $relevantSkillNames = [];
+        foreach ($profile['skills'] as $s) {
+            $name = $s['name'] ?? '';
+            if ($name === '') continue;
+            $rel = JobCatalog::titleSimilarity($name, $target);
+            if ($catId !== null) {
+                $rel = max($rel, JobCatalog::tokenRelevance($name, $catId));
+            }
+            if ($rel <= 0) continue;
+            $prof   = isset($s['proficiency']) && $s['proficiency'] !== null
+                ? max(1, min(5, (int) $s['proficiency'])) / 5.0
+                : 0.6;   // unrated skills count at 60%
+            $skillMass += $rel * $prof;
+            if ($rel >= self::RELEVANT_THRESHOLD) $relevantSkillNames[] = $name;
+        }
+        $skillMatchPts = self::W_SKILLS * min(1.0, $skillMass / self::FULL_SKILL_MASS);
+
+        // Experience implies skills: deep relevant experience sets a floor
+        // under the skill factor so a sparse-but-experienced profile can't
+        // be leapfrogged by a keyword-stuffed empty one.
+        $expFraction = $experiencePts / (self::W_EXPERIENCE_RELEVANT + self::W_EXPERIENCE_GENERAL);
+        $backfill    = self::W_SKILLS * self::SKILL_BACKFILL_FRACTION * $expFraction;
+        $skillPts    = max($skillMatchPts, $backfill);
+
+        $skillDetail = count($relevantSkillNames)
+            ? count($relevantSkillNames) . ' relevant skill(s): ' . implode(', ', array_slice($relevantSkillNames, 0, 5))
+            : 'No directly relevant skills listed';
+        if ($backfill > $skillMatchPts && $backfill > 0) {
+            $skillDetail .= ' — credited from relevant experience';
+        }
+        $factors[] = [
+            'factor' => 'skills_match',
+            'detail' => $skillDetail,
+            'points' => round($skillPts, 1),
         ];
 
-        // Job history depth (up to 25).
-        $jobCount = count($profile['jobs']);
-        $jobPts   = min(25, $jobCount * 8);
-        $factors[] = [
-            'factor' => 'experience',
-            'detail' => "$jobCount job record(s)",
-            'points' => $jobPts,
-        ];
-
-        // Education (up to 15).
+        // ---- 3) Education (presence + field relevance) ----------------
         $eduCount = count($profile['education']);
-        $eduPts   = min(15, $eduCount * 8);
+        $eduPresencePts = $eduCount >= 2 ? self::W_EDU_PRESENCE
+                        : ($eduCount === 1 ? self::W_EDU_PRESENCE * 0.67 : 0);
+        $bestEduRel = 0.0;
+        $bestEduField = null;
+        foreach ($profile['education'] as $e) {
+            $text = trim(($e['field'] ?? '') . ' ' . ($e['degree'] ?? ''));
+            if ($text === '') continue;
+            $rel = JobCatalog::titleSimilarity($text, $target);
+            if ($catId !== null) $rel = max($rel, JobCatalog::tokenRelevance($text, $catId));
+            if ($rel > $bestEduRel) { $bestEduRel = $rel; $bestEduField = $e['field'] ?: $e['degree']; }
+        }
+        $eduRelPts = self::W_EDU_RELEVANCE * $bestEduRel;
         $factors[] = [
             'factor' => 'education',
-            'detail' => "$eduCount education record(s)",
-            'points' => $eduPts,
+            'detail' => $eduCount
+                ? ($eduCount . ' degree(s)' . ($bestEduField && $bestEduRel >= self::RELEVANT_THRESHOLD
+                    ? ", \"$bestEduField\" relates to the role" : ''))
+                : 'No education records',
+            'points' => round($eduPresencePts + $eduRelPts, 1),
         ];
 
-        // Certifications (up to 15).
-        $certCount = count($profile['certifications']);
-        $certPts   = min(15, $certCount * 8);
+        // ---- 4) Certifications (relevance-weighted) -------------------
+        $certPts = 0.0;
+        $relCertCount = 0;
+        foreach ($profile['certifications'] as $c) {
+            $text = trim(($c['name'] ?? '') . ' ' . ($c['issuer'] ?? ''));
+            if ($text === '') continue;
+            $rel = JobCatalog::titleSimilarity($text, $target);
+            if ($catId !== null) $rel = max($rel, JobCatalog::tokenRelevance($text, $catId));
+            if ($rel >= self::RELEVANT_THRESHOLD) { $certPts += 4; $relCertCount++; }
+            else                                   { $certPts += 1; }
+        }
+        $certPts = min(self::W_CERTS, $certPts);
         $factors[] = [
             'factor' => 'certifications',
-            'detail' => "$certCount certification(s)",
-            'points' => $certPts,
+            'detail' => count($profile['certifications'])
+                ? count($profile['certifications']) . " certification(s), $relCertCount relevant"
+                : 'No certifications',
+            'points' => round($certPts, 1),
         ];
 
-        // Naive keyword relevance: does the target text appear in any
-        // skill/job title? (up to 15). Stand-in for real matching.
-        $needle = strtolower(trim($targetValue));
-        $hit = false;
-        foreach ($profile['skills'] as $s) {
-            if ($needle !== '' && str_contains(strtolower($s['name']), $needle)) { $hit = true; break; }
-        }
-        if (!$hit) {
-            foreach ($profile['jobs'] as $j) {
-                if ($needle !== '' && str_contains(strtolower($j['title']), $needle)) { $hit = true; break; }
-            }
-        }
-        $relPts = $hit ? 15 : 0;
+        // ---- 5) General profile strength ------------------------------
+        $sc = count($profile['skills']);
+        $strength  = $sc >= 3 ? 4 : ($sc >= 1 ? 2 : 0);
+        $strength += $eduCount >= 1 ? 3 : 0;
+        $strength += count($profile['certifications']) >= 1 ? 2 : 0;
+        $strength += count($profile['interests']) >= 1 ? 2 : 0;
+        $jc = count($profile['jobs']);
+        $strength += $jc >= 2 ? 4 : ($jc >= 1 ? 2 : 0);
+        $strength  = min(self::W_PROFILE_STRENGTH, $strength);
         $factors[] = [
-            'factor' => 'target_relevance',
-            'detail' => $hit ? "Profile mentions \"$targetValue\"" : "No direct mention of \"$targetValue\"",
-            'points' => $relPts,
+            'factor' => 'profile_strength',
+            'detail' => 'Overall profile completeness',
+            'points' => round((float) $strength, 1),
         ];
 
-        $score = $skillPts + $jobPts + $eduPts + $certPts + $relPts;
-        $score = max(0, min(100, $score));   // clamp to 0–100
+        // ---- Total -----------------------------------------------------
+        $score = $experiencePts + $skillPts + ($eduPresencePts + $eduRelPts) + $certPts + $strength;
+        $score = max(0.0, min(100.0, $score));
 
         return [
-            'score'     => (float) $score,
+            'score'     => round($score, 1),
             'breakdown' => $factors,
         ];
+    }
+
+    /** Fractional years between two dates; end NULL = today. */
+    private static function yearsBetween(?string $start, ?string $end): float
+    {
+        if (!$start) return 0.0;
+        $s = strtotime($start);
+        if ($s === false) return 0.0;
+        $e = $end ? strtotime($end) : time();
+        if ($e === false || $e <= $s) return 0.0;
+        return ($e - $s) / (365.25 * 24 * 3600);
     }
 
     /**
