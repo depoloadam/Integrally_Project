@@ -267,7 +267,19 @@ function jobMountTypeahead(input, opts) {
   const menu = document.createElement("div");
   menu.className = "job-ta-menu";
   menu.style.display = "none";
-  (wrap || input.parentNode).appendChild(menu);
+  // Append to <body> and position with fixed coords so the dropdown is
+  // never clipped by a scrolling ancestor (e.g. .in-modal has
+  // overflow-y:auto, which would otherwise cut the menu off).
+  menu.style.position = "fixed";
+  document.body.appendChild(menu);
+
+  // Place the menu flush under the input, in viewport coordinates.
+  const position = () => {
+    const r = input.getBoundingClientRect();
+    menu.style.left  = r.left + "px";
+    menu.style.width = r.width + "px";
+    menu.style.top   = (r.bottom + 4) + "px";
+  };
 
   let active = -1;
   let items = [];
@@ -290,6 +302,7 @@ function jobMountTypeahead(input, opts) {
       row.querySelector(".job-ta-cat").textContent = items[i].category;
       row.onmousedown = (e) => { e.preventDefault(); pick(i); };
     });
+    position();
     menu.style.display = "block";
   };
 
@@ -310,6 +323,10 @@ function jobMountTypeahead(input, opts) {
     else if (e.key === "Enter" && active >= 0) { e.preventDefault(); pick(active); }
     else if (e.key === "Escape") { close(); }
   });
+
+  const reposition = () => { if (menu.style.display !== "none") position(); };
+  window.addEventListener("scroll", reposition, true);  // capture: catches modal scroll
+  window.addEventListener("resize", reposition);
 
   return { close, refresh: render };
 }
