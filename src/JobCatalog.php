@@ -999,9 +999,70 @@ class JobCatalog
         26 => [20,18],
     ];
 
+    // Two alias layers, both applied to free-text titles/skills:
+    //
+    // (a) WORD aliases — expand an abbreviation/compound into canonical
+    //     words that ARE catalog tokens, before tokenizing. Only include
+    //     forms whose expansion tokenizes cleanly (verified in tests).
+    private const ALIASES = [
+        'helpdesk'    => 'help desk',
+        'sysadmin'    => 'systems administrator',
+        'sysadmins'   => 'systems administrator',
+        'infosec'     => 'security',
+        'netsec'      => 'network security',
+        'sre'         => 'site reliability engineer',
+        'sdet'        => 'software test engineer',
+        'dba'         => 'database administrator',
+        'rn'          => 'registered nurse',
+        'lpn'         => 'licensed practical nurse',
+        'cna'         => 'nursing assistant',
+        'emt'         => 'emergency medical technician',
+        'sys admin'   => 'systems administrator',
+        'swe'         => 'software engineer',
+        'dev'         => 'developer',
+        'devs'        => 'developer',
+        'admin'       => 'administrator',
+        'mgr'         => 'manager',
+        'eng'         => 'engineer',
+        'tech'        => 'technician',
+        'csr'         => 'customer service representative',
+        'rep'         => 'representative',
+    ];
+
+    // (b) CATEGORY aliases — short forms best mapped straight to a
+    //     category id (checked in categoryForTitle before token voting),
+    //     because their word-expansions don't tokenize reliably.
+    private const CATEGORY_ALIASES = [
+        'it'         => 2,   // IT & Infrastructure
+        'qa'         => 0,   // Software & Engineering
+        'ux'         => 4,   // Design & Creative
+        'ui'         => 4,   // Design & Creative
+        'hr'         => 10,  // Human Resources
+        'ml'         => 1,   // Data & AI
+        'ai'         => 1,   // Data & AI
+        'bi'         => 1,   // Data & AI
+        'pm'         => 5,   // Product & Project
+        'ba'         => 5,   // Product & Project (business analyst)
+        'cpa'        => 9,   // Finance & Accounting
+    ];
+
+    /**
+     * Expand word aliases in free text before tokenizing. Whole-word
+     * replacement on short titles/skills (not prose).
+     */
+    public static function expandAliases(string $text): string
+    {
+        $t = ' ' . strtolower($text) . ' ';
+        foreach (self::ALIASES as $from => $to) {
+            $t = preg_replace('/\\b' . preg_quote($from, '/') . '\\b/', $to, $t);
+        }
+        return trim($t);
+    }
+
     /** Lowercase word tokens (3+ chars, minus stopwords) from any text. */
     public static function tokens(string $text): array
     {
+        $text = self::expandAliases($text);
         preg_match_all('/[a-z]+/', strtolower($text), $m);
         $stop = ['and'=>1,'of'=>1,'the'=>1,'a'=>1,'an'=>1,'in'=>1,'for'=>1,'non'=>1,'to'=>1,
                  // seniority/level modifiers: meaningless for category voting
@@ -1044,6 +1105,16 @@ class JobCatalog
 
         $votes = [];
         $total = 0.0;
+
+        // Strong signal: category-alias words (it, qa, hr, ml, ...) present
+        // as whole words vote directly and heavily for their category.
+        foreach (self::CATEGORY_ALIASES as $word => $cid) {
+            if (preg_match('/\\b' . preg_quote($word, '/') . '\\b/', $norm)) {
+                $votes[$cid] = ($votes[$cid] ?? 0) + 1.5;
+                $total += 1.5;
+            }
+        }
+
         foreach (self::tokens($norm) as $tok) {
             $tok = self::lookupToken($tok);
             if ($tok === null) continue;
