@@ -1189,6 +1189,7 @@ a.ap-title:hover { color:var(--in-accent); }
 .ja-rel-meta { min-width:0; }
 .ja-rel-target { font-size:13.5px; font-weight:600; color:var(--in-ink); display:flex; align-items:center; gap:7px; }
 .ja-rel-tag { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.3px; color:var(--in-accent-d); background:#eafaf7; border:1px solid #c7ede6; border-radius:8px; padding:1px 6px; }
+.ja-rel-tag.hidden { color:var(--in-muted); background:var(--in-bg); border-color:var(--in-line); }
 .ja-rel-sub { font-size:12px; color:var(--in-muted); margin-top:1px; }
 
 /* Job editor: question builder rows share jf-input styling already */

@@ -28,7 +28,11 @@ function updateCompanyNav() {
       btn = el(`<button data-nav="company-dashboard">Company</button>`);
       btn.onclick = () => { location.hash = "company-dashboard"; };
       const links = document.querySelector(".in-nav-links");
-      if (links) links.appendChild(btn);
+      const searchBtn = document.getElementById("search-trigger");
+      // Keep the search trigger as the rightmost nav item: insert the
+      // Company tab before it rather than appending to the end.
+      if (links && searchBtn && searchBtn.parentNode === links) links.insertBefore(btn, searchBtn);
+      else if (links) links.appendChild(btn);
     }
     btn.style.display = "";
   } else if (btn) {
@@ -503,7 +507,7 @@ async function openApplicantDetail(appUuid) {
         <div class="ja-rel-row">
           <div class="ja-rel-badge">${Math.round(rs.score_value)}</div>
           <div class="ja-rel-meta">
-            <div class="ja-rel-target">${esc(rs.target_value)}${rs.relevant ? `<span class="ja-rel-tag">Related</span>` : ""}</div>
+            <div class="ja-rel-target">${esc(rs.target_value)}${rs.relevant ? `<span class="ja-rel-tag">Related</span>` : ""}${rs.hidden ? `<span class="ja-rel-tag hidden">Hidden</span>` : ""}</div>
             <div class="ja-rel-sub">${esc((rs.target_type || "").replace("_", " "))}</div>
           </div>
         </div>`).join("")}

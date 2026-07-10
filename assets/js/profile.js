@@ -1672,6 +1672,7 @@ function renderSetPrivacy(panel, st) {
   const followingOn = st.following_enabled !== "0";
   const hideScoresOn = st.hide_all_scores === "1";
   const shareScoresOn = st.share_scores_with_companies !== "0";   // default on
+  const shareHiddenOn = st.share_hidden_scores_with_companies === "1";   // default off
   panel.appendChild(el(`
     <div class="in-set-section">
       <h3>Privacy & preferences</h3>
@@ -1695,6 +1696,13 @@ function renderSetPrivacy(panel, st) {
           <div class="in-set-toggle-sub">When on, companies reviewing your application can see your most relevant self-scores (top 3). Scores you've hidden are never shared.</div>
         </div>
         <button class="in-toggle ${shareScoresOn ? "on" : ""}" id="toggle-share-scores" role="switch" aria-checked="${shareScoresOn}"><span class="in-toggle-knob"></span></button>
+      </div>
+      <div class="in-set-toggle in-set-subtoggle" id="share-hidden-row" style="margin-top:12px;margin-left:22px;${shareScoresOn ? "" : "display:none"}">
+        <div>
+          <div class="in-set-toggle-label">Also include my hidden scores</div>
+          <div class="in-set-toggle-sub">Off by default. When on, scores you've hidden from your profile are also shared with companies you apply to.</div>
+        </div>
+        <button class="in-toggle ${shareHiddenOn ? "on" : ""}" id="toggle-share-hidden" role="switch" aria-checked="${shareHiddenOn}"><span class="in-toggle-knob"></span></button>
       </div>
       <div class="in-set-msg" id="set-privacy-msg"></div>
     </div>`));
@@ -1729,6 +1737,21 @@ function renderSetPrivacy(panel, st) {
     const turningOn = !btn.classList.contains("on");
     btn.disabled = true;
     const r = await api("/settings/set.php", "POST", { key:"share_scores_with_companies", value: turningOn ? "1" : "0" });
+    btn.disabled = false;
+    const msg = $("set-privacy-msg");
+    if (r.ok && r.data?.success) {
+      btn.classList.toggle("on", turningOn);
+      btn.setAttribute("aria-checked", turningOn);
+      const sub = $("share-hidden-row");
+      if (sub) sub.style.display = turningOn ? "" : "none";
+      msg.className = "in-set-msg ok"; msg.textContent = "Saved.";
+    } else { msg.className = "in-set-msg err"; msg.textContent = r.data?.error || "Could not save."; }
+  };
+  $("toggle-share-hidden").onclick = async () => {
+    const btn = $("toggle-share-hidden");
+    const turningOn = !btn.classList.contains("on");
+    btn.disabled = true;
+    const r = await api("/settings/set.php", "POST", { key:"share_hidden_scores_with_companies", value: turningOn ? "1" : "0" });
     btn.disabled = false;
     const msg = $("set-privacy-msg");
     if (r.ok && r.data?.success) {

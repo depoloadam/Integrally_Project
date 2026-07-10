@@ -83,7 +83,7 @@ require_once __DIR__ . '/../../src/JobCatalog.php';
 
 $setStmt = $pdo->prepare(
     "SELECT setting_key, setting_value FROM user_settings
-     WHERE user_id = ? AND setting_key IN ('hide_all_scores','share_scores_with_companies')"
+     WHERE user_id = ? AND setting_key IN ('hide_all_scores','share_scores_with_companies','share_hidden_scores_with_companies')"
 );
 $setStmt->execute([$applicantId]);
 $settings = [];
@@ -92,6 +92,8 @@ foreach ($setStmt->fetchAll() as $row) $settings[$row['setting_key']] = $row['se
 $hideAll  = ($settings['hide_all_scores'] ?? '0') === '1';
 // Default ON: only an explicit '0' opts out.
 $shareOff = ($settings['share_scores_with_companies'] ?? '1') === '0';
+// Nested opt-in (default OFF): also surface scores the applicant hid.
+$shareHidden = ($settings['share_hidden_scores_with_companies'] ?? '0') === '1';
 
 if (!$hideAll && !$shareOff) {
     // Latest score per (target_type, target_value) for this applicant.
@@ -121,7 +123,9 @@ if (!$hideAll && !$shareOff) {
 
     $rows = [];
     foreach ($allScores as $r) {
-        if (isset($hidden[$r['target_type'] . '|' . $r['target_value']])) continue;
+        $isHidden = isset($hidden[$r['target_type'] . '|' . $r['target_value']]);
+        // Hidden scores are excluded unless the applicant opted to share them.
+        if ($isHidden && !$shareHidden) continue;
 
         // Relevance: same title (case-insensitive) or same resolved category.
         $relevant = false;
@@ -138,6 +142,7 @@ if (!$hideAll && !$shareOff) {
             'score_value'  => (float) $r['score_value'],
             'created_at'   => $r['created_at'],
             'relevant'     => $relevant,
+            'hidden'       => $isHidden,
         ];
     }
 
@@ -172,6 +177,7 @@ Response::success([
             'target_value' => $r['target_value'],
             'score_value'  => $r['score_value'],
             'relevant'     => $r['relevant'],
+            'hidden'       => $r['hidden'] ?? false,
             'created_at'   => $r['created_at'],
         ];
     }, $relatedScores),
