@@ -319,6 +319,15 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 /* --- Remove-score controls --- */
 .in-btn.danger-ghost { background:transparent; color:var(--in-error); border:1px solid #f0c8c2; }
 .in-btn.danger-ghost:hover { background:#fdecea; border-color:var(--in-error); }
+.in-btn.danger { background:var(--in-error); color:#fff; border:1px solid var(--in-error); }
+.in-btn.danger:hover { background:#c0392b; border-color:#c0392b; }
+
+/* score-removal dialog */
+.in-modal-text { font-size:14px; color:var(--in-ink-soft); line-height:1.5; margin:6px 0 4px; }
+.score-rm-next { display:flex; align-items:center; gap:12px; margin:14px 0 4px; padding:12px 14px; background:var(--in-bg); border:1px solid var(--in-line); border-radius:10px; }
+.score-rm-next-badge { flex:none; width:40px; height:40px; border-radius:50%; display:grid; place-items:center; font-weight:700; font-size:15px; color:#fff; background:linear-gradient(135deg,var(--in-accent),var(--in-teal-bright)); }
+.score-rm-next-meta { font-size:13px; color:var(--in-muted); line-height:1.45; }
+.score-rm-actions { flex-wrap:wrap; }
 .score-detail-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
 .bd-actions { margin-top:16px; padding-top:14px; border-top:1px solid var(--in-line); display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; }
 /* --- Score history page --- */
@@ -1172,6 +1181,15 @@ a.ap-title:hover { color:var(--in-accent); }
 /* Company: applicant detail score block */
 .ja-detail-score { display:flex; gap:16px; align-items:flex-start; padding:12px; background:var(--in-bg); border-radius:12px; margin-bottom:6px; }
 .ja-detail-score-num { flex:none; width:52px; height:52px; border-radius:12px; display:grid; place-items:center; font-weight:800; font-size:22px; color:#fff; background:linear-gradient(135deg,#0e3b4a,#0a8a8a); }
+.ja-rel { margin:10px 0 4px; }
+.ja-rel-head { font-size:12px; font-weight:700; letter-spacing:.3px; text-transform:uppercase; color:var(--in-muted); margin-bottom:8px; }
+.ja-rel-row { display:flex; align-items:center; gap:11px; padding:8px 0; border-bottom:1px solid var(--in-line); }
+.ja-rel-row:last-child { border-bottom:none; }
+.ja-rel-badge { flex:none; width:36px; height:36px; border-radius:9px; display:grid; place-items:center; font-weight:700; font-size:14px; color:#fff; background:linear-gradient(135deg,var(--in-accent),var(--in-teal-bright)); }
+.ja-rel-meta { min-width:0; }
+.ja-rel-target { font-size:13.5px; font-weight:600; color:var(--in-ink); display:flex; align-items:center; gap:7px; }
+.ja-rel-tag { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.3px; color:var(--in-accent-d); background:#eafaf7; border:1px solid #c7ede6; border-radius:8px; padding:1px 6px; }
+.ja-rel-sub { font-size:12px; color:var(--in-muted); margin-top:1px; }
 
 /* Job editor: question builder rows share jf-input styling already */
 .jf-qrow .jf-input { margin:0; }

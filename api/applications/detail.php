@@ -65,6 +65,91 @@ $derived = Applications::derivedStatus(
 $full = trim(($a['first_name'] ?? '') . ' ' . ($a['last_name'] ?? ''));
 $loc  = array_filter([$a['city'], $a['state'], $a['country']]);
 
+// ---------------------------------------------------------------------
+// Related self-scores: the applicant's OWN Score Me results, shown under
+// the application snapshot. Ranked: relevant-to-this-job first (matching
+// title or job category), high→low, then their highest other scores —
+// top 3 overall. Latest score per target only.
+//
+// Privacy: a candidate who applied has opted into evaluation, but we
+// still honor their hide choices. Hidden individual scores and the
+// hide-all-scores flag are respected, AND a dedicated opt-out
+// ('share_scores_with_companies' = '0') suppresses them entirely.
+// ---------------------------------------------------------------------
+$relatedScores = [];
+$applicantId   = (int) $a['user_id'];
+
+require_once __DIR__ . '/../../src/JobCatalog.php';
+
+$setStmt = $pdo->prepare(
+    "SELECT setting_key, setting_value FROM user_settings
+     WHERE user_id = ? AND setting_key IN ('hide_all_scores','share_scores_with_companies')"
+);
+$setStmt->execute([$applicantId]);
+$settings = [];
+foreach ($setStmt->fetchAll() as $row) $settings[$row['setting_key']] = $row['setting_value'];
+
+$hideAll  = ($settings['hide_all_scores'] ?? '0') === '1';
+// Default ON: only an explicit '0' opts out.
+$shareOff = ($settings['share_scores_with_companies'] ?? '1') === '0';
+
+if (!$hideAll && !$shareOff) {
+    // Latest score per (target_type, target_value) for this applicant.
+    $sc = $pdo->prepare(
+        "SELECT s.target_type, s.target_value, s.score_value, s.created_at
+         FROM scores s
+         JOIN (
+            SELECT target_type, target_value, MAX(created_at) AS latest
+            FROM scores WHERE user_id = ?
+            GROUP BY target_type, target_value
+         ) m ON m.target_type = s.target_type
+            AND m.target_value = s.target_value
+            AND m.latest = s.created_at
+         WHERE s.user_id = ?"
+    );
+    $sc->execute([$applicantId, $applicantId]);
+    $allScores = $sc->fetchAll();
+
+    // Hidden targets to exclude.
+    $hid = $pdo->prepare('SELECT target_type, target_value FROM hidden_scores WHERE user_id = ?');
+    $hid->execute([$applicantId]);
+    $hidden = [];
+    foreach ($hid->fetchAll() as $h) $hidden[$h['target_type'] . '|' . $h['target_value']] = true;
+
+    // Determine this job's category once for relevance testing.
+    $jobCat = JobCatalog::categoryForTitle($a['job_title'] ?? '');
+
+    $rows = [];
+    foreach ($allScores as $r) {
+        if (isset($hidden[$r['target_type'] . '|' . $r['target_value']])) continue;
+
+        // Relevance: same title (case-insensitive) or same resolved category.
+        $relevant = false;
+        if (strcasecmp(trim($r['target_value']), trim($a['job_title'] ?? '')) === 0) {
+            $relevant = true;
+        } elseif ($jobCat !== null) {
+            $tc = JobCatalog::categoryForTitle($r['target_value']);
+            if ($tc !== null && $tc === $jobCat) $relevant = true;
+        }
+
+        $rows[] = [
+            'target_type'  => $r['target_type'],
+            'target_value' => $r['target_value'],
+            'score_value'  => (float) $r['score_value'],
+            'created_at'   => $r['created_at'],
+            'relevant'     => $relevant,
+        ];
+    }
+
+    // Rank: relevant first, then by score desc within each group.
+    usort($rows, function ($x, $y) {
+        if ($x['relevant'] !== $y['relevant']) return $x['relevant'] ? -1 : 1;
+        return $y['score_value'] <=> $x['score_value'];
+    });
+
+    $relatedScores = array_slice($rows, 0, 3);
+}
+
 Response::success([
     'uuid'           => $a['uuid'],
     'status'         => $derived,
@@ -81,6 +166,15 @@ Response::success([
         'has'  => !empty($a['resume_file']),
         'name' => $a['resume_name'],
     ],
+    'related_scores' => array_map(function ($r) {
+        return [
+            'target_type'  => $r['target_type'],
+            'target_value' => $r['target_value'],
+            'score_value'  => $r['score_value'],
+            'relevant'     => $r['relevant'],
+            'created_at'   => $r['created_at'],
+        ];
+    }, $relatedScores),
     'job' => [
         'uuid'   => $a['job_uuid'],
         'title'  => $a['job_title'],

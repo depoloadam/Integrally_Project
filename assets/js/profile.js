@@ -304,22 +304,84 @@ function renderScoreRow(s, showOwnerControls) {
     if (delBtn) {
       delBtn.onclick = async (e) => {
         e.stopPropagation();
-        if (!confirm(`Remove your ${typeLabel} score for "${s.target_value}"? This permanently deletes this result and can't be undone.`)) return;
-        delBtn.disabled = true; delBtn.textContent = "Removing…";
-        const r = await api("/score/delete.php", "POST", { id: s.id });
-        if (r.ok && r.data?.success) {
-          renderProfile();   // refresh so the latest-per-target list is rebuilt
-        } else {
-          delBtn.disabled = false; delBtn.textContent = "Remove score";
-          alert(r.data?.error || "Could not remove the score.");
-        }
+        openScoreRemoveDialog(s, typeLabel);
       };
     }
   }
   return row;
 }
 
-// ---- "Top X%" comparison against everyone who scored the same target ---
+// ---- score removal dialog --------------------------------------------
+// The profile panel shows only the LATEST score per target, so a target
+// can hide a stack of older re-scores behind it. Removing the visible one
+// silently reveals the next — which looks like the delete failed. This
+// dialog makes that explicit: when history exists, it names the score
+// that would resurface and offers "remove just this one" vs "remove all".
+async function openScoreRemoveDialog(s, typeLabel, onDone) {
+  const val = Math.round(s.score_value);
+
+  // Peek this target's full history (newest first) to know how many
+  // scores stack behind the visible one, and what would resurface.
+  const params = new URLSearchParams({ target_type: s.target_type, target_value: s.target_value });
+  const r = await api("/score/history.php?" + params.toString());
+  const hist = (r.ok && r.data?.success && Array.isArray(r.data.data)) ? r.data.data : [];
+  const total = hist.length;
+
+  // The "next in line" is the newest score that ISN'T the one being
+  // removed (history is newest-first; the visible row is normally hist[0]).
+  const next = hist.find(h => h.id !== s.id) || null;
+  const escT = esc(s.target_value);
+
+  // Single score (or history unavailable): nothing will resurface, so a
+  // plain one-choice confirm is enough.
+  if (total <= 1) {
+    openModal(`
+      <h3>Remove score?</h3>
+      <p class="in-modal-text">This permanently deletes your ${esc(typeLabel)} score of <b>${val}</b> for “${escT}”. This can't be undone.</p>
+      <div class="in-modal-actions">
+        <button class="in-btn ghost" onclick="closeModal()">Cancel</button>
+        <button class="in-btn danger" id="score-rm-confirm">Remove</button>
+      </div>`);
+    $("score-rm-confirm").onclick = () => runScoreRemoval(s, "one", onDone);
+    return;
+  }
+
+  // Multiple scores: explain the swap and offer both scopes.
+  const nextVal = next ? Math.round(next.score_value) : null;
+  const nextDate = next ? new Date(next.created_at).toLocaleDateString() : "";
+  openModal(`
+    <h3>Remove this score?</h3>
+    <p class="in-modal-text">You have <b>${total}</b> saved ${esc(typeLabel)} scores for “${escT}”. Your profile shows only the most recent one (<b>${val}</b>).</p>
+    ${next ? `<div class="score-rm-next">
+        <div class="score-rm-next-badge">${nextVal}</div>
+        <div class="score-rm-next-meta">If you remove only the current score, this one becomes visible next:<br><b>${nextVal}</b> · scored ${esc(nextDate)}</div>
+      </div>` : ""}
+    <div class="in-modal-actions score-rm-actions">
+      <button class="in-btn ghost" onclick="closeModal()">Cancel</button>
+      <button class="in-btn ghost" id="score-rm-one">Remove just this one</button>
+      <button class="in-btn danger" id="score-rm-all">Remove all ${total}</button>
+    </div>`);
+  $("score-rm-one").onclick = () => runScoreRemoval(s, "one", onDone);
+  $("score-rm-all").onclick = () => runScoreRemoval(s, "all", onDone);
+}
+
+async function runScoreRemoval(s, scope, onDone) {
+  const ids = ["score-rm-confirm", "score-rm-one", "score-rm-all"];
+  ids.forEach(id => { const b = $(id); if (b) b.disabled = true; });
+  const activeId = scope === "all" ? "score-rm-all" : ($("score-rm-one") ? "score-rm-one" : "score-rm-confirm");
+  const activeBtn = $(activeId);
+  if (activeBtn) activeBtn.textContent = "Removing…";
+
+  const r = await api("/score/delete.php", "POST", { id: s.id, scope });
+  if (r.ok && r.data?.success) {
+    closeModal();
+    if (typeof onDone === "function") onDone();
+    else renderProfile();   // rebuild the latest-per-target panel
+  } else {
+    ids.forEach(id => { const b = $(id); if (b) b.disabled = false; });
+    alert(r.data?.error || "Could not remove the score.");
+  }
+}
 // Renders into `slot`. `scoreId` optionally pins the comparison to a
 // specific score of yours; omit to compare your latest.
 async function loadScoreComparison(s, slot, scoreId) {
@@ -983,7 +1045,7 @@ function addJob(existing) {
     ? { uuid: existing.company_uuid, name: existing.company_name || "" } : null;
   openModal(`
     <h3>${isEdit ? "Edit experience" : "Add experience"}</h3>
-    <label>Title *</label><input id="j-title" value="${isEdit ? esc(existing.title || "") : ""}">
+    <label>Title *</label><div class="job-ta-wrap"><input id="j-title" autocomplete="off" placeholder="e.g. Systems Administrator" value="${isEdit ? esc(existing.title || "") : ""}"></div>
     <label>Company</label>
     <div class="emp-search">
       <input id="j-company" autocomplete="off" placeholder="Type to search company accounts…" value="${isEdit ? esc(existing.company_name || "") : ""}">
@@ -1003,6 +1065,13 @@ function addJob(existing) {
   // Live employer search: as the user types, look up company accounts that
   // allow being listed. Selecting one links it (stores company_uuid).
   let linkedCompany = linkedInit;   // { uuid, name } when a company account is chosen
+
+  // Job-title typeahead: suggests catalog titles (which the score engine
+  // maps to categories) while still allowing any free text.
+  if (typeof jobMountTypeahead === "function") {
+    jobMountTypeahead($("j-title"), { minChars: 2, limit: 8 });
+  }
+
   const cInput = $("j-company");
   const cResults = $("j-company-results");
   const cLinked = $("j-company-linked");
@@ -1260,7 +1329,7 @@ function openBulkExperience() {
     const row = el(`
       <div class="bulk-row">
         <button class="bulk-row-x" title="Remove">✕</button>
-        <input class="bj-title" placeholder="Job title *">
+        <div class="job-ta-wrap"><input class="bj-title" placeholder="Job title *" autocomplete="off"></div>
         <input class="bj-company" placeholder="Company">
         <div class="bulk-dates">
           <div class="bulk-date-field"><label>Start date</label><input class="bj-start" type="date"></div>
@@ -1271,6 +1340,9 @@ function openBulkExperience() {
     row.querySelector(".bulk-row-x").onclick = () => row.remove();
     row.querySelector(".bj-current").onchange = (e) => { const end = row.querySelector(".bj-end"); end.disabled = e.target.checked; if (e.target.checked) end.value = ""; };
     wrap.appendChild(row);
+    if (typeof jobMountTypeahead === "function") {
+      jobMountTypeahead(row.querySelector(".bj-title"), { minChars: 2, limit: 8 });
+    }
   };
   addRow();
   $("bulk-job-add").onclick = addRow;
@@ -1599,6 +1671,7 @@ function renderSetPrivacy(panel, st) {
   // following_enabled defaults to ON when unset
   const followingOn = st.following_enabled !== "0";
   const hideScoresOn = st.hide_all_scores === "1";
+  const shareScoresOn = st.share_scores_with_companies !== "0";   // default on
   panel.appendChild(el(`
     <div class="in-set-section">
       <h3>Privacy & preferences</h3>
@@ -1615,6 +1688,13 @@ function renderSetPrivacy(panel, st) {
           <div class="in-set-toggle-sub">Your scores stay visible to you, but no one else will see them on your profile. You can also hide individual scores from the profile page.</div>
         </div>
         <button class="in-toggle ${hideScoresOn ? "on" : ""}" id="toggle-hide-scores" role="switch" aria-checked="${hideScoresOn}"><span class="in-toggle-knob"></span></button>
+      </div>
+      <div class="in-set-toggle" style="margin-top:16px">
+        <div>
+          <div class="in-set-toggle-label">Share my scores with companies I apply to</div>
+          <div class="in-set-toggle-sub">When on, companies reviewing your application can see your most relevant self-scores (top 3). Scores you've hidden are never shared.</div>
+        </div>
+        <button class="in-toggle ${shareScoresOn ? "on" : ""}" id="toggle-share-scores" role="switch" aria-checked="${shareScoresOn}"><span class="in-toggle-knob"></span></button>
       </div>
       <div class="in-set-msg" id="set-privacy-msg"></div>
     </div>`));
@@ -1644,9 +1724,20 @@ function renderSetPrivacy(panel, st) {
       msg.className = "in-set-msg ok"; msg.textContent = "Saved.";
     } else { msg.className = "in-set-msg err"; msg.textContent = r.data?.error || "Could not save."; }
   };
+  $("toggle-share-scores").onclick = async () => {
+    const btn = $("toggle-share-scores");
+    const turningOn = !btn.classList.contains("on");
+    btn.disabled = true;
+    const r = await api("/settings/set.php", "POST", { key:"share_scores_with_companies", value: turningOn ? "1" : "0" });
+    btn.disabled = false;
+    const msg = $("set-privacy-msg");
+    if (r.ok && r.data?.success) {
+      btn.classList.toggle("on", turningOn);
+      btn.setAttribute("aria-checked", turningOn);
+      msg.className = "in-set-msg ok"; msg.textContent = "Saved.";
+    } else { msg.className = "in-set-msg err"; msg.textContent = r.data?.error || "Could not save."; }
+  };
 }
-
-// ---- Notifications tab: per-type in-app toggles (+ dormant email) ----
 function renderSetNotifications(panel) {
   const st = (SETTINGS_DATA && SETTINGS_DATA.st) || {};
   renderNotificationPrefs(panel, {
@@ -1809,16 +1900,8 @@ async function renderScoreBreakdown(scoreId) {
 
   const del = $("bd-delete");
   if (del) {
-    del.onclick = async () => {
-      if (!confirm(`Remove your ${esc(s.target_type.replace("_"," "))} score for "${s.target_value}"? This permanently deletes this result and can't be undone.`)) return;
-      del.disabled = true; del.textContent = "Removing…";
-      const r = await api("/score/delete.php", "POST", { id: s.id });
-      if (r.ok && r.data?.success) {
-        location.hash = "profile";
-      } else {
-        del.disabled = false; del.textContent = "Remove this score";
-        alert(r.data?.error || "Could not remove the score.");
-      }
+    del.onclick = () => {
+      openScoreRemoveDialog(s, s.target_type.replace("_", " "), () => { location.hash = "profile"; });
     };
   }
 }

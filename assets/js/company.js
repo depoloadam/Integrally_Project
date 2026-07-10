@@ -493,6 +493,22 @@ async function openApplicantDetail(appUuid) {
       </div>
     </div>` : `<div class="in-empty" style="padding:10px">No score snapshot.</div>`;
 
+  // The candidate's own self-scores (top 3, relevant first), shown under
+  // the application snapshot. Empty when they have none / opted out / hid them.
+  const rel = a.related_scores || [];
+  const relatedHtml = rel.length ? `
+    <div class="ja-rel">
+      <div class="ja-rel-head">Candidate's own scores</div>
+      ${rel.map(rs => `
+        <div class="ja-rel-row">
+          <div class="ja-rel-badge">${Math.round(rs.score_value)}</div>
+          <div class="ja-rel-meta">
+            <div class="ja-rel-target">${esc(rs.target_value)}${rs.relevant ? `<span class="ja-rel-tag">Related</span>` : ""}</div>
+            <div class="ja-rel-sub">${esc((rs.target_type || "").replace("_", " "))}</div>
+          </div>
+        </div>`).join("")}
+    </div>` : "";
+
   const resumeHtml = a.resume?.has
     ? `<a class="in-btn ghost" style="flex:none;padding:8px 16px;text-decoration:none;display:inline-block" href="${API_BASE}/applications/resume.php?uuid=${encodeURIComponent(a.uuid)}" target="_blank">📎 Download resume (${esc(a.resume.name || "file")})</a>`
     : `<div class="in-empty" style="padding:8px">No resume attached.</div>`;
@@ -506,6 +522,7 @@ async function openApplicantDetail(appUuid) {
 
     <div class="ep-sep"><span>Integrally score</span></div>
     ${scoreHtml}
+    ${relatedHtml}
     <div class="ep-sep"><span>Responses</span></div>
     ${answersHtml}
     <div class="ep-sep"><span>Resume</span></div>

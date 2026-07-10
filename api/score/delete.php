@@ -31,6 +31,9 @@ $id = isset($in['id']) ? (int) $in['id'] : 0;
 if ($id <= 0) {
     Response::error('A valid score id is required.', 422);
 }
+// scope 'one' (default) deletes just this row; 'all' deletes every score
+// the caller has for the same (target_type, target_value) target.
+$scope = ($in['scope'] ?? 'one') === 'all' ? 'all' : 'one';
 
 // Fetch the row first so we can (a) verify ownership and (b) know the
 // target for the hidden_scores cleanup below.
@@ -47,8 +50,18 @@ if ((int) $score['user_id'] !== $userId) {
 
 $pdo->beginTransaction();
 try {
-    $del = $pdo->prepare('DELETE FROM scores WHERE id = ? AND user_id = ?');
-    $del->execute([$id, $userId]);
+    if ($scope === 'all') {
+        // Remove the entire history for this target.
+        $del = $pdo->prepare(
+            'DELETE FROM scores WHERE user_id = ? AND target_type = ? AND target_value = ?'
+        );
+        $del->execute([$userId, $score['target_type'], $score['target_value']]);
+        $deleted = $del->rowCount();
+    } else {
+        $del = $pdo->prepare('DELETE FROM scores WHERE id = ? AND user_id = ?');
+        $del->execute([$id, $userId]);
+        $deleted = $del->rowCount();
+    }
 
     // Any remaining rows for this same target?
     $rem = $pdo->prepare(
@@ -72,8 +85,10 @@ try {
 }
 
 Response::success([
-    'id'               => $id,
-    'target_type'      => $score['target_type'],
-    'target_value'     => $score['target_value'],
+    'id'                   => $id,
+    'scope'                => $scope,
+    'deleted'              => $deleted,
+    'target_type'          => $score['target_type'],
+    'target_value'         => $score['target_value'],
     'remaining_for_target' => $remaining,
 ]);
