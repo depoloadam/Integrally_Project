@@ -46,6 +46,42 @@ if (strlen($targetValue) > 150) {
     Response::error('target_value is too long (150 max).', 422);
 }
 
+// --- Entry cap: limit DISTINCT main entries by plan ------------------
+// A "main entry" is a distinct (target_type, target_value) pair — the
+// same collapsing latest.php does for the profile scores panel.
+// Re-scoring an EXISTING entry only adds history and is always allowed;
+// the cap only stops a NEW distinct entry once the profile is full.
+// Hidden entries still occupy a slot (hiding is a display choice).
+$existsStmt = $pdo->prepare(
+    'SELECT 1 FROM scores
+     WHERE user_id = ? AND target_type = ? AND target_value = ?
+     LIMIT 1'
+);
+$existsStmt->execute([$userId, $targetType, $targetValue]);
+$isExistingEntry = (bool) $existsStmt->fetch();
+
+if (!$isExistingEntry) {
+    $countStmt = $pdo->prepare(
+        'SELECT COUNT(*) AS c FROM (
+            SELECT 1 FROM scores
+            WHERE user_id = ?
+            GROUP BY target_type, target_value
+         ) t'
+    );
+    $countStmt->execute([$userId]);
+    $entryCount = (int) $countStmt->fetch()['c'];
+
+    $plan = Auth::plan();
+    $cap  = Auth::entryCapForPlan($plan);
+
+    if ($entryCount >= $cap) {
+        $msg = $plan === 'plus'
+            ? "You've reached the maximum of {$cap} score entries."
+            : "Free accounts can keep up to {$cap} score entries. Upgrade to Plus for up to " . Auth::ENTRY_CAP['plus'] . ", or remove an existing entry to add a new one.";
+        Response::error($msg, 403, 'entry_cap');
+    }
+}
+
 // --- Gather the user's profile data for scoring ----------------------
 $profile = gatherProfile($pdo, $userId);
 

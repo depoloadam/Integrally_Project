@@ -19,6 +19,17 @@ function debounce(fn, wait) {
   return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), wait); };
 }
 
+// Save/action feedback: sets the tab's inline status line AND fires a
+// corner toast (shell.js), so confirmation is visible even when the
+// acted-on row is scrolled far below the status line.
+function adminNotify(msgEl, kind, text) {
+  if (msgEl) {
+    msgEl.className = "in-set-msg " + kind;
+    msgEl.textContent = text;
+  }
+  toast(text, kind);
+}
+
 async function renderAdmin() {
   const view = $("view");
 
@@ -174,7 +185,7 @@ async function loadAdminUsers() {
   const table = el(`
     <table class="in-admin-table">
       <thead><tr>
-        <th>User</th><th>Email</th><th>Role</th><th>Status</th><th>Joined</th><th></th>
+        <th>User</th><th>Email</th><th>Role</th><th>Plan</th><th>Status</th><th>Joined</th><th></th>
       </tr></thead>
       <tbody></tbody>
     </table>`);
@@ -202,6 +213,12 @@ async function loadAdminUsers() {
             <option value="admin" ${u.role === "admin" ? "selected" : ""}>Admin</option>
           </select>
         </td>
+        <td>
+          <select class="in-admin-plan-select">
+            <option value="free" ${u.plan === "free" ? "selected" : ""}>Free</option>
+            <option value="plus" ${u.plan === "plus" ? "selected" : ""}>Plus</option>
+          </select>
+        </td>
         <td><span class="in-admin-badge ${active ? "ok" : "off"}">${active ? "Active" : "Inactive"}</span></td>
         <td>${esc(joined)}</td>
         <td>
@@ -212,9 +229,27 @@ async function loadAdminUsers() {
         </td>
       </tr>`);
 
-    const select    = row.querySelector(".in-admin-role-select");
-    const saveBtn   = row.querySelector(".in-admin-save");
-    const toggleBtn = row.querySelector(".in-admin-toggle");
+    const select     = row.querySelector(".in-admin-role-select");
+    const planSelect = row.querySelector(".in-admin-plan-select");
+    const saveBtn    = row.querySelector(".in-admin-save");
+    const toggleBtn  = row.querySelector(".in-admin-toggle");
+
+    // Plan is editable for everyone including self (no lockout risk),
+    // so its handler is wired outside the !isSelf block below.
+    planSelect.onchange = async () => {
+      const newPlan = planSelect.value;
+      if (newPlan === u.plan) return;
+      planSelect.disabled = true;
+      const res = await api("/admin/set-plan.php", "POST", { uuid: u.uuid, plan: newPlan });
+      if (res.ok && res.data?.success) {
+        adminNotify(msg, "ok", `Set @${u.username} to ${newPlan === "plus" ? "Plus" : "Free"}.`);
+        u.plan = newPlan;
+      } else {
+        adminNotify(msg, "err", res.data?.error || "Could not update plan.");
+        planSelect.value = u.plan; // revert on failure
+      }
+      planSelect.disabled = false;
+    };
 
     if (!isSelf) {
       saveBtn.onclick = async () => {
@@ -224,12 +259,10 @@ async function loadAdminUsers() {
         saveBtn.textContent = "Saving…";
         const res = await api("/admin/set-role.php", "POST", { uuid: u.uuid, role: newRole });
         if (res.ok && res.data?.success) {
-          msg.className = "in-set-msg ok";
-          msg.textContent = `Updated @${u.username} to ${newRole}.`;
+          adminNotify(msg, "ok", `Updated @${u.username} to ${newRole}.`);
           u.role = newRole;
         } else {
-          msg.className = "in-set-msg err";
-          msg.textContent = res.data?.error || "Could not update role.";
+          adminNotify(msg, "err", res.data?.error || "Could not update role.");
           select.value = u.role; // revert on failure
         }
         saveBtn.disabled = false;
@@ -245,8 +278,7 @@ async function loadAdminUsers() {
         const res = await api("/admin/set-active.php", "POST", { uuid: u.uuid, active: !nowActive });
         if (res.ok && res.data?.success) {
           u.is_active = nowActive ? 0 : 1;
-          msg.className = "in-set-msg ok";
-          msg.textContent = `${nowActive ? "Deactivated" : "Activated"} @${u.username}.`;
+          adminNotify(msg, "ok", `${nowActive ? "Deactivated" : "Activated"} @${u.username}.`);
           // Update the row in place rather than reloading the page of results.
           const badge = row.querySelector(".in-admin-badge");
           const active = !!Number(u.is_active);
@@ -254,8 +286,7 @@ async function loadAdminUsers() {
           badge.textContent = active ? "Active" : "Inactive";
           toggleBtn.textContent = active ? "Deactivate" : "Activate";
         } else {
-          msg.className = "in-set-msg err";
-          msg.textContent = res.data?.error || "Could not update the account.";
+          adminNotify(msg, "err", res.data?.error || "Could not update the account.");
           toggleBtn.textContent = verb;
         }
         toggleBtn.disabled = false;
@@ -359,16 +390,14 @@ async function loadAdminCompanies() {
       const res = await api("/admin/set-company-active.php", "POST", { uuid: c.uuid, active: !nowActive });
       if (res.ok && res.data?.success) {
         c.is_active = nowActive ? 0 : 1;
-        msg.className = "in-set-msg ok";
-        msg.textContent = `${nowActive ? "Deactivated" : "Activated"} ${c.name}.`;
+        adminNotify(msg, "ok", `${nowActive ? "Deactivated" : "Activated"} ${c.name}.`);
         const badge = row.querySelector(".in-admin-badge");
         const active = !!Number(c.is_active);
         badge.className = `in-admin-badge ${active ? "ok" : "off"}`;
         badge.textContent = active ? "Active" : "Inactive";
         toggleBtn.textContent = active ? "Deactivate" : "Activate";
       } else {
-        msg.className = "in-set-msg err";
-        msg.textContent = res.data?.error || "Could not update the company.";
+        adminNotify(msg, "err", res.data?.error || "Could not update the company.");
       }
       toggleBtn.disabled = false;
     };
@@ -466,8 +495,8 @@ async function loadAdminPosts() {
     row.querySelector("[data-del]").onclick = async () => {
       if (!confirm(`Delete this post by ${p.author_name}? This can't be undone.`)) return;
       const res = await api("/posts/delete.php", "POST", { id: p.id });
-      if (res.ok && res.data?.success) { msg.className = "in-set-msg ok"; msg.textContent = "Post deleted."; loadAdminPosts(); }
-      else { msg.className = "in-set-msg err"; msg.textContent = res.data?.error || "Could not delete the post."; }
+      if (res.ok && res.data?.success) { adminNotify(msg, "ok", "Post deleted."); loadAdminPosts(); }
+      else { adminNotify(msg, "err", res.data?.error || "Could not delete the post."); }
     };
 
     tbody.appendChild(row);
@@ -563,8 +592,8 @@ async function loadAdminJobs() {
     row.querySelector("[data-del]").onclick = async () => {
       if (!confirm(`Delete "${j.title}" by ${j.company_name}? This can't be undone.`)) return;
       const res = await api("/admin/delete-job.php", "POST", { uuid: j.uuid });
-      if (res.ok && res.data?.success) { msg.className = "in-set-msg ok"; msg.textContent = `Deleted "${j.title}".`; loadAdminJobs(); }
-      else { msg.className = "in-set-msg err"; msg.textContent = res.data?.error || "Could not delete the job."; }
+      if (res.ok && res.data?.success) { adminNotify(msg, "ok", `Deleted "${j.title}".`); loadAdminJobs(); }
+      else { adminNotify(msg, "err", res.data?.error || "Could not delete the job."); }
     };
     tbody.appendChild(row);
   });

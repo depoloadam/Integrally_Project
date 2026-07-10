@@ -24,24 +24,32 @@ class Response
 
     /**
      * Send an error envelope and stop execution.
+     * $code is an optional machine-readable identifier (e.g. 'entry_cap')
+     * so the frontend can react to a SPECIFIC error without string-matching
+     * the human message. Only included in the envelope when provided, so
+     * existing consumers of {success,data,error} are unaffected.
      */
-    public static function error(string $message, int $httpCode = 400): void
+    public static function error(string $message, int $httpCode = 400, ?string $code = null): void
     {
-        self::send(false, null, $message, $httpCode);
+        self::send(false, null, $message, $httpCode, $code);
     }
 
     /**
      * Internal: set headers, encode, and exit.
      */
-    private static function send(bool $success, $data, ?string $error, int $httpCode): void
+    private static function send(bool $success, $data, ?string $error, int $httpCode, ?string $code = null): void
     {
         header('Content-Type: application/json; charset=utf-8');
         http_response_code($httpCode);
-        echo json_encode([
+        $body = [
             'success' => $success,
             'data'    => $data,
             'error'   => $error,
-        ]);
+        ];
+        if ($code !== null) {
+            $body['code'] = $code;
+        }
+        echo json_encode($body);
         exit;
     }
 

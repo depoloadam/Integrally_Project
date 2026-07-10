@@ -143,6 +143,45 @@ class Auth
         return $id;
     }
 
+    // ---- PLAN / TIER -------------------------------------------------
+    // Read live from the DB (same pattern as role()), so an upgrade or
+    // downgrade takes effect immediately instead of persisting stale in
+    // the session. Brand-neutral values: 'free' | 'plus'.
+
+    // Max number of DISTINCT main score entries a profile may hold,
+    // keyed by plan. Re-scoring an existing entry is never limited by
+    // this — it only adds history. Tunable in one place.
+    const ENTRY_CAP = [
+        'free' => 2,
+        'plus' => 5,
+    ];
+
+    public static function plan(): ?string
+    {
+        $id = self::userId();
+        if ($id === null) return null;
+
+        $pdo  = Database::conn();
+        $stmt = $pdo->prepare('SELECT plan FROM users WHERE id = ? LIMIT 1');
+        $stmt->execute([$id]);
+        $row = $stmt->fetch();
+        return $row ? $row['plan'] : null;
+    }
+
+    public static function isPlus(): bool
+    {
+        return self::plan() === 'plus';
+    }
+
+    /**
+     * How many distinct main score entries the given plan allows.
+     * Unknown/null plans fall back to the free cap.
+     */
+    public static function entryCapForPlan(?string $plan): int
+    {
+        return self::ENTRY_CAP[$plan] ?? self::ENTRY_CAP['free'];
+    }
+
     // ---- helpers -----------------------------------------------------
 
     /**

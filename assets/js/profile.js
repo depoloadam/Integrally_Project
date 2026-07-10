@@ -1271,8 +1271,34 @@ function scoreMe() {
     const btn = $("run-score"); btn.disabled = true; btn.textContent = "Scoring…";
     const r = await api("/score/score-me.php","POST",{ target_type:typeSel.value, target_value });
     if (r.ok && r.data?.success) { closeModal(); renderProfile(); }
+    else if (r.data?.code === "entry_cap") { showEntryCapModal(); }
     else { btn.disabled = false; btn.textContent = "Score"; alert(r.data?.error || "Could not score right now."); }
   };
+}
+
+// Shown when scoring a NEW target would exceed the plan's entry cap.
+// Replaces the Score Me modal content in the same overlay. Copy differs
+// by plan: free users get the Plus pitch; Plus users just get the limit.
+function showEntryCapModal() {
+  const isPlus = ME && ME.plan === "plus";
+  openModal(`
+    <div class="cap-modal">
+      <div class="cap-badge">${isPlus ? "★" : "＋"}</div>
+      <h3 class="cap-title">${isPlus ? "Score limit reached" : "You've hit your score limit"}</h3>
+      <p class="cap-body">
+        ${isPlus
+          ? "Plus profiles can keep up to <strong>5</strong> score entries. To add a new one, remove an existing entry first."
+          : "Free profiles can keep up to <strong>2</strong> score entries. You can re-score an existing entry anytime — that never counts against your limit."}
+      </p>
+      ${isPlus ? "" : `
+      <div class="cap-upsell">
+        <div class="cap-upsell-head"><span class="cap-plus-tag">Plus</span> Coming soon</div>
+        <div class="cap-upsell-body">Plus profiles will keep up to <strong>5</strong> score entries — plus more perks on the way.</div>
+      </div>`}
+      <div class="in-modal-actions">
+        <button class="in-btn primary" onclick="closeModal()" style="margin-left:auto">Got it</button>
+      </div>
+    </div>`);
 }
 
 // ---- removals --------------------------------------------------------

@@ -15,7 +15,7 @@ $userId = Auth::requireLogin();
 
 $pdo  = Database::conn();
 $stmt = $pdo->prepare(
-    'SELECT id, uuid, email, username, role, city, state, country, profile_pic
+    'SELECT id, uuid, email, username, role, plan, city, state, country, profile_pic
      FROM users WHERE id = ? LIMIT 1'
 );
 $stmt->execute([$userId]);

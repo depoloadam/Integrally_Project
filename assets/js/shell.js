@@ -35,6 +35,31 @@ function openModal(html, opts) {
   $("overlay").classList.add("show");
 }
 function closeModal() { $("overlay").classList.remove("show"); const m = $("modal"); m.innerHTML = ""; m.classList.remove("wide"); }
+
+// ---- toast notifications ----------------------------------------------
+// Small auto-dismissing confirmation in the bottom-right corner. Use for
+// "it worked" feedback that shouldn't interrupt (saves, toggles). Stays
+// visible regardless of scroll position, unlike inline status text.
+//   toast("Saved.")            -> success styling
+//   toast("Failed.", "err")    -> error styling
+function toast(message, kind = "ok") {
+  let holder = document.getElementById("toast-holder");
+  if (!holder) {
+    holder = document.createElement("div");
+    holder.id = "toast-holder";
+    document.body.appendChild(holder);
+  }
+  const t = document.createElement("div");
+  t.className = "in-toast " + (kind === "err" ? "err" : "ok");
+  t.textContent = message;
+  holder.appendChild(t);
+  // enter -> hold -> exit -> remove
+  requestAnimationFrame(() => t.classList.add("show"));
+  setTimeout(() => {
+    t.classList.remove("show");
+    setTimeout(() => t.remove(), 300);
+  }, 2600);
+}
 // Close on overlay click, but ONLY when the press started on the overlay
 // itself. Without the mousedown guard, selecting text inside the modal and
 // releasing the mouse outside it registers as an overlay click and closes

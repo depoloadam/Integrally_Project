@@ -55,7 +55,7 @@ $total = (int) $countStmt->fetch()['c'];
 
 // Page of results.
 $stmt = $pdo->prepare(
-    "SELECT uuid, username, email, role, first_name, last_name,
+    "SELECT uuid, username, email, role, plan, first_name, last_name,
             is_active, is_verified, created_at
      FROM users
      {$whereSql}
