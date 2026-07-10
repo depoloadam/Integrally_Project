@@ -1,8 +1,9 @@
 // =====================================================================
 // admin.js — admin dashboard (#admin route)
-//   Overview stats + four management sections behind sub-tabs:
+//   Overview stats + five management sections behind sub-tabs:
 //   Users (role + activate/deactivate), Companies (activate/deactivate),
-//   Posts (moderation: view + delete), Jobs (view + delete).
+//   Posts (moderation: view + delete), Jobs (view + delete), and an
+//   Audit tab (read-only log of admin actions).
 //   Admin-only; shell.js gates nav visibility and routing, but this
 //   file double-checks ME.role before rendering.
 // =====================================================================
@@ -13,6 +14,7 @@ let ADMIN_STATE     = { q: "", role: "", page: 1, limit: 25 };
 let ADMIN_COMPANIES = { q: "", status: "", page: 1, limit: 25 };
 let ADMIN_POSTS     = { q: "", author_type: "", page: 1, limit: 25 };
 let ADMIN_JOBS      = { q: "", status: "", page: 1, limit: 25 };
+let ADMIN_AUDIT     = { q: "", action: "", page: 1, limit: 25 };
 
 function debounce(fn, wait) {
   let t;
@@ -54,6 +56,7 @@ async function renderAdmin() {
       <button data-atab="companies">Companies</button>
       <button data-atab="posts">Posts</button>
       <button data-atab="jobs">Jobs</button>
+      <button data-atab="audit">Audit</button>
     </div>`);
   wrap.appendChild(tabs);
 
@@ -74,6 +77,7 @@ function renderAdminSection(section) {
   if (ADMIN_TAB === "users")          renderAdminUsersSection(section);
   else if (ADMIN_TAB === "companies") renderAdminCompaniesSection(section);
   else if (ADMIN_TAB === "posts")     renderAdminPostsSection(section);
+  else if (ADMIN_TAB === "audit")     renderAdminAuditSection(section);
   else                                renderAdminJobsSection(section);
 }
 
@@ -223,7 +227,6 @@ async function loadAdminUsers() {
         <td>${esc(joined)}</td>
         <td>
           <div class="in-admin-actions">
-            <button class="in-btn ghost in-admin-save" style="flex:none;padding:6px 14px" ${isSelf ? 'disabled title="You can\'t change your own role"' : ""}>Save</button>
             <button class="in-btn ghost in-admin-toggle" style="flex:none;padding:6px 14px" ${isSelf ? 'disabled title="You can\'t deactivate yourself"' : ""}>${active ? "Deactivate" : "Activate"}</button>
           </div>
         </td>
@@ -231,7 +234,6 @@ async function loadAdminUsers() {
 
     const select     = row.querySelector(".in-admin-role-select");
     const planSelect = row.querySelector(".in-admin-plan-select");
-    const saveBtn    = row.querySelector(".in-admin-save");
     const toggleBtn  = row.querySelector(".in-admin-toggle");
 
     // Plan is editable for everyone including self (no lockout risk),
@@ -252,11 +254,22 @@ async function loadAdminUsers() {
     };
 
     if (!isSelf) {
-      saveBtn.onclick = async () => {
+      // Role saves immediately on change. Admin privileges are the one
+      // change with real consequences, so granting OR removing admin
+      // asks for confirmation first; user<->moderator changes just save.
+      select.onchange = async () => {
         const newRole = select.value;
         if (newRole === u.role) return;
-        saveBtn.disabled = true;
-        saveBtn.textContent = "Saving…";
+
+        const touchesAdmin = newRole === "admin" || u.role === "admin";
+        if (touchesAdmin) {
+          const what = newRole === "admin"
+            ? `Grant ADMIN access to @${u.username}? They'll have full control of the admin dashboard.`
+            : `Remove ADMIN access from @${u.username}?`;
+          if (!confirm(what)) { select.value = u.role; return; }
+        }
+
+        select.disabled = true;
         const res = await api("/admin/set-role.php", "POST", { uuid: u.uuid, role: newRole });
         if (res.ok && res.data?.success) {
           adminNotify(msg, "ok", `Updated @${u.username} to ${newRole}.`);
@@ -265,8 +278,7 @@ async function loadAdminUsers() {
           adminNotify(msg, "err", res.data?.error || "Could not update role.");
           select.value = u.role; // revert on failure
         }
-        saveBtn.disabled = false;
-        saveBtn.textContent = "Save";
+        select.disabled = false;
       };
 
       toggleBtn.onclick = async () => {
@@ -600,4 +612,116 @@ async function loadAdminJobs() {
 
   tableBox.appendChild(table);
   adminPager(pager, ADMIN_JOBS, total, page, limit, "jobs", loadAdminJobs);
+}
+
+// =====================================================================
+// AUDIT LOG — read-only trail of admin actions
+// =====================================================================
+
+// action -> { label, badge class } for display
+const AUDIT_ACTIONS = {
+  set_role:           { label: "Role changed" },
+  set_plan:           { label: "Plan changed" },
+  set_user_active:    { label: "User account toggled" },
+  set_company_active: { label: "Company account toggled" },
+  delete_post:        { label: "Post deleted" },
+  delete_job:         { label: "Job deleted" },
+};
+
+function renderAdminAuditSection(section) {
+  const options = Object.entries(AUDIT_ACTIONS).map(([v, a]) =>
+    `<option value="${v}" ${ADMIN_AUDIT.action === v ? "selected" : ""}>${a.label}</option>`).join("");
+  const card = el(`
+    <div class="in-card2">
+      <h2>Audit Log</h2>
+      <div class="in-admin-toolbar">
+        <input type="text" id="admin-audit-search" placeholder="Search admin or target…" value="${esc(ADMIN_AUDIT.q)}">
+        <select id="admin-audit-action">
+          <option value="">All actions</option>
+          ${options}
+        </select>
+      </div>
+      <div id="admin-audit-table"></div>
+      <div class="in-admin-pager" id="admin-audit-pager"></div>
+    </div>`);
+  section.appendChild(card);
+
+  $("admin-audit-search").addEventListener("input", debounce(() => {
+    ADMIN_AUDIT.q = $("admin-audit-search").value.trim();
+    ADMIN_AUDIT.page = 1;
+    loadAdminAudit();
+  }, 350));
+  $("admin-audit-action").onchange = () => {
+    ADMIN_AUDIT.action = $("admin-audit-action").value;
+    ADMIN_AUDIT.page = 1;
+    loadAdminAudit();
+  };
+
+  loadAdminAudit();
+}
+
+// Renders one entry's detail JSON as a compact human string.
+function auditDetailText(e) {
+  const d = e.detail;
+  if (!d) return "";
+  if (d.from !== undefined && d.to !== undefined) return `${d.from} → ${d.to}`;
+  if (d.to !== undefined) return `→ ${d.to}`;
+  if (e.action === "delete_post" && d.author_type) return `by ${d.author_type} #${d.author_id}`;
+  return "";
+}
+
+async function loadAdminAudit() {
+  const tableBox = $("admin-audit-table");
+  const pager    = $("admin-audit-pager");
+  if (!tableBox) return;
+
+  tableBox.innerHTML = `<div class="in-loading">Loading audit log…</div>`;
+
+  const params = new URLSearchParams({
+    page: ADMIN_AUDIT.page, limit: ADMIN_AUDIT.limit,
+  });
+  if (ADMIN_AUDIT.q)      params.set("q", ADMIN_AUDIT.q);
+  if (ADMIN_AUDIT.action) params.set("action", ADMIN_AUDIT.action);
+
+  const r = await api("/admin/audit.php?" + params.toString());
+  if (!r.ok || !r.data?.success) {
+    tableBox.innerHTML = `<div class="in-empty">Could not load the audit log. If this is a fresh setup, make sure the audit-log migration has been run.</div>`;
+    pager.innerHTML = "";
+    return;
+  }
+
+  const { entries, total, page, limit } = r.data.data;
+
+  if (!entries.length) {
+    tableBox.innerHTML = `<div class="in-empty">No audit entries${ADMIN_AUDIT.q || ADMIN_AUDIT.action ? " match" : " yet — admin actions will appear here"}.</div>`;
+    pager.innerHTML = "";
+    return;
+  }
+
+  tableBox.innerHTML = "";
+  const table = el(`
+    <table class="in-admin-table">
+      <thead><tr>
+        <th>When</th><th>Admin</th><th>Action</th><th>Target</th><th>Detail</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>`);
+  const tbody = table.querySelector("tbody");
+
+  entries.forEach(e => {
+    const a     = AUDIT_ACTIONS[e.action] || { label: e.action };
+    const when  = (e.created_at || "").slice(0, 16).replace("T", " ");
+    const row = el(`
+      <tr>
+        <td style="white-space:nowrap">${esc(when)}</td>
+        <td>@${esc(e.admin_username)}</td>
+        <td><span class="in-audit-action">${esc(a.label)}</span></td>
+        <td class="in-audit-target">${esc(e.target_label)}</td>
+        <td class="in-audit-detail">${esc(auditDetailText(e))}</td>
+      </tr>`);
+    tbody.appendChild(row);
+  });
+
+  tableBox.appendChild(table);
+  adminPager(pager, ADMIN_AUDIT, total, page, limit, "entries", loadAdminAudit);
 }

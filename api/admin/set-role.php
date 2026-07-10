@@ -15,6 +15,7 @@
 require_once __DIR__ . '/../../src/Database.php';
 require_once __DIR__ . '/../../src/Response.php';
 require_once __DIR__ . '/../../src/Auth.php';
+require_once __DIR__ . '/../../src/Audit.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     Response::error('Method not allowed.', 405);
@@ -33,7 +34,7 @@ if (!in_array($role, ['user', 'moderator', 'admin'], true)) {
 }
 
 // Resolve target.
-$stmt = $pdo->prepare('SELECT id, role FROM users WHERE uuid = ? LIMIT 1');
+$stmt = $pdo->prepare('SELECT id, role, username FROM users WHERE uuid = ? LIMIT 1');
 $stmt->execute([$uuid]);
 $target = $stmt->fetch();
 if (!$target) Response::error('User not found.', 404);
@@ -63,5 +64,8 @@ if ($currentRole === 'admin' && $role !== 'admin') {
 
 $update = $pdo->prepare('UPDATE users SET role = ? WHERE id = ?');
 $update->execute([$role, $targetId]);
+
+Audit::log($adminId, 'set_role', 'user', $uuid, '@' . $target['username'],
+    ['from' => $currentRole, 'to' => $role]);
 
 Response::success(['uuid' => $uuid, 'role' => $role]);

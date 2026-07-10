@@ -15,6 +15,7 @@
 require_once __DIR__ . '/../../src/Database.php';
 require_once __DIR__ . '/../../src/Response.php';
 require_once __DIR__ . '/../../src/Auth.php';
+require_once __DIR__ . '/../../src/Audit.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     Response::error('Method not allowed.', 405);
@@ -31,7 +32,7 @@ if ($uuid === '')     Response::error('A target uuid is required.', 422);
 if ($active === null) Response::error('active must be true or false.', 422);
 
 // Resolve target.
-$stmt = $pdo->prepare('SELECT id, role, is_active FROM users WHERE uuid = ? LIMIT 1');
+$stmt = $pdo->prepare('SELECT id, role, is_active, username FROM users WHERE uuid = ? LIMIT 1');
 $stmt->execute([$uuid]);
 $target = $stmt->fetch();
 if (!$target) Response::error('User not found.', 404);
@@ -60,5 +61,8 @@ if (!$active && $target['role'] === 'admin') {
 
 $update = $pdo->prepare('UPDATE users SET is_active = ? WHERE id = ?');
 $update->execute([$active ? 1 : 0, $targetId]);
+
+Audit::log($adminId, 'set_user_active', 'user', $uuid, '@' . $target['username'],
+    ['to' => $active ? 'active' : 'inactive']);
 
 Response::success(['uuid' => $uuid, 'is_active' => $active]);

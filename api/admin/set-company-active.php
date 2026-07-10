@@ -11,12 +11,13 @@
 require_once __DIR__ . '/../../src/Database.php';
 require_once __DIR__ . '/../../src/Response.php';
 require_once __DIR__ . '/../../src/Auth.php';
+require_once __DIR__ . '/../../src/Audit.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     Response::error('Method not allowed.', 405);
 }
 
-Auth::requireAdmin();
+$adminId = Auth::requireAdmin();
 $pdo = Database::conn();
 
 $in     = Response::input();
@@ -26,7 +27,7 @@ $active = filter_var($in['active'] ?? null, FILTER_VALIDATE_BOOLEAN, FILTER_NULL
 if ($uuid === '')     Response::error('A company uuid is required.', 422);
 if ($active === null) Response::error('active must be true or false.', 422);
 
-$stmt = $pdo->prepare('SELECT id, is_active FROM companies WHERE uuid = ? LIMIT 1');
+$stmt = $pdo->prepare('SELECT id, is_active, name FROM companies WHERE uuid = ? LIMIT 1');
 $stmt->execute([$uuid]);
 $company = $stmt->fetch();
 if (!$company) Response::error('Company not found.', 404);
@@ -38,5 +39,8 @@ if ((int) $company['is_active'] === ($active ? 1 : 0)) {
 
 $update = $pdo->prepare('UPDATE companies SET is_active = ? WHERE id = ?');
 $update->execute([$active ? 1 : 0, (int) $company['id']]);
+
+Audit::log($adminId, 'set_company_active', 'company', $uuid, $company['name'],
+    ['to' => $active ? 'active' : 'inactive']);
 
 Response::success(['uuid' => $uuid, 'is_active' => $active]);

@@ -13,12 +13,13 @@
 require_once __DIR__ . '/../../src/Database.php';
 require_once __DIR__ . '/../../src/Response.php';
 require_once __DIR__ . '/../../src/Auth.php';
+require_once __DIR__ . '/../../src/Audit.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     Response::error('Method not allowed.', 405);
 }
 
-Auth::requireAdmin();
+$adminId = Auth::requireAdmin();
 $pdo = Database::conn();
 
 $in   = Response::input();
@@ -31,7 +32,7 @@ if (!in_array($plan, ['free', 'plus'], true)) {
 }
 
 // Resolve target.
-$stmt = $pdo->prepare('SELECT id, plan FROM users WHERE uuid = ? LIMIT 1');
+$stmt = $pdo->prepare('SELECT id, plan, username FROM users WHERE uuid = ? LIMIT 1');
 $stmt->execute([$uuid]);
 $target = $stmt->fetch();
 if (!$target) Response::error('User not found.', 404);
@@ -45,5 +46,8 @@ if ($target['plan'] === $plan) {
 
 $update = $pdo->prepare('UPDATE users SET plan = ? WHERE id = ?');
 $update->execute([$plan, $targetId]);
+
+Audit::log($adminId, 'set_plan', 'user', $uuid, '@' . $target['username'],
+    ['from' => $target['plan'], 'to' => $plan]);
 
 Response::success(['uuid' => $uuid, 'plan' => $plan]);

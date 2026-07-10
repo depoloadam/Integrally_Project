@@ -33,8 +33,26 @@ if ($id <= 0) Response::error('A valid post id is required.', 422);
 
 // Admins can delete ANY post; regular users only their own.
 if (Auth::isAdmin()) {
+    // Snapshot the post BEFORE deleting so moderation actions can be
+    // audited. Only deleting SOMEONE ELSE'S post is a moderation act;
+    // an admin removing their own post is a normal delete (no audit).
+    $snap = $pdo->prepare('SELECT author_type, author_id, body FROM posts WHERE id = ? LIMIT 1');
+    $snap->execute([$id]);
+    $post = $snap->fetch();
+
     $stmt = $pdo->prepare('DELETE FROM posts WHERE id = ?');
     $stmt->execute([$id]);
+
+    $isOwnPost = $post
+        && $post['author_type'] === 'user'
+        && (int) $post['author_id'] === $userId;
+    if ($post && !$isOwnPost && $stmt->rowCount() > 0) {
+        require_once __DIR__ . '/../../src/Audit.php';
+        $snippet = trim(mb_substr(strip_tags((string) $post['body']), 0, 80));
+        $label   = $snippet !== '' ? '"' . $snippet . '"' : ('post #' . $id);
+        Audit::log($userId, 'delete_post', 'post', null, $label,
+            ['post_id' => $id, 'author_type' => $post['author_type'], 'author_id' => (int) $post['author_id']]);
+    }
 } else {
     // Delete only if this session owns the post.
     $stmt = $pdo->prepare(
