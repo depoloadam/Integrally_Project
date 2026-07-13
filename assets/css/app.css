@@ -614,6 +614,30 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 }
 .comp-draftbar button:hover { text-decoration:underline; }
 
+/* inline "add a link" row — revealed by the 🔗 Link button */
+.comp-linkinput {
+  display:flex; gap:8px; align-items:center; margin-top:10px;
+}
+.comp-linkinput input {
+  flex:1; min-width:0; padding:9px 12px; font-family:inherit; font-size:14px;
+  border:1px solid var(--in-line); border-radius:9px;
+  background:var(--in-bg); color:var(--in-ink);
+}
+.comp-linkinput input:focus {
+  outline:none; background:#fff; border-color:var(--in-accent);
+  box-shadow:0 0 0 3px rgba(14,122,111,.12);
+}
+.comp-linkinput input.invalid {
+  border-color:var(--in-error);
+  box-shadow:0 0 0 3px rgba(192,57,43,.12);
+}
+.comp-linkinput .in-btn { flex:none; padding:9px 16px; }
+.comp-linkcancel {
+  flex:none; background:none; border:none; font-family:inherit; font-size:13px;
+  color:var(--in-muted); cursor:pointer; padding:8px 4px;
+}
+.comp-linkcancel:hover { color:var(--in-ink); text-decoration:underline; }
+
 /* quick emoji row */
 .comp-emojis { display:flex; gap:2px; margin-right:auto; }
 .comp-emoji {
@@ -696,6 +720,43 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 .img-lightbox-x:hover { background:rgba(255,255,255,.28); }
 
 /* cert announcement card */
+/* ---------- milestone posts (new role / certification) ----------
+   One shape, two tints. .cert is teal (matches the brand accent),
+   .job is indigo so the two read as different KINDS of news at a
+   glance while still being obviously the same family of card. */
+.post-milestone {
+  display:flex; gap:14px; align-items:center;
+  border-radius:12px; padding:14px 16px;
+  position:relative; overflow:hidden;
+}
+.post-milestone .ms-icon {
+  width:46px; height:46px; border-radius:11px; flex:none;
+  display:grid; place-items:center; font-size:22px;
+}
+.post-milestone .ms-text { min-width:0; }
+.post-milestone .ms-label {
+  font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.6px;
+}
+.post-milestone .ms-name {
+  font-size:16px; font-weight:700; color:var(--in-ink); margin-top:2px;
+  overflow-wrap:anywhere;
+}
+.post-milestone .ms-sub { font-size:13px; color:var(--in-muted); margin-top:1px; }
+
+.post-milestone.cert { background:linear-gradient(135deg,#ecfdf7,#e0f7f3); border:1px solid #b3e6d1; }
+.post-milestone.cert .ms-icon { background:linear-gradient(135deg,var(--in-accent),var(--in-teal-bright)); }
+.post-milestone.cert .ms-label { color:var(--in-accent); }
+
+.post-milestone.job { background:linear-gradient(135deg,#eef2ff,#e6ecfd); border:1px solid #c2cdf2; }
+.post-milestone.job .ms-icon { background:linear-gradient(135deg,#3b53c4,#6d86e8); }
+.post-milestone.job .ms-label { color:#3b53c4; }
+
+/* the share-to-feed modal's "this is how it will look" line */
+.share-intro { font-size:13px; color:var(--in-muted); margin:0 0 10px; }
+
+/* LEGACY: cert posts created before the milestone refactor are already in
+   the database rendering .post-cert / .cert-* markup via cached JS. Keep
+   these until you're confident every client has the new feed.js. */
 .post-cert { display:flex; gap:14px; align-items:center; background:linear-gradient(135deg,#ecfdf7,#e0f7f3); border:1px solid #b3e6d1; border-radius:12px; padding:14px 16px; }
 .cert-icon { width:46px; height:46px; border-radius:11px; flex:none; display:grid; place-items:center; background:linear-gradient(135deg,var(--in-accent),var(--in-teal-bright)); font-size:22px; }
 .cert-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--in-accent); }

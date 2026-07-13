@@ -94,10 +94,16 @@ function buildComposer(opts) {
         <img id="comp-preview-img" src="" alt="">
         <button id="comp-preview-x" title="Remove image">✕</button>
       </div>
+      <div id="comp-linkinput" class="comp-linkinput" style="display:none">
+        <input type="url" id="comp-linkurl" placeholder="Paste a link — https://example.com" autocomplete="off">
+        <button type="button" class="in-btn primary" id="comp-linkadd">Add</button>
+        <button type="button" class="comp-linkcancel" id="comp-linkcancel">Cancel</button>
+      </div>
       <div id="comp-link" class="comp-link" style="display:none"></div>
       <div class="comp-actions">
         <input type="file" id="comp-file" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none">
         <button class="comp-imgbtn" id="comp-img" title="Add image">🖼️ Image</button>
+        <button class="comp-imgbtn" id="comp-linkbtn" title="Add a link">🔗 Link</button>
         <span class="comp-emojis" id="comp-emojis" title="Insert emoji"></span>
         <select id="comp-vis" title="Who can see this">
           <option value="public">🌐 Public</option>
@@ -187,6 +193,24 @@ function buildComposer(opts) {
     return { raw, clean };
   };
 
+  // Turn what a person actually typed into a usable URL, or null if it
+  // isn't one. Shared by the "Add link" button and the paste handler so
+  // the two can't drift apart.
+  const normalizeUrl = (raw) => {
+    let url = String(raw || "").trim();
+    if (!url) return null;
+    // Be forgiving: "example.com" is what people type. Add the scheme
+    // rather than reject them for omitting it.
+    if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+    try {
+      const u = new URL(url);
+      if (!u.hostname.includes(".")) return null;   // "https://localhost" isn't shareable
+      return url;
+    } catch (e) {
+      return null;
+    }
+  };
+
   const renderLinkCard = (lk) => {
     const host = (() => { try { return new URL(lk.url).hostname.replace(/^www\./, ""); } catch (e) { return lk.site || ""; } })();
     linkBox.innerHTML = `
@@ -207,28 +231,64 @@ function buildComposer(opts) {
     };
   };
 
+  // Loads a preview card for one URL.
+  //
+  // fromBody=true  — the URL was TYPED into the post. It stays in the text
+  //                  (it's part of the sentence the person wrote), and we
+  //                  re-check it is still there before rendering, so a
+  //                  slow response can't resurrect a card for a URL that
+  //                  has since been deleted.
+  // fromBody=false — the URL came from the "Add link" button. The card IS
+  //                  the link; no raw URL is left in the body, so there is
+  //                  nothing to re-check against.
+  const loadPreview = async (url, { fromBody }) => {
+    lastLinkUrl = url;
+    linkBox.style.display = "flex";
+    linkBox.innerHTML = `<div class="comp-link-loading">Loading link preview…</div>`;
+
+    const r = await api("/posts/link-preview.php", "POST", { url });
+
+    if (fromBody) {
+      const still = findUrl(bodyText());
+      if (!still || still.clean !== url) return;   // they deleted/changed it while we fetched
+    }
+
+    if (r.ok && r.data?.success) {
+      linkPreview = r.data.data;
+      renderLinkCard(linkPreview);
+
+      // If the WHOLE message is nothing but this URL, the raw text is
+      // pure noise now that the card exists — drop it. This is the
+      // typed-it-out-by-hand equivalent of pasting a bare link.
+      //
+      // Only when it's the whole message. A URL sitting inside a sentence
+      // ("see https://x.com for details") is part of what the person
+      // wrote, and deleting it would leave "see for details".
+      if (fromBody && bodyText().trim() === url) {
+        editor.clear();
+        editor.el.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    } else {
+      linkPreview = null;
+      linkBox.style.display = "none";
+      linkBox.innerHTML = "";
+      if (!fromBody) toast("Couldn't load a preview for that link.", "err");
+    }
+    syncExpandBtn();
+  };
+
   const fetchLinkPreview = async () => {
     const found = findUrl(bodyText());
     if (!found) {
+      // No URL in the text. Only clear the card if it CAME from the text —
+      // a card added via the button has no URL in the body by design, and
+      // must survive every keystroke.
       if (!linkPreview) { lastLinkUrl = null; linkBox.style.display = "none"; linkBox.innerHTML = ""; }
       return;
     }
     const url = found.clean;
     if (url === lastLinkUrl || dismissedUrls.has(url)) return;
-    lastLinkUrl = url;
-    linkBox.style.display = "flex";
-    linkBox.innerHTML = `<div class="comp-link-loading">Loading link preview…</div>`;
-    const r = await api("/posts/link-preview.php", "POST", { url });
-    const still = findUrl(bodyText());
-    if (!still || still.clean !== url) return;
-    if (r.ok && r.data?.success) {
-      linkPreview = r.data.data;
-      renderLinkCard(linkPreview);
-    } else {
-      linkPreview = null;
-      linkBox.style.display = "none";
-      linkBox.innerHTML = "";
-    }
+    await loadPreview(url, { fromBody: true });
   };
 
   // ---- live character counter ----
@@ -432,6 +492,106 @@ function buildComposer(opts) {
     clearTimeout(linkTimer);
     linkTimer = setTimeout(fetchLinkPreview, 600);
   });
+
+  // ---- pasting a link --------------------------------------------------
+  // Pasting a URL is the single most common way a link gets into a post,
+  // and it went through the typing pipeline — which leaves the raw URL
+  // sitting in the message text next to the preview card. Same ugly
+  // duplication the "Add link" button avoids.
+  //
+  // So: if the ENTIRE paste is one URL, intercept it. The card is the
+  // link; no text goes into the body.
+  //
+  // "Entire paste" is the load-bearing condition. Pasting a paragraph that
+  // happens to contain a link is not the same act — that text is content
+  // the person means to publish, so it falls through untouched and the
+  // normal auto-detect handles the URL inside it.
+  editor.el.addEventListener("paste", (e) => {
+    const clip = (e.clipboardData || window.clipboardData);
+    if (!clip) return;
+
+    const pasted = (clip.getData("text/plain") || "").trim();
+    if (!pasted) return;
+
+    // Require a scheme or a leading "www." before treating this as a link.
+    // A looser test would swallow ordinary text — "Node.js", "e.g." and
+    // "index.php" all look like bare domains to a naive pattern.
+    const looksLikeUrl = /^https?:\/\/\S+$/i.test(pasted) || /^www\.\S+\.\S+$/i.test(pasted);
+    if (!looksLikeUrl) return;
+
+    const url = normalizeUrl(pasted);
+    if (!url) return;   // couldn't parse it — let it paste as plain text
+
+    e.preventDefault();
+    dismissedUrls.delete(url);   // pasting it again is a clear "I do want this"
+    closeLinkRow();
+    clearTimeout(linkTimer);
+    loadPreview(url, { fromBody: false });
+  });
+
+  // ---- "Add link" button -----------------------------------------------
+  // Links in the body are ALREADY picked up automatically — but that is
+  // invisible, and nobody discovers a feature that never announces itself.
+  // This button makes it explicit.
+  //
+  // It deliberately does NOT run its own preview fetch. It writes the URL
+  // into the editor and lets the existing auto-detect pipeline handle it,
+  // for two reasons: the preview machinery re-checks that the URL is still
+  // present in the body before rendering (so a parallel path would fight
+  // it), and a link a reader can't see in the text is a link they can't
+  // copy if the preview card fails to load.
+  const linkRow    = composer.querySelector("#comp-linkinput");
+  const linkField  = composer.querySelector("#comp-linkurl");
+  const linkBtn    = composer.querySelector("#comp-linkbtn");
+
+  const closeLinkRow = () => {
+    linkRow.style.display = "none";
+    linkField.value = "";
+    linkField.classList.remove("invalid");
+  };
+
+  linkBtn.onclick = () => {
+    expand();
+    const open = linkRow.style.display !== "none";
+    if (open) { closeLinkRow(); return; }
+    linkRow.style.display = "flex";
+    linkField.focus();
+  };
+
+  composer.querySelector("#comp-linkcancel").onclick = () => {
+    closeLinkRow();
+    editor.el.focus();
+  };
+
+  const submitLink = () => {
+    const url = normalizeUrl(linkField.value);
+    if (!url) {
+      linkField.classList.add("invalid");
+      linkField.focus();
+      return;
+    }
+
+    // If this URL's preview was dismissed earlier, adding it deliberately
+    // is a clear "actually, I do want it" — honour that.
+    dismissedUrls.delete(url);
+
+    // NOTE: we do NOT write the URL into the body. The preview card IS the
+    // link — leaving a raw "https://…" in the message text as well is the
+    // ugly duplication this button exists to avoid. The card carries the
+    // URL through to the post via meta.link, and the server accepts a post
+    // whose only content is a link.
+    closeLinkRow();
+    clearTimeout(linkTimer);
+    loadPreview(url, { fromBody: false });
+    editor.el.focus();
+  };
+
+  composer.querySelector("#comp-linkadd").onclick = submitLink;
+  linkField.addEventListener("keydown", (e) => {
+    if (e.key === "Enter")  { e.preventDefault(); submitLink(); }
+    if (e.key === "Escape") { e.preventDefault(); closeLinkRow(); editor.el.focus(); }
+  });
+  linkField.addEventListener("input", () => linkField.classList.remove("invalid"));
 
   composer.querySelector("#comp-post").onclick = async () => {
     const html = editor.getHTML();
@@ -666,15 +826,33 @@ function renderPost(it, opts = {}) {
   if (it.post_type === "cert" && it.meta) {
     const m = it.meta;
     contentHtml = `
-      <div class="post-cert">
-        <div class="cert-icon">🎓</div>
-        <div>
-          <div class="cert-label">Earned a certification</div>
-          <div class="cert-name">${esc(m.name || "")}</div>
-          ${m.issuer ? `<div class="cert-issuer">${esc(m.issuer)}</div>` : ""}
+      <div class="post-milestone cert">
+        <div class="ms-icon">🎓</div>
+        <div class="ms-text">
+          <div class="ms-label">Earned a certification</div>
+          <div class="ms-name">${esc(m.name || "")}</div>
+          ${m.issuer ? `<div class="ms-sub">${esc(m.issuer)}</div>` : ""}
         </div>
       </div>
-      ${it.body ? `<div class="post-body" style="margin-top:12px">${esc(it.body).replace(/\n/g,"<br>")}</div>` : ""}`;
+      ${it.body ? `<div class="post-body rich-content" style="margin-top:12px">${it.body}</div>` : ""}`;
+  } else if (it.post_type === "job" && it.meta) {
+    const m = it.meta;
+    // "at Acme · Started March 2026" — build the sub-line from whatever
+    // parts we actually have, so a missing company or date never leaves a
+    // stray separator behind.
+    const bits = [];
+    if (m.company) bits.push(esc(m.company));
+    if (m.start_label) bits.push(esc(m.start_label));
+    contentHtml = `
+      <div class="post-milestone job">
+        <div class="ms-icon">💼</div>
+        <div class="ms-text">
+          <div class="ms-label">${m.is_promotion ? "New role" : "Started a new position"}</div>
+          <div class="ms-name">${esc(m.title || "")}</div>
+          ${bits.length ? `<div class="ms-sub">${bits.join(" · ")}</div>` : ""}
+        </div>
+      </div>
+      ${it.body ? `<div class="post-body rich-content" style="margin-top:12px">${it.body}</div>` : ""}`;
   } else {
     // Body is server-sanitized rich-text HTML (src/RichText.php), safe to render.
     contentHtml = it.body ? `<div class="post-body rich-content">${it.body}</div>` : "";

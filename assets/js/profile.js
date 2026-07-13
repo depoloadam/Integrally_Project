@@ -1151,18 +1151,25 @@ function addJob(existing) {
       });
       closeModal(); renderProfile();
     } else {
+      // Read every field BEFORE closeModal(). closeModal() sets the
+      // modal's innerHTML to "", so any $("j-…") lookup after it returns
+      // null and reading .value throws — which silently killed both the
+      // share prompt AND the renderProfile() below it.
+      const startDate = $("j-start").value;
+      const isCurrent = currentCb.checked;
+
       await api("/profile/jobs/add.php","POST",{
         title, company_name:company,
         company_uuid: (linkedCompany && company === linkedCompany.name) ? linkedCompany.uuid : null,
-        start_date:$("j-start").value,
-        end_date: currentCb.checked ? "" : $("j-end").value,   // current job -> no end date
+        start_date: startDate,
+        end_date: isCurrent ? "" : $("j-end").value,   // current job -> no end date
         description:$("j-desc").value.trim()
       });
       closeModal();
       // Only prompt to post to the feed for a CURRENT role — sharing a
       // past job to the feed doesn't make sense.
-      if (currentCb.checked) {
-        offerShare(`💼 Excited to share a new role: ${title}${company ? " at " + company : ""}!`);
+      if (isCurrent) {
+        offerShareJob(title, company, startDate);
       }
       renderProfile();
     }
@@ -1315,6 +1322,89 @@ async function removeChip(ref) {
 }
 
 // ---- share-to-feed prompts -------------------------------------------
+// Both prompts show a LIVE PREVIEW of the card that will appear in the
+// feed, so the person can see what they're publishing before they publish
+// it. The note is optional — a milestone post with an empty body still
+// renders as a proper card, because the content lives in meta, not body.
+//
+// Job posts used to be plain text ("💼 Excited to share a new role: X at
+// Y!") — a hardcoded sentence in someone else's voice, with no card. They
+// now post post_type:"job" and render as a milestone, the same way certs
+// already did. The server has always whitelisted the type; nothing else
+// was using it.
+
+// "March 2026" from an ISO date. Returns "" for a missing/garbage value
+// rather than "Invalid Date".
+function monthYear(iso) {
+  if (!iso) return "";
+  const d = new Date(iso + (iso.length === 7 ? "-01" : ""));
+  if (isNaN(d)) return "";
+  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+}
+
+function milestoneCardHtml(kind, m) {
+  const isJob = kind === "job";
+  const bits = isJob
+    ? [m.company, m.start_label].filter(Boolean)
+    : [m.issuer].filter(Boolean);
+  return `
+    <div class="post-milestone ${isJob ? "job" : "cert"}">
+      <div class="ms-icon">${isJob ? "💼" : "🎓"}</div>
+      <div class="ms-text">
+        <div class="ms-label">${isJob ? (m.is_promotion ? "New role" : "Started a new position") : "Earned a certification"}</div>
+        <div class="ms-name">${esc(isJob ? m.title : m.name)}</div>
+        ${bits.length ? `<div class="ms-sub">${bits.map(esc).join(" · ")}</div>` : ""}
+      </div>
+    </div>`;
+}
+
+function offerShareMilestone(kind, meta, noteHint) {
+  openModal(`
+    <h3>Share to your feed?</h3>
+    <p class="share-intro">This is how it will look:</p>
+    ${milestoneCardHtml(kind, meta)}
+    <label style="margin-top:14px">Add a note (optional)</label>
+    <textarea id="share-note" rows="3" placeholder="${esc(noteHint)}"></textarea>
+    <div class="in-modal-actions">
+      <button class="in-btn ghost" onclick="closeModal()">Skip</button>
+      <button class="in-btn primary" id="share-go">Post to feed</button>
+    </div>`);
+
+  $("share-go").onclick = async () => {
+    const btn = $("share-go");
+    btn.disabled = true; btn.textContent = "Posting…";
+    const r = await api("/posts/create.php", "POST", {
+      post_type: kind,
+      body: $("share-note").value.trim(),
+      meta,
+      visibility: "public",
+    });
+    if (r.ok && r.data?.success) {
+      closeModal();
+      toast("Shared to your feed.", "ok");
+    } else {
+      btn.disabled = false; btn.textContent = "Post to feed";
+      toast(r.data?.error || "Could not share to your feed.", "err");
+    }
+  };
+}
+
+function offerShareJob(title, company, startDate) {
+  offerShareMilestone("job", {
+    title,
+    company: company || null,
+    start_label: monthYear(startDate) || null,
+  }, "What are you looking forward to?");
+}
+
+function offerShareCert(name, issuer) {
+  offerShareMilestone("cert", {
+    name,
+    issuer: issuer || null,
+  }, "Say something about it…");
+}
+
+// Kept for any caller that still wants a plain-text share prompt.
 function offerShare(suggestedText) {
   openModal(`
     <h3>Share to your feed?</h3>
@@ -1323,20 +1413,6 @@ function offerShare(suggestedText) {
   $("share-go").onclick = async () => {
     const body = $("share-body").value.trim();
     if (body) await api("/posts/create.php","POST",{ body, visibility:"public" });
-    closeModal();
-  };
-}
-function offerShareCert(name, issuer) {
-  openModal(`
-    <h3>Share to your feed?</h3>
-    <div class="post-cert" style="margin-bottom:14px">
-      <div class="cert-icon">🎓</div>
-      <div><div class="cert-label">Earned a certification</div><div class="cert-name">${esc(name)}</div>${issuer ? `<div class="cert-issuer">${esc(issuer)}</div>` : ""}</div>
-    </div>
-    <label>Add a note (optional)</label><textarea id="share-note" rows="2" placeholder="Say something about it…"></textarea>
-    <div class="in-modal-actions"><button class="in-btn ghost" onclick="closeModal()">Skip</button><button class="in-btn primary" id="share-cert-go">Post to feed</button></div>`);
-  $("share-cert-go").onclick = async () => {
-    await api("/posts/create.php","POST",{ post_type:"cert", body:$("share-note").value.trim(), meta:{ name, issuer }, visibility:"public" });
     closeModal();
   };
 }
