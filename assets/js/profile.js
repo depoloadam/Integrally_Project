@@ -889,6 +889,8 @@ function editCore(p, headline, attrs) {
     try {
       const res = await fetch(API_BASE + "/profile/resume-upload.php", { method:"POST", credentials:"include", body:fd });
       const data = await res.json();
+      // Multipart bypasses api(), so the 429 handler has to be called by hand.
+      if (res.status === 429) handleRateLimited(data);
       if (res.ok && data.success) {
         resumeState.current = data.data;
         paintResume();

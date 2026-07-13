@@ -369,6 +369,8 @@ function openApplyModal(j) {
       try {
         const res = await fetch(API_BASE + "/applications/apply.php", { method: "POST", credentials: "include", body: fd });
         r = { ok: res.ok, data: await res.json() };
+        // Multipart bypasses api(), so the 429 handler has to be called by hand.
+        if (res.status === 429) handleRateLimited(r.data);
       } catch (e) { r = { ok: false, data: { error: "Upload failed." } }; }
     } else {
       r = await api("/applications/apply.php", "POST",

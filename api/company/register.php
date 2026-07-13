@@ -11,10 +11,14 @@
 require_once __DIR__ . '/../../src/Database.php';
 require_once __DIR__ . '/../../src/Response.php';
 require_once __DIR__ . '/../../src/Auth.php';
+require_once __DIR__ . '/../../src/RateLimit.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     Response::error('Method not allowed.', 405);
 }
+
+// Throttle account farming. Keyed on IP — nobody is signed in yet.
+RateLimit::guard('company_register');
 
 $in = Response::input();
 

@@ -24,7 +24,26 @@ async function api(path, method = "GET", body = null) {
   const res = await fetch(API_BASE + path, opts);
   let data = null;
   try { data = await res.json(); } catch (e) {}
+  if (res.status === 429) handleRateLimited(data);
   return { ok: res.ok, status: res.status, data };
+}
+
+// ---- rate limiting ---------------------------------------------------
+// The backend (src/RateLimit.php) throttles per actor and answers 429 with
+// { code: "rate_limited", error: "<human message>" }. Surfacing that HERE
+// rather than at every call site means a new endpoint gets the behaviour
+// for free — callers still see { ok:false } and can render their own
+// inline error as usual, they just don't have to know 429 exists.
+//
+// Guarded against double-firing: several of our views issue parallel
+// requests on load, and a burst of six identical toasts helps nobody.
+let _rlLastToast = 0;
+function handleRateLimited(data) {
+  const now = Date.now();
+  if (now - _rlLastToast < 3000) return;
+  _rlLastToast = now;
+  const msg = (data && data.error) || "You're doing that too quickly. Please slow down.";
+  toast(msg, "err");
 }
 
 // ---- modal system ----------------------------------------------------

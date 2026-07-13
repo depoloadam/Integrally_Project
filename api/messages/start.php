@@ -23,10 +23,14 @@ require_once __DIR__ . '/../../src/Response.php';
 require_once __DIR__ . '/../../src/Auth.php';
 require_once __DIR__ . '/../../src/Social.php';
 require_once __DIR__ . '/../../src/Messaging.php';
+require_once __DIR__ . '/../../src/RateLimit.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     Response::error('Method not allowed.', 405);
 }
+
+// Throttle: see src/RateLimit.php. Rejects with 429 + code 'rate_limited'.
+RateLimit::guardAll(['message_start', 'message_start_day']);
 
 $actor = Social::requireActor();
 Messaging::requireUserActor($actor);
