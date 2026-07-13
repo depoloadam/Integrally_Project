@@ -156,14 +156,16 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 .in-phead .loc { color:var(--in-muted); font-size:14px; }
 .in-phead .headline { color:var(--in-ink-soft); font-size:14px; margin-top:8px; }
 
-/* social links under the profile header — stacked rows, only rendered
-   when set. Each row: [logo placeholder] + [site name]. */
-.in-sociallinks { display:flex; flex-direction:column; gap:8px; margin-top:14px; width:100%; }
+/* social links under the profile header — compact pills in a wrapping
+   row. Each pill: [small logo dot] + [site name], width fitted to the
+   label. Long custom website labels are ellipsized; the full URL lives
+   in the title tooltip. */
+.in-sociallinks { display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; width:100%; }
 .in-social-btn {
-  display:flex; align-items:center; gap:10px; background:var(--in-bg);
-  border:1px solid var(--in-line); border-radius:10px; padding:9px 12px;
-  font-size:13px; font-weight:600; color:var(--in-ink-soft); text-decoration:none;
-  width:100%; text-align:left;
+  display:inline-flex; align-items:center; gap:6px; background:var(--in-bg);
+  border:1px solid var(--in-line); border-radius:999px; padding:4px 10px 4px 5px;
+  font-size:12px; font-weight:600; color:var(--in-ink-soft); text-decoration:none;
+  max-width:100%;
 }
 .in-social-btn:hover { border-color:var(--in-accent); color:var(--in-accent); background:var(--in-card); }
 .in-social-btn.linkedin:hover { border-color:#0a66c2; color:#0a66c2; }
@@ -171,13 +173,13 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 .in-social-btn.website:hover { border-color:var(--in-accent); color:var(--in-accent); }
 /* placeholder logo swatch — swap for an <img> per platform later */
 .in-social-logo {
-  flex:none; width:22px; height:22px; border-radius:6px;
+  flex:none; width:16px; height:16px; border-radius:50%;
   background:linear-gradient(135deg,var(--in-accent),var(--in-teal-bright));
   display:inline-block;
 }
 .in-social-btn.linkedin .in-social-logo { background:linear-gradient(135deg,#0a66c2,#3b9ae1); }
 .in-social-btn.twitter .in-social-logo { background:linear-gradient(135deg,#0b1f2a,#38505c); }
-.in-social-name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.in-social-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:160px; }
 
 /* bio box — distinct shape from the standard section cards (.in-card2),
    sits above the scores panel at the top of the right column. */
@@ -231,10 +233,14 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 .in-phead-dropdown button:hover { background:var(--in-bg); }
 
 /* section cards */
-.in-card2 { background:var(--in-card); border:1px solid var(--in-line); border-radius:14px; padding:20px 22px; margin-bottom:18px; }
+.in-card2 { position:relative; background:var(--in-card); border:1px solid var(--in-line); border-radius:14px; padding:20px 22px; margin-bottom:18px; }
 .in-card2 h2 { font-size:15px; text-transform:uppercase; letter-spacing:0.6px; color:var(--in-ink-soft); margin:0 0 14px; display:flex; align-items:center; }
-.in-card2 h2 .add { margin-left:auto; background:var(--in-bg); border:1px solid var(--in-line); color:var(--in-accent); width:28px; height:28px; border-radius:7px; cursor:pointer; font-size:18px; line-height:1; font-weight:600; }
-.in-card2 h2 .add:hover { border-color:var(--in-accent); }
+/* corner "+" — pulled out of the h2 flow and pinned at the same offset
+   and size as the other corner icons (.in-bio-edit / .in-phead-menu /
+   .co-edit-corner: 30x30 at top:12 right:12), so every card's corner
+   control sits in exactly the same spot. */
+.in-card2 h2 .add { position:absolute; top:12px; right:12px; z-index:2; background:var(--in-bg); border:1px solid var(--in-line); color:var(--in-accent); width:30px; height:30px; border-radius:8px; cursor:pointer; font-size:18px; line-height:1; font-weight:600; display:grid; place-items:center; padding:0; }
+.in-card2 h2 .add:hover { border-color:var(--in-accent); background:#fff; }
 .in-item { padding:12px 0; border-top:1px solid var(--in-line); display:flex; gap:12px; }
 .in-item:first-of-type { border-top:none; }
 .in-item .meta { flex:1; }

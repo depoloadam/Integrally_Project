@@ -415,11 +415,9 @@ async function loadScoreComparison(s, slot, scoreId) {
 }
 
 // ---- social link buttons (LinkedIn / X / website) ---------------------
-// Renders a row of buttons, one per attribute that actually has a value.
+// Renders a compact row of pill links, one per attribute that actually
+// has a value. Pills wrap onto a second line if the labels are long.
 // Returns "" (nothing) if none are set, so it never leaves an empty gap.
-// Renders a stacked list of buttons, one per attribute that actually has
-// a value. Each row is [logo placeholder] + [site name]. Returns ""
-// (nothing) if none are set, so it never leaves an empty gap.
 function socialLinksHtml(attrs) {
   const websiteLabel = (attrs.website_label?.value || "").trim() || "Website";
   const links = [
@@ -436,7 +434,7 @@ function socialLinksHtml(attrs) {
   return `
     <div class="in-sociallinks">
       ${links.map(l => `
-        <a class="in-social-btn ${l.cls}" href="${esc(normalize(l.url))}" target="_blank" rel="noopener noreferrer nofollow">
+        <a class="in-social-btn ${l.cls}" href="${esc(normalize(l.url))}" target="_blank" rel="noopener noreferrer nofollow" title="${esc(l.url)}">
           <span class="in-social-logo" aria-hidden="true"></span>
           <span class="in-social-name">${esc(l.label)}</span>
         </a>`).join("")}
