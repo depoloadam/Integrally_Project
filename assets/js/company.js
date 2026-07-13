@@ -8,6 +8,21 @@
 //   the same time (separate sessions). CO holds the company session.
 // =====================================================================
 
+// Websites are stored as typed (e.g. "example.com" with no protocol).
+// Used directly as an <a href>, a bare host string is a RELATIVE link,
+// so the browser appends it to the current path instead of navigating
+// out — the site opens "localhost/integrally/example.com" instead of
+// leaving the app. Always route website hrefs through this helper.
+// Returns { href, text } — href always has a protocol, text is the
+// bare host for display (no protocol, no trailing slash).
+function normalizeWebsite(raw) {
+  if (!raw) return { href: "", text: "" };
+  const href = /^https?:\/\//i.test(raw) ? raw : "https://" + raw;
+  const text = raw.replace(/^https?:\/\//i, "").replace(/\/$/, "");
+  return { href, text };
+}
+
+
 let CO = null;   // current logged-in company (or null)
 
 // Establish the company session (called from boot()). Safe when none.
@@ -190,8 +205,7 @@ async function renderCompanyDashboard() {
     ? new Date(CO.created_at.replace(" ", "T")).toLocaleDateString(undefined, { month: "long", year: "numeric" })
     : "";
   // Websites are stored as typed — normalize the href, show the bare host-ish text.
-  const webHref = CO.website ? (/^https?:\/\//i.test(CO.website) ? CO.website : "https://" + CO.website) : "";
-  const webText = CO.website ? CO.website.replace(/^https?:\/\//i, "").replace(/\/$/, "") : "";
+  const { href: webHref, text: webText } = normalizeWebsite(CO.website);
 
   const infoRows = [
     CO.email ? `<div class="co-info-row"><div class="co-info-label">Email</div><div class="co-info-value">${esc(CO.email)}</div></div>` : "",
@@ -845,7 +859,7 @@ async function renderCompanyProfile(uuid) {
         <div style="flex:1">
           <h1 style="margin:0 0 4px;font-size:24px;letter-spacing:-0.5px">${esc(c.name)}${c.is_verified ? ' <span class="post-tag" style="vertical-align:middle">Verified</span>' : ""}</h1>
           <div class="job-company" style="font-size:14.5px">${esc(c.industry || "")}${c.city ? " · " + esc(c.city) + (c.state ? ", " + esc(c.state) : "") : ""}</div>
-          ${c.website ? `<a href="${esc(c.website)}" target="_blank" rel="noopener noreferrer" style="font-size:13.5px;color:var(--in-accent);text-decoration:none">${esc(c.website)} ↗</a>` : ""}
+          ${c.website ? `<a href="${esc(normalizeWebsite(c.website).href)}" target="_blank" rel="noopener noreferrer" style="font-size:13.5px;color:var(--in-accent);text-decoration:none">${esc(normalizeWebsite(c.website).text)} ↗</a>` : ""}
           <div class="co-meta-row"><span class="in-followcount">${followerCount} follower${followerCount === 1 ? "" : "s"}</span>${since ? `<span class="co-since">· Member since ${esc(since)}</span>` : ""}</div>
         </div>
         ${canFollow ? `<button class="in-follow-btn ${isFollowing ? "following" : ""}" id="cp-follow" style="width:auto;flex:none;margin-top:0;padding:9px 22px;align-self:flex-start">${isFollowing ? "Following" : "Follow"}</button>` : ""}
