@@ -78,10 +78,17 @@ async function renderFeed() {
 //   onPosted    — callback after a successful post
 function buildComposer(opts) {
   const composer = el(`
-    <div class="in-card2 in-composer">
+    <div class="in-card2 in-composer collapsed">
       <div class="comp-top">
         <div class="comp-avatar">${opts.avatarHTML}</div>
         <div id="comp-editor" style="flex:1;min-width:0"></div>
+      </div>
+      <button type="button" class="comp-expand" id="comp-expand" title="Expand composer" aria-label="Expand composer">
+        <span class="comp-expand-chev">⌄</span>
+      </button>
+      <div id="comp-draftbar" class="comp-draftbar" style="display:none">
+        <span>Draft restored</span>
+        <button id="comp-draft-discard" type="button">Discard</button>
       </div>
       <div id="comp-preview" class="comp-preview" style="display:none">
         <img id="comp-preview-img" src="" alt="">
@@ -91,12 +98,13 @@ function buildComposer(opts) {
       <div class="comp-actions">
         <input type="file" id="comp-file" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none">
         <button class="comp-imgbtn" id="comp-img" title="Add image">🖼️ Image</button>
+        <span class="comp-emojis" id="comp-emojis" title="Insert emoji"></span>
         <select id="comp-vis" title="Who can see this">
           <option value="public">🌐 Public</option>
           <option value="followers">👥 Followers</option>
         </select>
         <span class="comp-count" id="comp-count"></span>
-        <button class="in-btn primary" id="comp-post" style="flex:none;padding:9px 18px">Post</button>
+        <button class="in-btn primary" id="comp-post" title="Post (Ctrl+Enter)" style="flex:none;padding:9px 18px">Post</button>
       </div>
     </div>`);
 
@@ -112,7 +120,11 @@ function buildComposer(opts) {
   const preview = composer.querySelector("#comp-preview");
   const previewImg = composer.querySelector("#comp-preview-img");
   composer.querySelector("#comp-img").onclick = () => fileInput.click();
-  composer.querySelector("#comp-preview-x").onclick = () => { attachedUrl = null; fileInput.value = ""; preview.style.display = "none"; previewImg.src = ""; };
+  composer.querySelector("#comp-preview-x").onclick = () => {
+    attachedUrl = null; fileInput.value = "";
+    preview.style.display = "none"; previewImg.src = "";
+    syncExpandBtn();   // removing the image may have made the composer empty again
+  };
   fileInput.onchange = async () => {
     const f = fileInput.files[0];
     if (!f) return;
@@ -159,6 +171,7 @@ function buildComposer(opts) {
       toast("Image upload failed. Please try another file.", "err");
       reset();
     }
+    syncExpandBtn();   // an attached image counts as content
   };
   // ---- link preview ----
   let linkPreview   = null;
@@ -190,6 +203,7 @@ function buildComposer(opts) {
       linkPreview = null;
       linkBox.style.display = "none";
       linkBox.innerHTML = "";
+      syncExpandBtn();
     };
   };
 
@@ -245,12 +259,176 @@ function buildComposer(opts) {
     countEl.className = "comp-count" + (over ? " over" : warn ? " warn" : "");
     postBtn.disabled = over;
     postBtn.title = over ? `Posts are limited to ${POST_MAX_CHARS.toLocaleString()} characters.` : "";
+    // Emptiness may have changed, which decides whether collapse is offered.
+    syncExpandBtn();
   };
-  updateCount();   // paint the initial "0 / 3,000" rather than waiting for a keystroke
+
+  // ---- collapsed-until-focused --------------------------------------
+  // The composer starts as one quiet line ("Share an update…"); toolbar
+  // and action row reveal on first focus. Clicking the field is easy to
+  // MISS as an affordance, so the chevron underneath does it explicitly.
+  //
+  // The chevron is a TOGGLE, but collapse is only offered when the
+  // composer is EMPTY. Collapsing hides the action row — including the
+  // Post button — so allowing it mid-draft would look like the post had
+  // been swallowed. Once there's text, an image, or a link, the only way
+  // out is to publish it or clear it.
+  //
+  // Note there's still no auto-collapse on BLUR: that would mean fighting
+  // focus events every time someone clicks the image button or the
+  // visibility select. Collapse stays a deliberate, user-driven act.
+  const expandBtn = composer.querySelector("#comp-expand");
+
+  const isEmpty = () =>
+    !editor.getText() && !attachedUrl && !(linkPreview && linkPreview.url);
+
+  function syncExpandBtn() {
+    const collapsed = composer.classList.contains("collapsed");
+    // Show when collapsed (as "open me"), or when expanded AND empty
+    // (as "close me"). Hidden while a draft is in progress.
+    expandBtn.classList.toggle("show", collapsed || isEmpty());
+    expandBtn.classList.toggle("up", !collapsed);
+    expandBtn.title = collapsed ? "Expand composer" : "Collapse composer";
+    expandBtn.setAttribute("aria-label", expandBtn.title);
+    expandBtn.setAttribute("aria-expanded", String(!collapsed));
+  }
+
+  const expand = () => { composer.classList.remove("collapsed"); syncExpandBtn(); };
+  const collapse = () => {
+    if (!isEmpty()) return;          // never strand a draft behind a hidden Post button
+    composer.classList.add("collapsed");
+    editor.el.blur();                // otherwise focus would instantly re-expand it
+    syncExpandBtn();
+  };
+
+  editor.el.addEventListener("focus", expand, { once: false });
+  composer.querySelector(".comp-top").addEventListener("click", () => { expand(); editor.el.focus(); });
+
+  expandBtn.onclick = () => {
+    if (composer.classList.contains("collapsed")) {
+      expand();
+      editor.el.focus();
+    } else {
+      collapse();
+    }
+  };
+
+  // Escape collapses an empty composer — the same instinct as dismissing
+  // any other open panel. With a draft in it, Escape does nothing rather
+  // than hiding your work.
+  editor.el.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && isEmpty()) {
+      e.preventDefault();
+      collapse();
+    }
+  });
+
+  // Initial paint. Must come AFTER expandBtn is declared: updateCount()
+  // calls syncExpandBtn(), which would otherwise hit the const's temporal
+  // dead zone and throw on the very first render.
+  updateCount();
+  syncExpandBtn();
+
+  // ---- draft autosave -------------------------------------------------
+  // Half-written posts survive navigation and reloads. Keyed per identity
+  // so a user draft and a company draft never bleed into each other.
+  // localStorage is fine here: it's our own site, and the body is
+  // sanitized server-side at post time regardless of what's stored.
+  const draftKey = "integrally_draft_" + (ME?.uuid ? "u" + ME.uuid : CO?.uuid ? "c" + CO.uuid : "anon");
+  const draftBar = composer.querySelector("#comp-draftbar");
+  let draftTimer = null;
+
+  const saveDraft = () => {
+    clearTimeout(draftTimer);
+    draftTimer = setTimeout(() => {
+      try {
+        const plain = editor.getText();
+        if (plain) {
+          localStorage.setItem(draftKey, JSON.stringify({
+            html: editor.getHTML(),
+            vis:  composer.querySelector("#comp-vis").value,
+            t:    Date.now(),
+          }));
+        } else {
+          localStorage.removeItem(draftKey);   // emptied it manually — no ghost draft
+        }
+      } catch (e) { /* storage full/blocked — drafts are a nicety, not a promise */ }
+    }, 400);
+  };
+  const clearDraft = () => {
+    clearTimeout(draftTimer);
+    try { localStorage.removeItem(draftKey); } catch (e) {}
+    draftBar.style.display = "none";
+  };
+
+  // Restore on build (drafts older than 7 days are stale — let them go).
+  try {
+    const saved = JSON.parse(localStorage.getItem(draftKey) || "null");
+    if (saved?.html && Date.now() - (saved.t || 0) < 7 * 86400e3) {
+      editor.el.innerHTML = saved.html;
+      composer.querySelector("#comp-vis").value = saved.vis || "public";
+      draftBar.style.display = "flex";
+      expand();
+      updateCount();
+    } else if (saved) {
+      localStorage.removeItem(draftKey);
+    }
+  } catch (e) {}
+
+  composer.querySelector("#comp-draft-discard").onclick = () => {
+    editor.clear();
+    clearDraft();
+    updateCount();
+  };
+  // Typing past the restore point is an implicit "yes, keeping it".
+  editor.el.addEventListener("input", () => { draftBar.style.display = "none"; }, { once: true });
+  composer.querySelector("#comp-vis").onchange = saveDraft;
+
+  // ---- quick emojis ---------------------------------------------------
+  // A handful of one-tap reactions people actually use in professional
+  // posts. Inserted at the caret; falls back to the end of the text if
+  // the caret is elsewhere on the page.
+  const EMOJIS = ["👍", "🎉", "💡", "🚀", "✅", "📈"];
+  const emojiWrap = composer.querySelector("#comp-emojis");
+  EMOJIS.forEach(em => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "comp-emoji";
+    b.textContent = em;
+    // mousedown-preventDefault keeps the caret where it is in the editor,
+    // same trick the rich-text toolbar buttons use.
+    b.onmousedown = (e) => e.preventDefault();
+    b.onclick = () => {
+      expand();
+      editor.el.focus();
+      const sel = window.getSelection();
+      if (!sel.rangeCount || !editor.el.contains(sel.anchorNode)) {
+        // Caret isn't in the editor — put it at the end.
+        const range = document.createRange();
+        range.selectNodeContents(editor.el);
+        range.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+      document.execCommand("insertText", false, em);
+      editor.el.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    emojiWrap.appendChild(b);
+  });
+
+  // ---- Ctrl+Enter / Cmd+Enter to post ----------------------------------
+  editor.el.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+      e.preventDefault();
+      const btn = composer.querySelector("#comp-post");
+      if (!btn.disabled) btn.click();
+    }
+  });
 
   let linkTimer = null;
   editor.el.addEventListener("input", () => {
     updateCount();
+    saveDraft();
     clearTimeout(linkTimer);
     linkTimer = setTimeout(fetchLinkPreview, 600);
   });
@@ -271,6 +449,7 @@ function buildComposer(opts) {
     if (hasCard) payload.meta = { link: linkPreview };
     const r = await api("/posts/create.php", "POST", payload);
     if (r.ok && r.data?.success) {
+      clearDraft();   // BEFORE onPosted — the feed re-render rebuilds the composer, which would restore it
       if (opts.onPosted) opts.onPosted();
     } else {
       // Server said no (too long, throttled, session expired…). Keep the

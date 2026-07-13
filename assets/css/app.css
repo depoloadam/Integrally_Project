@@ -542,8 +542,86 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 .extras-label { font-size:13px; font-weight:700; color:var(--in-ink-soft); margin-bottom:10px; }
 
 /* ---------- feed: composer ---------- */
+/* ---- composer ------------------------------------------------------
+   The typing area used to blend into the card: white editor on a white
+   card, both with the same border colour. Now the editor reads as an
+   INPUT — gray inset at rest, white with an accent ring when focused —
+   and the composer starts collapsed (one quiet line) until clicked. */
 .in-composer { padding:16px 18px; }
-.comp-top { display:flex; gap:12px; }
+.comp-top { display:flex; gap:12px; align-items:flex-start; }
+
+/* the editor as a distinct field */
+.in-composer .rt-editor {
+  background:var(--in-bg);
+  border:1px solid var(--in-line);
+  border-radius:12px;
+  transition:background .15s, border-color .15s, box-shadow .15s;
+}
+.in-composer .rt-editor:focus-within {
+  background:#fff;
+  border-color:var(--in-accent);
+  box-shadow:0 0 0 3px rgba(14,122,111,.12);
+}
+.in-composer .rt-toolbar { background:transparent; border-bottom:1px solid var(--in-line); }
+.in-composer .rt-area { background:transparent; }
+
+/* collapsed: one line, no toolbar, no action row — expands on focus */
+.in-composer.collapsed .rt-toolbar,
+.in-composer.collapsed .comp-actions { display:none; }
+.in-composer.collapsed .rt-area { min-height:0; padding:12px 14px; }
+.in-composer.collapsed .rt-editor { cursor:text; }
+
+/* Expand/collapse chevron. Clicking the field expands too, but that is
+   easy to miss — this says "there is more here". Full-width so it's a
+   generous hit target.
+   Visibility is driven by JS (.show), not by the collapsed class alone:
+   it is HIDDEN while a draft is in progress, because collapsing would
+   hide the Post button and look like the draft had been swallowed. */
+.comp-expand {
+  display:none; width:100%; margin:8px 0 -6px; padding:2px 0;
+  background:none; border:none; cursor:pointer;
+  color:var(--in-muted); line-height:1;
+}
+.comp-expand.show { display:block; }
+.comp-expand-chev {
+  display:inline-block; font-size:19px; font-weight:700;
+  transition:transform .18s, color .15s;
+}
+/* expanded: the same glyph, flipped, so it reads as the inverse action */
+.comp-expand.up .comp-expand-chev { transform:rotate(180deg); }
+.comp-expand:hover .comp-expand-chev { color:var(--in-accent); transform:translateY(2px); }
+.comp-expand.up:hover .comp-expand-chev { color:var(--in-accent); transform:rotate(180deg) translateY(2px); }
+/* nudge attention on first paint, then stop — a chevron that bounces
+   forever is a chevron people learn to ignore. Collapsed state only. */
+.in-composer.collapsed .comp-expand-chev { animation:comp-nudge 1.6s ease-in-out 2; }
+@keyframes comp-nudge {
+  0%, 100% { transform:translateY(0); }
+  50%      { transform:translateY(3px); }
+}
+@media (prefers-reduced-motion:reduce) {
+  .in-composer.collapsed .comp-expand-chev { animation:none; }
+}
+
+/* draft-restored bar */
+.comp-draftbar {
+  display:flex; align-items:center; gap:10px; margin-top:10px;
+  padding:7px 12px; border:1px dashed var(--in-line); border-radius:9px;
+  background:var(--in-bg); font-size:12.5px; color:var(--in-muted);
+}
+.comp-draftbar button {
+  margin-left:auto; background:none; border:none; color:var(--in-error);
+  font-family:inherit; font-size:12.5px; font-weight:600; cursor:pointer; padding:2px 4px;
+}
+.comp-draftbar button:hover { text-decoration:underline; }
+
+/* quick emoji row */
+.comp-emojis { display:flex; gap:2px; margin-right:auto; }
+.comp-emoji {
+  width:30px; height:30px; border:1px solid transparent; border-radius:8px;
+  background:none; cursor:pointer; font-size:16px; line-height:1; padding:0;
+  display:grid; place-items:center;
+}
+.comp-emoji:hover { background:var(--in-bg); border-color:var(--in-line); transform:scale(1.12); }
 .comp-avatar { width:42px; height:42px; border-radius:50%; flex:none; background:linear-gradient(135deg,var(--in-accent),var(--in-teal-bright)); display:grid; place-items:center; color:#fff; font-weight:700; font-size:17px; }
 .in-composer textarea { flex:1; border:none; resize:none; font-family:inherit; font-size:15px; padding:9px 0; background:none; color:var(--in-ink); overflow:hidden; }
 .in-composer textarea:focus { outline:none; }
@@ -555,7 +633,7 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 .comp-count { font-size:12px; color:var(--in-muted); font-variant-numeric:tabular-nums; }
 .comp-count.warn { color:#b26a00; font-weight:600; }
 .comp-count.over { color:var(--in-error); font-weight:700; }
-.comp-imgbtn { margin-right:auto; background:var(--in-bg); border:1px solid var(--in-line); border-radius:8px; padding:8px 12px; font-family:inherit; font-size:13px; font-weight:600; color:var(--in-ink-soft); cursor:pointer; }
+.comp-imgbtn { background:var(--in-bg); border:1px solid var(--in-line); border-radius:8px; padding:8px 12px; font-family:inherit; font-size:13px; font-weight:600; color:var(--in-ink-soft); cursor:pointer; }
 .comp-imgbtn:hover { border-color:var(--in-accent); color:var(--in-accent); }
 .comp-imgbtn:disabled { opacity:.6; cursor:default; }
 .comp-preview { position:relative; margin:12px 0 4px; }
