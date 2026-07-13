@@ -549,15 +549,19 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 .in-composer textarea:focus { outline:none; }
 .comp-actions { display:flex; align-items:center; gap:10px; margin-top:10px; padding-top:10px; border-top:1px solid var(--in-line); justify-content:flex-end; }
 .comp-actions select { padding:8px 10px; border:1px solid var(--in-line); border-radius:8px; font-family:inherit; font-size:13px; background:var(--in-bg); cursor:pointer; }
-/* live character counter — empty (invisible) until ~80% of the cap,
-   then "4,132 / 5,000"; turns red once over. */
+/* live character counter — always on. Amber in the last 10% of the
+   budget, red once over. Tabular numerals so the width doesn't jitter
+   as the count climbs. */
 .comp-count { font-size:12px; color:var(--in-muted); font-variant-numeric:tabular-nums; }
+.comp-count.warn { color:#b26a00; font-weight:600; }
 .comp-count.over { color:var(--in-error); font-weight:700; }
 .comp-imgbtn { margin-right:auto; background:var(--in-bg); border:1px solid var(--in-line); border-radius:8px; padding:8px 12px; font-family:inherit; font-size:13px; font-weight:600; color:var(--in-ink-soft); cursor:pointer; }
 .comp-imgbtn:hover { border-color:var(--in-accent); color:var(--in-accent); }
 .comp-imgbtn:disabled { opacity:.6; cursor:default; }
 .comp-preview { position:relative; margin:12px 0 4px; }
-.comp-preview img { width:100%; border-radius:10px; display:block; max-height:340px; object-fit:cover; }
+/* Composer preview: object-fit:cover CROPPED the preview, so what you
+   saw was not what you were about to post. contain shows the whole frame. */
+.comp-preview img { max-width:100%; width:auto; border-radius:10px; display:block; max-height:340px; object-fit:contain; }
 .comp-preview button { position:absolute; top:8px; right:8px; width:30px; height:30px; border-radius:8px; background:rgba(11,31,42,.7); color:#fff; border:none; cursor:pointer; font-size:14px; }
 
 /* feed sub-tabs */
@@ -579,10 +583,39 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 .post-del { margin-left:auto; align-self:flex-start; background:none; border:none; color:var(--in-muted); cursor:pointer; font-size:15px; padding:4px 8px; border-radius:7px; line-height:1; }
 .post-del:hover { color:var(--in-error); background:#fdecea; }
 .post-body { font-size:14.5px; line-height:1.55; color:var(--in-ink); white-space:normal; word-break:break-word; }
-/* "keep reading" expander on truncated feed posts */
+/* "keep reading" / "show less" toggle on truncated feed posts.
+   Collapsed: sits inline right after the ellipsis. Expanded (.block):
+   drops to its own line, so it doesn't read as part of the last sentence. */
 .post-more { display:inline-block; margin-left:6px; color:var(--in-accent); font-weight:600; font-size:13.5px; cursor:pointer; white-space:nowrap; }
 .post-more:hover { text-decoration:underline; }
-.post-media { width:100%; border-radius:10px; margin-top:12px; display:block; }
+.post-more.block { display:block; margin:8px 0 0; }
+/* Feed image.
+   WAS: width:100% — which FORCED every image to the full column width.
+   A 200px screenshot got upscaled to 600px and turned to mush; a tall
+   portrait photo became a wall you had to scroll past to reach the next
+   post. width:auto lets an image render at its natural size, max-width
+   keeps it inside the column, and max-height stops a tall one from
+   dominating the feed. Click opens the full-size original. */
+.post-media {
+  max-width:100%; width:auto; height:auto; max-height:460px;
+  border-radius:10px; margin-top:12px; display:block;
+  cursor:zoom-in; background:var(--in-bg);
+}
+/* Lightbox — full-size view, since the feed now caps display height. */
+.img-lightbox {
+  position:fixed; inset:0; z-index:200; background:rgba(11,31,42,.88);
+  display:grid; place-items:center; padding:32px; cursor:zoom-out;
+}
+.img-lightbox img {
+  max-width:100%; max-height:100%; border-radius:8px; display:block;
+  box-shadow:0 12px 48px rgba(0,0,0,.5);
+}
+.img-lightbox-x {
+  position:absolute; top:18px; right:22px; width:38px; height:38px;
+  border:none; border-radius:50%; background:rgba(255,255,255,.15);
+  color:#fff; font-size:18px; cursor:pointer; line-height:1;
+}
+.img-lightbox-x:hover { background:rgba(255,255,255,.28); }
 
 /* cert announcement card */
 .post-cert { display:flex; gap:14px; align-items:center; background:linear-gradient(135deg,#ecfdf7,#e0f7f3); border:1px solid #b3e6d1; border-radius:12px; padding:14px 16px; }

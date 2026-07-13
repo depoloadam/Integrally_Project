@@ -28,6 +28,7 @@ require_once __DIR__ . '/../../src/Database.php';
 require_once __DIR__ . '/../../src/Response.php';
 require_once __DIR__ . '/../../src/Auth.php';
 require_once __DIR__ . '/../../src/RateLimit.php';
+require_once __DIR__ . '/../../src/ImageProcessor.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     Response::error('Method not allowed.', 405);
@@ -63,10 +64,14 @@ if ($file['error'] !== UPLOAD_ERR_OK) {
     Response::error($map[$file['error']] ?? 'Upload failed.', 400);
 }
 
-// --- Size cap (5 MB). Enforced here regardless of PHP ini. -----------
-$MAX_BYTES = 5 * 1024 * 1024;
+// --- Size cap (10 MB). Enforced here regardless of PHP ini. ----------
+// Deliberately generous: we DOWNSCALE and re-encode below, so the stored
+// file is small regardless of what arrives. Rejecting a 6 MB phone photo
+// outright would just annoy people for no benefit. The real protection
+// against oversized images is the pixel cap in ImageProcessor, not this.
+$MAX_BYTES = 10 * 1024 * 1024;
 if ($file['size'] > $MAX_BYTES) {
-    Response::error('Image must be 5 MB or smaller.', 422);
+    Response::error('Image must be 10 MB or smaller.', 422);
 }
 if ($file['size'] === 0) {
     Response::error('The uploaded file is empty.', 422);
@@ -120,20 +125,44 @@ if (!is_dir($uploadsPath)) {
 
 $destPath = rtrim($uploadsPath, '/\\') . DIRECTORY_SEPARATOR . $filename;
 
-// --- Move the upload into place --------------------------------------
-// move_uploaded_file() also re-checks this was a genuine HTTP upload,
-// an extra guard against tricking the script into moving arbitrary files.
-if (!move_uploaded_file($file['tmp_name'], $destPath)) {
-    Response::error('Could not save the uploaded file.', 500);
+// --- Confirm this really was an HTTP upload --------------------------
+// We no longer call move_uploaded_file() (ImageProcessor writes the
+// destination itself), so we must do this check explicitly — it is what
+// stops a crafted request from tricking the script into reading an
+// arbitrary server file as if it were the upload.
+if (!is_uploaded_file($file['tmp_name'])) {
+    Response::error('Invalid upload.', 400);
+}
+
+// --- Downscale + re-encode into place --------------------------------
+// The old code moved the raw file straight in, so a 6000x4000 phone photo
+// was stored AND served at 6000x4000 — every viewer downloaded megabytes
+// to render a ~600px column. ImageProcessor caps the longest edge at
+// POST_IMAGE_MAX_EDGE, re-encodes, and strips EXIF (including GPS).
+$POST_IMAGE_MAX_EDGE = 1600;   // plenty for a 600px feed column on a 2x display
+
+try {
+    $out = ImageProcessor::process(
+        $file['tmp_name'],
+        $info,
+        $destPath,
+        $POST_IMAGE_MAX_EDGE
+    );
+} catch (RuntimeException $e) {
+    // Messages from ImageProcessor are written to be user-facing.
+    Response::error($e->getMessage(), 422);
 }
 
 // --- Return the public URL the caller stores / displays --------------
 // This URL is what goes into posts.media_url (or users.profile_pic).
+// width/height are the PROCESSED dimensions, so the client can reserve
+// the right space and avoid the layout jump as images load.
 $publicUrl = rtrim($uploadsUrl, '/') . '/' . $filename;
 
 Response::success([
     'url'      => $publicUrl,
     'filename' => $filename,
-    'width'    => $info[0],
-    'height'   => $info[1],
+    'width'    => $out['width'],
+    'height'   => $out['height'],
+    'resized'  => $out['resized'],
 ], 201);

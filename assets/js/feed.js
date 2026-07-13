@@ -14,8 +14,45 @@ let FEED_TAB = "main";   // 'main' | 'explore'
 // POST_PREVIEW_CHARS is how much of a post's text the feed shows before
 // cutting off with a "keep reading" link. The dedicated post page
 // (#post/<id>) always shows everything.
-const POST_MAX_CHARS     = 5000;
+const POST_MAX_CHARS     = 3000;
 const POST_PREVIEW_CHARS = 300;
+
+// Admins post without a cap (mirrors the Auth::isAdmin() exemption in
+// api/posts/create.php). Companies are NOT exempt — a company session has
+// no role, and the server check reads the users table.
+const postCapExempt = () => !!(ME && ME.role === "admin");
+
+// ---- image upload rules ------------------------------------------------
+// Mirrors api/upload/image.php. The server is the enforcer; these just let
+// us reject an impossible file instantly instead of after a slow upload.
+const IMAGE_MAX_BYTES  = 10 * 1024 * 1024;   // 10 MB
+const IMAGE_MAX_PIXELS = 50000000;           // 50 MP — matches ImageProcessor::MAX_PIXELS
+
+// ---- lightbox ----------------------------------------------------------
+// Feed images are height-capped by CSS (.post-media), so clicking one
+// opens the full-size version. Closes on click, on the X, or on Escape.
+function openLightbox(src) {
+  if (!src) return;
+  const box = el(`
+    <div class="img-lightbox">
+      <button class="img-lightbox-x" title="Close">✕</button>
+      <img src="${esc(src)}" alt="">
+    </div>`);
+
+  const close = () => {
+    box.remove();
+    document.removeEventListener("keydown", onKey);
+  };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+
+  box.onclick = close;
+  // Clicking the image itself shouldn't close it — only the backdrop.
+  box.querySelector("img").onclick = (e) => e.stopPropagation();
+  box.querySelector(".img-lightbox-x").onclick = close;
+  document.addEventListener("keydown", onKey);
+
+  document.body.appendChild(box);
+}
 
 async function renderFeed() {
   const view = $("view");
@@ -79,14 +116,49 @@ function buildComposer(opts) {
   fileInput.onchange = async () => {
     const f = fileInput.files[0];
     if (!f) return;
-    if (f.size > 5 * 1024 * 1024) { alert("Image must be 5 MB or smaller."); fileInput.value = ""; return; }
+
+    const reset = () => {
+      attachedUrl = null; fileInput.value = "";
+      preview.style.display = "none"; previewImg.src = "";
+    };
+
+    // Fail fast on the obvious cases. The server checks all of this too —
+    // the point here is to not make someone wait through a 40 MB upload
+    // just to be told no at the end of it.
+    if (f.size > IMAGE_MAX_BYTES) {
+      toast(`Image must be ${(IMAGE_MAX_BYTES / 1024 / 1024).toFixed(0)} MB or smaller — this one is ${(f.size / 1024 / 1024).toFixed(1)} MB.`, "err");
+      reset();
+      return;
+    }
+
+    // Read the dimensions before uploading, so a decompression bomb (a
+    // tiny file that decodes to 20000x20000) is caught on the client too.
+    const dims = await new Promise((res) => {
+      const probe = new Image();
+      probe.onload = () => res({ w: probe.naturalWidth, h: probe.naturalHeight });
+      probe.onerror = () => res(null);
+      probe.src = URL.createObjectURL(f);
+    });
+    if (dims && dims.w * dims.h > IMAGE_MAX_PIXELS) {
+      toast(`That image is too large to process (${dims.w} × ${dims.h}). Please resize it first.`, "err");
+      reset();
+      return;
+    }
+
     previewImg.src = URL.createObjectURL(f);
     preview.style.display = "block";
     const imgBtn = composer.querySelector("#comp-img"); imgBtn.disabled = true; imgBtn.textContent = "Uploading…";
     const up = await uploadImage(f);
     imgBtn.disabled = false; imgBtn.textContent = "🖼️ Image";
-    if (up?.url) { attachedUrl = up.url; }
-    else { alert("Image upload failed. Please try another file."); attachedUrl = null; fileInput.value = ""; preview.style.display = "none"; previewImg.src = ""; }
+    if (up?.url) {
+      attachedUrl = up.url;
+      // Show the processed preview, not the local original — so what you
+      // see in the composer is exactly what will appear in the feed.
+      previewImg.src = up.url;
+    } else {
+      toast("Image upload failed. Please try another file.", "err");
+      reset();
+    }
   };
   // ---- link preview ----
   let linkPreview   = null;
@@ -146,25 +218,35 @@ function buildComposer(opts) {
   };
 
   // ---- live character counter ----
-  // Hidden until the post is 80% of the way to the cap (a counter on a
-  // two-line update is just noise), then shows "4,132 / 5,000". Over the
-  // cap: turns red and disables Post, so nobody types a novel only to be
-  // rejected on submit.
+  // Always visible from the first keystroke, so the budget is never a
+  // surprise. Three states:
+  //   normal  — "412 / 3,000"
+  //   warn    — amber inside the last 10% (2,700+)
+  //   over    — red, Post disabled
+  // Admins are uncapped, so they get a plain count with no denominator
+  // and no disabling.
   const countEl = composer.querySelector("#comp-count");
   const postBtn = composer.querySelector("#comp-post");
+  const exempt  = postCapExempt();
   const updateCount = () => {
     const len = editor.getText().length;
-    const over = len > POST_MAX_CHARS;
-    if (len < POST_MAX_CHARS * 0.8) {
-      countEl.textContent = "";
-      countEl.classList.remove("over");
-    } else {
-      countEl.textContent = `${len.toLocaleString()} / ${POST_MAX_CHARS.toLocaleString()}`;
-      countEl.classList.toggle("over", over);
+
+    if (exempt) {
+      countEl.textContent = len ? `${len.toLocaleString()} characters` : "";
+      countEl.className = "comp-count";
+      postBtn.disabled = false;
+      postBtn.title = "";
+      return;
     }
+
+    const over = len > POST_MAX_CHARS;
+    const warn = !over && len >= POST_MAX_CHARS * 0.9;
+    countEl.textContent = `${len.toLocaleString()} / ${POST_MAX_CHARS.toLocaleString()}`;
+    countEl.className = "comp-count" + (over ? " over" : warn ? " warn" : "");
     postBtn.disabled = over;
     postBtn.title = over ? `Posts are limited to ${POST_MAX_CHARS.toLocaleString()} characters.` : "";
   };
+  updateCount();   // paint the initial "0 / 3,000" rather than waiting for a keystroke
 
   let linkTimer = null;
   editor.el.addEventListener("input", () => {
@@ -178,7 +260,7 @@ function buildComposer(opts) {
     const plain = editor.getText();
     const hasCard = !!(linkPreview && linkPreview.url);
     if (!plain && !attachedUrl && !hasCard) return;
-    if (plain.length > POST_MAX_CHARS) {
+    if (!postCapExempt() && plain.length > POST_MAX_CHARS) {
       toast(`Posts are limited to ${POST_MAX_CHARS.toLocaleString()} characters — this one is ${plain.length.toLocaleString()}.`, "err");
       return;
     }
@@ -327,46 +409,63 @@ async function renderSinglePost(id) {
 // rich formatting of what remains. Works on the live DOM node rather than
 // the HTML string — slicing HTML as a string would sever tags mid-element
 // (e.g. cutting inside a <strong>), which the DOM walk cannot do.
-// If the body fits, does nothing. If it doesn't, prunes past the limit,
-// trims back to a word boundary, appends "…" and a "keep reading" link
-// that swaps the full body back in.
+//
+// If the body fits, does nothing. If it doesn't, it becomes a TOGGLE:
+// "keep reading" expands to the full text, "show less" collapses it back.
+// Both states are rebuilt from the original HTML each time, so repeated
+// toggling can't accumulate stray ellipses or drift the markup.
 function truncateInPlace(bodyEl, limit) {
   const fullText = bodyEl.textContent.replace(/\u200B/g, "");
   if (fullText.length <= limit + 40) return;   // grace zone: don't clip 20 chars for a link
 
   const fullHtml = bodyEl.innerHTML;
-  let remaining = limit;
 
-  const prune = (node) => {
-    for (const kid of Array.from(node.childNodes)) {
-      if (remaining <= 0) { node.removeChild(kid); continue; }
-      if (kid.nodeType === Node.TEXT_NODE) {
-        const t = kid.textContent;
-        if (t.length > remaining) {
-          // Cut, then back off to the last word boundary so we don't end
-          // mid-word ("keep read" reads worse than "keep").
-          kid.textContent = t.slice(0, remaining).replace(/\s+\S*$/, "") + "…";
-          remaining = 0;
+  // Builds the clipped DOM from a fresh copy of the original every time.
+  const buildClipped = () => {
+    const frag = document.createElement("div");
+    frag.innerHTML = fullHtml;
+    let remaining = limit;
+
+    const prune = (node) => {
+      for (const kid of Array.from(node.childNodes)) {
+        if (remaining <= 0) { node.removeChild(kid); continue; }
+        if (kid.nodeType === Node.TEXT_NODE) {
+          const t = kid.textContent;
+          if (t.length > remaining) {
+            // Cut, then back off to the last word boundary so we don't end
+            // mid-word ("keep read" reads worse than "keep").
+            kid.textContent = t.slice(0, remaining).replace(/\s+\S*$/, "") + "…";
+            remaining = 0;
+          } else {
+            remaining -= t.length;
+          }
         } else {
-          remaining -= t.length;
+          prune(kid);
+          // An element left empty by pruning is just phantom margin — drop it.
+          if (!kid.textContent && !kid.querySelector?.("img")) kid.remove();
         }
-      } else {
-        prune(kid);
-        // An element left empty by pruning is just phantom margin — drop it.
-        if (!kid.textContent && !kid.querySelector?.("img")) kid.remove();
       }
-    }
+    };
+    prune(frag);
+    return frag.innerHTML;
   };
-  prune(bodyEl);
 
-  const more = document.createElement("a");
-  more.className = "post-more";
-  more.textContent = "keep reading";
-  more.onclick = (e) => {
-    e.stopPropagation();
-    bodyEl.innerHTML = fullHtml;   // link removes itself with the swap
+  const clippedHtml = buildClipped();
+
+  const toggle = (expanded) => {
+    bodyEl.innerHTML = expanded ? fullHtml : clippedHtml;
+    const link = document.createElement("a");
+    link.className = "post-more";
+    link.textContent = expanded ? "show less" : "keep reading";
+    link.onclick = (e) => { e.stopPropagation(); toggle(!expanded); };
+    // Collapsed: the link trails the "…" inline. Expanded: it sits on its
+    // own line under the post, where a trailing inline link would look
+    // like part of the sentence.
+    if (expanded) link.classList.add("block");
+    bodyEl.appendChild(link);
   };
-  bodyEl.appendChild(more);
+
+  toggle(false);
 }
 
 // ---- single post card ------------------------------------------------
@@ -463,6 +562,11 @@ function renderPost(it, opts = {}) {
     const bodyEl = card.querySelector(".post-body");
     if (bodyEl) truncateInPlace(bodyEl, POST_PREVIEW_CHARS);
   }
+
+  // Feed images are capped in height by CSS, so give people a way to see
+  // the whole thing: click opens a full-size lightbox.
+  const media = card.querySelector(".post-media");
+  if (media) media.onclick = () => openLightbox(media.src);
 
   if (canDelete) {
     card.querySelector(".post-del").onclick = async () => {

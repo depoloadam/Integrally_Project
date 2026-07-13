@@ -96,8 +96,13 @@ if ($postType === 'text' && $bodyPlain === '' && $mediaUrl === null && !$hasLink
 // Server-side cap. The composer mirrors this in feed.js (POST_MAX_CHARS)
 // for the live counter — change one, change BOTH. Measured on the PLAIN
 // text so rich formatting tags can't eat into anyone's allowance.
-const POST_MAX_CHARS = 5000;
-if (mb_strlen($bodyPlain) > POST_MAX_CHARS) {
+//
+// Admins are exempt: the cap exists to keep the feed readable and to stop
+// abuse, and an admin posting a long announcement is neither. Note this is
+// a USER-role check — a company session is never exempt, since companies
+// have no role and Auth::isAdmin() reads from the users table.
+const POST_MAX_CHARS = 3000;
+if (!Auth::isAdmin() && mb_strlen($bodyPlain) > POST_MAX_CHARS) {
     Response::error(
         'Posts are limited to ' . number_format(POST_MAX_CHARS) . ' characters (this one is ' . number_format(mb_strlen($bodyPlain)) . ').',
         422,
