@@ -7,6 +7,16 @@
 
 let FEED_TAB = "main";   // 'main' | 'explore'
 
+// ---- post length rules -------------------------------------------------
+// POST_MAX_CHARS mirrors the server cap in api/posts/create.php — the
+// server is the enforcer, this is just the early warning. If you change
+// one, change BOTH.
+// POST_PREVIEW_CHARS is how much of a post's text the feed shows before
+// cutting off with a "keep reading" link. The dedicated post page
+// (#post/<id>) always shows everything.
+const POST_MAX_CHARS     = 5000;
+const POST_PREVIEW_CHARS = 300;
+
 async function renderFeed() {
   const view = $("view");
   view.innerHTML = "";
@@ -48,6 +58,7 @@ function buildComposer(opts) {
           <option value="public">🌐 Public</option>
           <option value="followers">👥 Followers</option>
         </select>
+        <span class="comp-count" id="comp-count"></span>
         <button class="in-btn primary" id="comp-post" style="flex:none;padding:9px 18px">Post</button>
       </div>
     </div>`);
@@ -134,8 +145,30 @@ function buildComposer(opts) {
     }
   };
 
+  // ---- live character counter ----
+  // Hidden until the post is 80% of the way to the cap (a counter on a
+  // two-line update is just noise), then shows "4,132 / 5,000". Over the
+  // cap: turns red and disables Post, so nobody types a novel only to be
+  // rejected on submit.
+  const countEl = composer.querySelector("#comp-count");
+  const postBtn = composer.querySelector("#comp-post");
+  const updateCount = () => {
+    const len = editor.getText().length;
+    const over = len > POST_MAX_CHARS;
+    if (len < POST_MAX_CHARS * 0.8) {
+      countEl.textContent = "";
+      countEl.classList.remove("over");
+    } else {
+      countEl.textContent = `${len.toLocaleString()} / ${POST_MAX_CHARS.toLocaleString()}`;
+      countEl.classList.toggle("over", over);
+    }
+    postBtn.disabled = over;
+    postBtn.title = over ? `Posts are limited to ${POST_MAX_CHARS.toLocaleString()} characters.` : "";
+  };
+
   let linkTimer = null;
   editor.el.addEventListener("input", () => {
+    updateCount();
     clearTimeout(linkTimer);
     linkTimer = setTimeout(fetchLinkPreview, 600);
   });
@@ -145,13 +178,25 @@ function buildComposer(opts) {
     const plain = editor.getText();
     const hasCard = !!(linkPreview && linkPreview.url);
     if (!plain && !attachedUrl && !hasCard) return;
+    if (plain.length > POST_MAX_CHARS) {
+      toast(`Posts are limited to ${POST_MAX_CHARS.toLocaleString()} characters — this one is ${plain.length.toLocaleString()}.`, "err");
+      return;
+    }
     if (!plain && attachedUrl && !hasCard) { if (!confirm("Post this image without any text?")) return; }
 
     const btn = composer.querySelector("#comp-post"); btn.disabled = true; btn.textContent = "Posting…";
     const payload = { body: html, visibility: composer.querySelector("#comp-vis").value, media_url: attachedUrl };
     if (hasCard) payload.meta = { link: linkPreview };
-    await api("/posts/create.php", "POST", payload);
-    if (opts.onPosted) opts.onPosted();
+    const r = await api("/posts/create.php", "POST", payload);
+    if (r.ok && r.data?.success) {
+      if (opts.onPosted) opts.onPosted();
+    } else {
+      // Server said no (too long, throttled, session expired…). Keep the
+      // composer contents so nothing is lost — the OLD behaviour refreshed
+      // the feed regardless, silently discarding the text AND the error.
+      btn.disabled = false; btn.textContent = "Post";
+      toast(r.data?.error || "Could not publish the post. Please try again.", "err");
+    }
   };
 
   return composer;
@@ -267,7 +312,7 @@ async function renderSinglePost(id) {
   const wrap = el(`<div class="in-admin"></div>`);
   wrap.appendChild(el(`<div class="in-back"><button class="in-back-btn" onclick="history.length>1?history.back():location.hash='feed'">‹ Back</button></div>`));
   const listWrap = el(`<div class="in-card2 in-post-list" style="padding:0"></div>`);
-  const card = renderPost(r.data.data);
+  const card = renderPost(r.data.data, { full: true });
   listWrap.appendChild(card);
   wrap.appendChild(listWrap);
   view.appendChild(wrap);
@@ -277,8 +322,58 @@ async function renderSinglePost(id) {
   if (commentBtn) commentBtn.click();
 }
 
+// ---- feed truncation ---------------------------------------------------
+// Cuts a rendered post body down to `limit` TEXT characters, keeping the
+// rich formatting of what remains. Works on the live DOM node rather than
+// the HTML string — slicing HTML as a string would sever tags mid-element
+// (e.g. cutting inside a <strong>), which the DOM walk cannot do.
+// If the body fits, does nothing. If it doesn't, prunes past the limit,
+// trims back to a word boundary, appends "…" and a "keep reading" link
+// that swaps the full body back in.
+function truncateInPlace(bodyEl, limit) {
+  const fullText = bodyEl.textContent.replace(/\u200B/g, "");
+  if (fullText.length <= limit + 40) return;   // grace zone: don't clip 20 chars for a link
+
+  const fullHtml = bodyEl.innerHTML;
+  let remaining = limit;
+
+  const prune = (node) => {
+    for (const kid of Array.from(node.childNodes)) {
+      if (remaining <= 0) { node.removeChild(kid); continue; }
+      if (kid.nodeType === Node.TEXT_NODE) {
+        const t = kid.textContent;
+        if (t.length > remaining) {
+          // Cut, then back off to the last word boundary so we don't end
+          // mid-word ("keep read" reads worse than "keep").
+          kid.textContent = t.slice(0, remaining).replace(/\s+\S*$/, "") + "…";
+          remaining = 0;
+        } else {
+          remaining -= t.length;
+        }
+      } else {
+        prune(kid);
+        // An element left empty by pruning is just phantom margin — drop it.
+        if (!kid.textContent && !kid.querySelector?.("img")) kid.remove();
+      }
+    }
+  };
+  prune(bodyEl);
+
+  const more = document.createElement("a");
+  more.className = "post-more";
+  more.textContent = "keep reading";
+  more.onclick = (e) => {
+    e.stopPropagation();
+    bodyEl.innerHTML = fullHtml;   // link removes itself with the swap
+  };
+  bodyEl.appendChild(more);
+}
+
 // ---- single post card ------------------------------------------------
-function renderPost(it) {
+// opts.full — render the complete body with no truncation (used by the
+// dedicated #post/<id> page). Feed/profile/company surfaces omit it and
+// get the POST_PREVIEW_CHARS cutoff with a "keep reading" link.
+function renderPost(it, opts = {}) {
   const a = it.author || {};
   const initial = (a.name || "?").charAt(0).toUpperCase();
   const when = new Date(it.created_at).toLocaleString();
@@ -360,6 +455,14 @@ function renderPost(it) {
       </div>
       <div class="post-comments" style="display:none"></div>
     </div>`);
+
+  // Feed preview: clamp long bodies to POST_PREVIEW_CHARS. The dedicated
+  // post page passes opts.full and always shows everything. Covers both
+  // plain text posts and the body under cert cards (same .post-body class).
+  if (!opts.full) {
+    const bodyEl = card.querySelector(".post-body");
+    if (bodyEl) truncateInPlace(bodyEl, POST_PREVIEW_CHARS);
+  }
 
   if (canDelete) {
     card.querySelector(".post-del").onclick = async () => {

@@ -93,8 +93,16 @@ $hasLink = isset($metaArr['link']) && is_array($metaArr['link']);
 if ($postType === 'text' && $bodyPlain === '' && $mediaUrl === null && !$hasLink) {
     Response::error('A post needs text, an image, or a link.', 422);
 }
-if (mb_strlen($bodyPlain) > 5000) {
-    Response::error('Post is too long (5000 characters max).', 422);
+// Server-side cap. The composer mirrors this in feed.js (POST_MAX_CHARS)
+// for the live counter — change one, change BOTH. Measured on the PLAIN
+// text so rich formatting tags can't eat into anyone's allowance.
+const POST_MAX_CHARS = 5000;
+if (mb_strlen($bodyPlain) > POST_MAX_CHARS) {
+    Response::error(
+        'Posts are limited to ' . number_format(POST_MAX_CHARS) . ' characters (this one is ' . number_format(mb_strlen($bodyPlain)) . ').',
+        422,
+        'post_too_long'
+    );
 }
 
 $visibility = ($in['visibility'] ?? 'public') === 'followers' ? 'followers' : 'public';
