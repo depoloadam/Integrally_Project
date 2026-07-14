@@ -685,9 +685,12 @@ function routeFromHash() {
     renderPublicProfile(raw.slice("user/".length));
     return;
   }
-  if (raw === "settings") {
+  if (raw === "settings" || raw.startsWith("settings/")) {
     document.querySelectorAll("[data-nav]").forEach(x => x.classList.remove("active"));
-    renderSettings();
+    // #settings/<tab> deep-links straight to a tab (e.g. the score
+    // privacy controls, linked from the ⚙ on the profile Scores card).
+    const tab = raw.startsWith("settings/") ? raw.slice("settings/".length) : null;
+    renderSettings(tab);
     return;
   }
   if (raw === "ai-skillset") {

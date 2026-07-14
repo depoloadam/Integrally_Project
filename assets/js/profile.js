@@ -127,8 +127,9 @@ async function renderProfile() {
   // scores panel
   const onboardingDone = (st.onboarding_complete === "1");
   const scoreRows = (scores.data?.data || []);
-  const scoreCard = el(`<div class="in-card2"><h2>Scores</h2><div id="score-body"></div></div>`);
+  const scoreCard = el(`<div class="in-card2"><h2>Scores<button class="add" id="score-privacy-btn" title="Score privacy settings" aria-label="Score privacy settings">⚙</button></h2><div id="score-body"></div></div>`);
   rightCol.appendChild(scoreCard);
+  $("score-privacy-btn").onclick = () => { location.hash = "settings/privacy"; };
   const sb = $("score-body");
   if (!scoreRows.length) {
     sb.appendChild(el(`<div class="in-empty">${onboardingDone
@@ -1928,9 +1929,12 @@ function roChips(col, title, items, label) {
 let SETTINGS_TAB = "account";
 let SETTINGS_DATA = null;   // cached {p, st} so tab switches don't refetch
 
-async function renderSettings() {
+async function renderSettings(tab) {
   const view = $("view");
   view.innerHTML = `<div class="in-loading">Loading settings…</div>`;
+  // Deep link from #settings/<tab>. Validated against the real tab list
+  // further down, which falls back to "account" for anything unknown.
+  if (tab) SETTINGS_TAB = tab;
 
   // fetch once; tab switches reuse this without refetching/rebuilding.
   const [prof, settings] = await Promise.all([
