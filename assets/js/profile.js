@@ -169,7 +169,7 @@ async function renderProfile() {
 
   section(rightCol, "Certifications", certs.data?.data, c => `
     <div class="meta"><div class="t">${esc(c.name)}</div>
-    <div class="s">${esc(c.issuer || "")}${c.issue_date ? " · " + c.issue_date : ""}</div></div>`,
+    <div class="s">${certSubLine(c)}</div></div>`,
     "certs", addCert, c => c.id, c => addCert(c));
 
   // AI Skillset display — sits under Certifications. Shown when the owner
@@ -1489,18 +1489,51 @@ function addEdu(existing) {
   };
 }
 
+// Cert sub-line: issuer · issued · expiry. Expiry only appears when the
+// certification actually has one (many never expire), and an already-
+// past date is flagged rather than shown as a neutral fact.
+function certSubLine(c) {
+  const bits = [];
+  if (c.issuer) bits.push(esc(c.issuer));
+  if (c.issue_date) bits.push(esc(c.issue_date));
+  let out = bits.join(" · ");
+  if (c.expiry_date) {
+    const expired = new Date(c.expiry_date) < new Date(new Date().toDateString());
+    out += (out ? " · " : "") + (expired
+      ? `<span class="cert-expired">Expired ${esc(c.expiry_date)}</span>`
+      : `Expires ${esc(c.expiry_date)}`);
+  }
+  return out;
+}
+
 function addCert(existing) {
   const isEdit = !!(existing && existing.id);
+  const hasExp = !!(isEdit && existing.expiry_date);
   openModal(`
     <h3>${isEdit ? "Edit certification" : "Add certification"}</h3>
     <label>Name *</label><input id="c-name" value="${isEdit ? esc(existing.name || "") : ""}">
     <label>Issuer</label><input id="c-issuer" value="${isEdit ? esc(existing.issuer || "") : ""}">
-    <div class="row"><div><label>Issued</label><input id="c-issue" type="date" value="${isEdit ? esc(existing.issue_date || "") : ""}"></div><div><label>Expires</label><input id="c-exp" type="date" value="${isEdit ? esc(existing.expiry_date || "") : ""}"></div></div>
+    <div class="row">
+      <div><label>Issued</label><input id="c-issue" type="date" value="${isEdit ? esc(existing.issue_date || "") : ""}"></div>
+      <div id="c-exp-wrap" ${hasExp ? "" : "hidden"}><label>Expires</label><input id="c-exp" type="date" value="${isEdit ? esc(existing.expiry_date || "") : ""}"></div>
+    </div>
+    <label class="cert-expcheck"><input type="checkbox" id="c-has-exp" ${hasExp ? "checked" : ""}> This certification expires</label>
     <div class="in-modal-actions"><button class="in-btn ghost" onclick="closeModal()">Cancel</button><button class="in-btn primary" id="save-cert">${isEdit ? "Save" : "Add"}</button></div>`);
+  // Expiry is opt-in: many certifications never expire. The date field
+  // only appears once the box is ticked, and unticking it clears the
+  // value so an empty string reaches the API (which stores NULL).
+  const expBox = $("c-has-exp"), expWrap = $("c-exp-wrap");
+  expBox.onchange = () => {
+    expWrap.hidden = !expBox.checked;
+    if (!expBox.checked) $("c-exp").value = "";
+    else $("c-exp").focus();
+  };
   $("save-cert").onclick = async () => {
     const name = $("c-name").value.trim(); if (!name) return;
     const issuer = $("c-issuer").value.trim();
-    const payload = { name, issuer, issue_date:$("c-issue").value, expiry_date:$("c-exp").value };
+    const expiry = $("c-has-exp").checked ? $("c-exp").value : "";
+    if ($("c-has-exp").checked && !expiry) { alert("Enter an expiration date, or uncheck “This certification expires.”"); return; }
+    const payload = { name, issuer, issue_date:$("c-issue").value, expiry_date:expiry };
     if (isEdit) { await api("/profile/certs/update.php","POST",{ id:existing.id, ...payload }); closeModal(); refreshAfterProfileChange(); }
     else        { await api("/profile/certs/add.php","POST", payload); closeModal(); offerShareCert(name, issuer); refreshAfterProfileChange(); }
   };
@@ -1788,8 +1821,15 @@ function openExtrasFlow() {
   };
   const certWrap = $("ex-cert-rows");
   $("ex-cert-add").onclick = () => {
-    const row = el(`<div class="bulk-row"><button class="bulk-row-x">✕</button><input class="ec-name" placeholder="Certification name *"><input class="ec-issuer" placeholder="Issuer"><div class="bulk-dates"><div class="bulk-date-field"><label>Issued</label><input class="ec-issue" type="date"></div><div class="bulk-date-field"><label>Expires</label><input class="ec-exp" type="date"></div></div></div>`);
-    row.querySelector(".bulk-row-x").onclick = () => row.remove(); certWrap.appendChild(row);
+    const row = el(`<div class="bulk-row"><button class="bulk-row-x">✕</button><input class="ec-name" placeholder="Certification name *"><input class="ec-issuer" placeholder="Issuer"><div class="bulk-dates"><div class="bulk-date-field"><label>Issued</label><input class="ec-issue" type="date"></div><div class="bulk-date-field ec-exp-wrap" hidden><label>Expires</label><input class="ec-exp" type="date"></div></div><label class="cert-expcheck"><input type="checkbox" class="ec-has-exp"> This certification expires</label></div>`);
+    row.querySelector(".bulk-row-x").onclick = () => row.remove();
+    const ecBox = row.querySelector(".ec-has-exp"), ecWrap = row.querySelector(".ec-exp-wrap");
+    ecBox.onchange = () => {
+      ecWrap.hidden = !ecBox.checked;
+      if (!ecBox.checked) row.querySelector(".ec-exp").value = "";
+      else row.querySelector(".ec-exp").focus();
+    };
+    certWrap.appendChild(row);
   };
   // "I have none of these" now also marks the underlying strength items
   // (education + certification) as skipped/complete, not just the gate.
@@ -1803,7 +1843,8 @@ function openExtrasFlow() {
     }
     for (const r of certWrap.querySelectorAll(".bulk-row")) {
       const name = r.querySelector(".ec-name").value.trim(); if (!name) continue;
-      await api("/profile/certs/add.php","POST",{ name, issuer:r.querySelector(".ec-issuer").value.trim(), issue_date:r.querySelector(".ec-issue").value, expiry_date:r.querySelector(".ec-exp").value });
+      const ecExp = r.querySelector(".ec-has-exp").checked ? r.querySelector(".ec-exp").value : "";
+      await api("/profile/certs/add.php","POST",{ name, issuer:r.querySelector(".ec-issuer").value.trim(), issue_date:r.querySelector(".ec-issue").value, expiry_date:ecExp });
     }
     await api("/settings/set.php","POST",{ key:"step_extras_done", value:"1" });
     closeModal(); refreshAfterProfileChange();
@@ -1900,7 +1941,7 @@ async function renderPublicProfile(uuid) {
 
   roSection(rightCol, "Experience", jobs.data?.data, j => `<div class="meta"><div class="t">${esc(j.title)}</div><div class="s">${esc(j.company_name || "")}${j.start_date ? " · " + j.start_date + (j.end_date ? " – " + j.end_date : " – Present") : ""}</div></div>`);
   roSection(rightCol, "Education", edu.data?.data, e => `<div class="meta"><div class="t">${esc(e.degree || e.institution)}</div><div class="s">${esc([e.institution, e.field].filter(Boolean).join(" · "))}${e.end_year ? " · " + e.end_year : ""}</div></div>`);
-  roSection(rightCol, "Certifications", certs.data?.data, c => `<div class="meta"><div class="t">${esc(c.name)}</div><div class="s">${esc(c.issuer || "")}${c.issue_date ? " · " + c.issue_date : ""}</div></div>`);
+  roSection(rightCol, "Certifications", certs.data?.data, c => `<div class="meta"><div class="t">${esc(c.name)}</div><div class="s">${certSubLine(c)}</div></div>`);
   // AI Skillset display under Certifications — only if enabled with skills.
   const pubAi = p.ai_skillset;
   if (pubAi && pubAi.enabled && (pubAi.skills || []).length) {
