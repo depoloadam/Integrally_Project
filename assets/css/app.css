@@ -203,6 +203,10 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
    flex:1, which would otherwise leave a half-width gap next to Issued
    while the expiry field is turned off. */
 .in-modal .row > div[hidden] { display:none; }
+
+/* activity feed "See more" */
+.feed-more-wrap { display:flex; justify-content:center; margin-top:14px; }
+.feed-more { flex:none; padding:9px 22px; }
 .cert-expired { color:#b91c1c; font-weight:600; }
 
 /* avatar strength bar with riding percentage pill (own profile only) */

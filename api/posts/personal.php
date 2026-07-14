@@ -2,10 +2,20 @@
 
 // =====================================================================
 // FILE: api/posts/personal.php
-// GET ?type=user|company&uuid=<uuid>
+// GET ?type=user|company&uuid=<uuid>&limit=10&offset=0
 // The "personal feed": one author's own posts, newest first.
 // Public posts are visible to anyone; 'followers' posts only to the
 // owner or to logged-in users who follow that author.
+//
+// Paged: previously this returned a hard LIMIT 50 with no way past it,
+// so a prolific author's older posts were simply unreachable. Now the
+// caller pages with limit/offset and gets `has_more` back, which drives
+// the "See more" button on the profile. Ordering is (created_at DESC,
+// id DESC) — the id tiebreaker keeps paging stable when several posts
+// share a timestamp, which would otherwise repeat or skip rows.
+//
+// Callers that pass no limit still get 50, so existing consumers of this
+// endpoint keep working unchanged.
 // =====================================================================
 
 require_once __DIR__ . '/../../src/Database.php';
@@ -16,9 +26,13 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     Response::error('Method not allowed.', 405);
 }
 
-$pdo  = Database::conn();
-$type = trim($_GET['type'] ?? '');
-$uuid = trim($_GET['uuid'] ?? '');
+$pdo    = Database::conn();
+$type   = trim($_GET['type'] ?? '');
+$uuid   = trim($_GET['uuid'] ?? '');
+$limit  = (int) ($_GET['limit'] ?? 50);
+$offset = max(0, (int) ($_GET['offset'] ?? 0));
+if ($limit <= 0)  $limit = 50;
+if ($limit > 50)  $limit = 50;   // clamp: no request drags the table out
 
 if ($type !== 'user' && $type !== 'company') {
     Response::error("type must be 'user' or 'company'.", 422);
@@ -56,17 +70,29 @@ if ($type === 'user' && $viewerUserId === $authorId) {
     $canSeeFollowerPosts = (bool) $chk->fetch();
 }
 
-$sql = 'SELECT id, post_type, body, media_url, meta, visibility, created_at
-        FROM posts
-        WHERE author_type = ? AND author_id = ?';
+$where = 'WHERE author_type = ? AND author_id = ?';
 if (!$canSeeFollowerPosts) {
-    $sql .= " AND visibility = 'public'";
+    $where .= " AND visibility = 'public'";
 }
-$sql .= ' ORDER BY created_at DESC LIMIT 50';
+
+// Total under the SAME visibility rules as the page itself, so has_more
+// can never promise posts the viewer isn't allowed to see.
+$cnt = $pdo->prepare("SELECT COUNT(*) AS n FROM posts $where");
+$cnt->execute([$type, $authorId]);
+$total = (int) $cnt->fetch()['n'];
+
+// LIMIT/OFFSET are interpolated as ints (already validated above) —
+// MySQL won't accept them as bound params in a prepared statement.
+$sql = "SELECT id, post_type, body, media_url, meta, visibility, created_at
+        FROM posts
+        $where
+        ORDER BY created_at DESC, id DESC
+        LIMIT $limit OFFSET $offset";
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute([$type, $authorId]);
 $posts = $stmt->fetchAll();
+$hasMore = ($offset + count($posts)) < $total;
 
 // Decode the JSON meta column for any structured (e.g. cert) posts.
 foreach ($posts as &$pp) {
@@ -93,5 +119,9 @@ Response::success([
         'name'   => $author['name'],
         'avatar' => $author['avatar'],
     ],
-    'posts' => $posts,
+    'posts'    => $posts,
+    'offset'   => $offset,
+    'limit'    => $limit,
+    'total'    => $total,
+    'has_more' => $hasMore,
 ]);

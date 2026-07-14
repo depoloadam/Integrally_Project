@@ -181,22 +181,65 @@ async function renderProfile() {
 }
 
 // ---- personal feed (own posts at bottom of profile) ------------------
+// Activity feed. Shows a first page of posts with a "See more" button
+// rather than everything at once — a long history used to bury the rest
+// of the profile (and anything past the old hard LIMIT 50 was simply
+// unreachable). Each click appends the next page in place.
+const PERSONAL_FEED_PAGE = 10;
+
 async function renderPersonalFeed(col, uuid) {
   const card = el(`<div class="in-card2"><h2>Activity</h2><div class="body"><div class="in-empty">Loading…</div></div></div>`);
   col.appendChild(card);
   const body = card.querySelector(".body");
-  const res = await api("/posts/personal.php?type=user&uuid=" + encodeURIComponent(uuid));
+
+  const fetchPage = (offset) => api(
+    "/posts/personal.php?type=user&uuid=" + encodeURIComponent(uuid) +
+    "&limit=" + PERSONAL_FEED_PAGE + "&offset=" + offset
+  );
+
+  const res = await fetchPage(0);
   const posts = res.data?.data?.posts || [];
   const author = res.data?.data?.author || {};
   body.innerHTML = "";
   if (!posts.length) { body.appendChild(el(`<div class="in-empty">No posts yet. Updates you share will appear here.</div>`)); return; }
+
   const list = el(`<div class="in-post-list" style="border:none;padding:0"></div>`);
-  posts.forEach(po => list.appendChild(renderPost({
+  const addPosts = (rows) => rows.forEach(po => list.appendChild(renderPost({
     post_id:po.id, post_type:po.post_type, body:po.body, media_url:po.media_url, meta:po.meta,
     created_at:po.created_at, reason:"self",
     author:{ type:"user", uuid:author.uuid, name:author.name, avatar:author.avatar },
   })));
+  addPosts(posts);
   body.appendChild(list);
+
+  let offset = posts.length;
+  if (!res.data?.data?.has_more) return;
+
+  const moreWrap = el(`<div class="feed-more-wrap"></div>`);
+  const btn = el(`<button class="in-btn ghost feed-more">See more…</button>`);
+  moreWrap.appendChild(btn);
+  body.appendChild(moreWrap);
+
+  btn.onclick = async () => {
+    btn.disabled = true;
+    btn.textContent = "Loading…";
+    const r = await fetchPage(offset);
+    if (!r.ok || !r.data?.success) {
+      btn.disabled = false;
+      btn.textContent = "See more…";
+      toast("Could not load more posts.", "err");
+      return;
+    }
+    const more = r.data.data.posts || [];
+    offset += more.length;
+    addPosts(more);
+    if (r.data.data.has_more && more.length) {
+      btn.disabled = false;
+      btn.textContent = "See more…";
+    } else {
+      moreWrap.remove();   // nothing left — don't leave a dead button
+    }
+  };
 }
 
 // ---- score row (badge, gradient bar, mini-breakdown, full link) ------
