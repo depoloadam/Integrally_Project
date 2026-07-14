@@ -695,6 +695,11 @@ function routeFromHash() {
     renderAiSkillset();
     return;
   }
+  if (raw === "profile-strength") {
+    document.querySelectorAll("[data-nav]").forEach(x => x.classList.remove("active"));
+    renderStrengthPage();
+    return;
+  }
   if (raw.startsWith("score-history/")) {
     document.querySelectorAll("[data-nav]").forEach(x => x.classList.remove("active"));
     renderScoreHistory(raw.slice("score-history/".length));

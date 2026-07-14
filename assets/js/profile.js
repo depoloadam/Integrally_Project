@@ -11,13 +11,12 @@ async function renderProfile() {
   const view = $("view");
   view.innerHTML = `<div class="in-loading">Loading your profile…</div>`;
 
-  const [prof, jobs, edu, certs, skills, interests, scores, settings] = await Promise.all([
+  const [prof, jobs, edu, certs, skills, scores, settings] = await Promise.all([
     api("/profile/get.php"),
     api("/profile/jobs/list.php"),
     api("/profile/education/list.php"),
     api("/profile/certs/list.php"),
     api("/profile/skills/list.php"),
-    api("/profile/interests/list.php"),
     api("/score/latest.php"),
     api("/settings/get.php"),
   ]);
@@ -30,78 +29,40 @@ async function renderProfile() {
 
   view.innerHTML = "";
 
-  // ---- onboarding progress box ----
+  // ---- profile strength (unified onboarding + completeness) ----------
+  // Two layers in ONE card:
+  //   1) Required steps (gate) — unchanged keys/semantics; scoring stays
+  //      locked until these are done.
+  //   2) Strength items — the full modern profile checklist. Score-
+  //      relevant items mirror ScoreEngine's profile_strength thresholds;
+  //      presentation items never affect the score.
   const st = settings.data?.data || {};
-  const hasJobs   = (jobs.data?.data?.length || 0) > 0;
-  const skillCount = (skills.data?.data?.length || 0);
-  const hasExtras = (interests.data?.data?.length || 0) > 0
-                 || (certs.data?.data?.length || 0) > 0
-                 || (edu.data?.data?.length || 0) > 0;
+  const lists = {
+    jobs:      jobs.data?.data      || [],
+    edu:       edu.data?.data       || [],
+    certs:     certs.data?.data     || [],
+    skills:    skills.data?.data    || [],
+  };
 
-  const steps = [
-    { key:"email",      label:"Verify your email",                          done: st.email_verified === "1", action:null },
-    { key:"experience", label:"Add your work experience",                   done: hasJobs || st.step_experience_done === "1", action: () => openBulkExperience() },
-    { key:"skills",     label:"Add at least 3 skills",                       done: skillCount >= 3 || st.step_skills_done === "1", action: () => openBulkSkills() },
-    { key:"extras",     label:"Add interests, certifications & education",   done: hasExtras || st.step_extras_done === "1", action: () => openExtrasFlow() },
-  ];
-  const doneCount = steps.filter(s => s.done).length;
-  const pct = Math.round((doneCount / steps.length) * 100);
-  const allDone = doneCount === steps.length;
-
-  if (allDone && st.onboarding_complete !== "1") {
+  const gateSteps = buildGateSteps(st, lists);
+  const gateDone = gateSteps.every(s => s.done);
+  if (gateDone && st.onboarding_complete !== "1") {
     await api("/settings/set.php", "POST", { key:"onboarding_complete", value:"1" });
+    st.onboarding_complete = "1"; // reflect immediately so scoring unlocks this render
   }
 
-  if (!allDone) {
-    const box = el(`
-      <div class="in-onboard">
-        <div class="in-onboard-head">
-          <div>
-            <div class="in-onboard-title">Finish setting up your profile</div>
-            <div class="in-onboard-sub">Complete setup to unlock scoring and get the most from Integrally.</div>
-          </div>
-          <div class="in-onboard-pct">${pct}%</div>
-        </div>
-        <div class="in-onboard-bar"><div class="in-onboard-fill" style="width:${pct}%"></div></div>
-        <div class="in-onboard-steps"></div>
-      </div>`);
-    view.appendChild(box);
-    const stepsWrap = box.querySelector(".in-onboard-steps");
-    steps.filter(s => !s.done).forEach(s => {
-      const row = el(`
-        <div class="in-onboard-step">
-          <span class="in-onboard-label">${esc(s.label)}</span>
-          ${s.action ? `<button class="in-onboard-go">Start →</button>` : ""}
-        </div>`);
-      if (s.action) row.querySelector(".in-onboard-go").onclick = s.action;
-      stepsWrap.appendChild(row);
-    });
+  const strength = computeStrength(p, attrs, headline, lists, st);
+
+  // One-time celebration the first time the profile reaches 100%.
+  if (strength.pct === 100 && st.strength_complete_seen !== "1") {
+    api("/settings/set.php", "POST", { key:"strength_complete_seen", value:"1" });
+    st.strength_complete_seen = "1";
+    toast("Your profile is 100% complete 🎉");
   }
 
-  // ---- recommendation box (post-onboarding, discreet) ----
-  if (allDone && st.rec_box_hidden !== "1") {
-    const recs = [];
-    if (!p.profile_pic) {
-      recs.push({ label:"Add a profile picture", action: () => editCore(p, headline, attrs) });
-    }
-    if (recs.length) {
-      const recBox = el(`
-        <div class="in-recbox">
-          <div class="in-rec-head"><span class="in-rec-title">A few optional touches</span><button class="in-rec-hide" title="Hide">✕</button></div>
-          <div class="in-rec-items"></div>
-        </div>`);
-      view.appendChild(recBox);
-      const items = recBox.querySelector(".in-rec-items");
-      recs.forEach(r => {
-        const row = el(`<div class="in-rec-item"><span>${esc(r.label)}</span><button class="in-rec-go">Add</button></div>`);
-        row.querySelector(".in-rec-go").onclick = r.action;
-        items.appendChild(row);
-      });
-      recBox.querySelector(".in-rec-hide").onclick = async () => {
-        recBox.remove();
-        await api("/settings/set.php", "POST", { key:"rec_box_hidden", value:"1" });
-      };
-    }
+  const strengthCtx = { p, attrs, headline, st, gateSteps, gateDone, strength };
+  if (strength.pct < 100 && !(gateDone && st.strength_hidden === "1")) {
+    view.appendChild(renderStrengthCard(strengthCtx));
   }
 
   // ---- two-column layout: sticky profile box (left) + sections (right) ----
@@ -119,7 +80,7 @@ async function renderProfile() {
       <div class="in-phead-dropdown" id="phead-dropdown">
         <button data-pmenu="edit">Edit profile</button>
       </div>
-      <div class="in-avatar">${p.profile_pic ? `<img src="${esc(p.profile_pic)}" alt="">` : esc(initial)}</div>
+      ${avatarWithRing(p, initial, strength)}
       <div class="in-phead-info">
         <h1>@${esc(p.username || "")}</h1>
         <div class="loc">${esc(loc || "No location set")}</div>
@@ -134,6 +95,21 @@ async function renderProfile() {
   pheadDrop.querySelector('[data-pmenu="edit"]').onclick = (e) => {
     e.stopPropagation(); pheadDrop.classList.remove("show"); editCore(p, headline, attrs);
   };
+
+  // Ring badge: if the strength card was hidden, un-hide and bring it
+  // back; if it's visible, just scroll up to it.
+  const pctBadge = $("avatar-pct-badge");
+  if (pctBadge) {
+    pctBadge.onclick = async (e) => {
+      e.stopPropagation();
+      if (document.querySelector(".in-strength")) {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
+      await api("/settings/set.php", "POST", { key:"strength_hidden", value:"0" });
+      refreshAfterProfileChange();
+    };
+  }
 
   // Skills — moved to the left column, directly under the identity box.
   chipSection(leftCol, "Skills", skills.data?.data, s => `
@@ -199,9 +175,6 @@ async function renderProfile() {
   // has enabled it; visitors see it only if enabled + has endorsed skills.
   const aiBoxRight = renderAiSkillsDisplay(st, true);
   if (aiBoxRight) rightCol.appendChild(aiBoxRight);
-
-  chipSection(rightCol, "Interests", interests.data?.data, i => esc(i.name),
-    addInterest, i => ({ id:i.id, kind:"interest" }), "interest");
 
   renderPersonalFeed(rightCol, p.uuid);
 }
@@ -376,7 +349,7 @@ async function runScoreRemoval(s, scope, onDone) {
   if (r.ok && r.data?.success) {
     closeModal();
     if (typeof onDone === "function") onDone();
-    else renderProfile();   // rebuild the latest-per-target panel
+    else refreshAfterProfileChange();   // rebuild the latest-per-target panel
   } else {
     ids.forEach(id => { const b = $(id); if (b) b.disabled = false; });
     alert(r.data?.error || "Could not remove the score.");
@@ -418,6 +391,323 @@ async function loadScoreComparison(s, slot, scoreId) {
 // Renders a compact row of pill links, one per attribute that actually
 // has a value. Pills wrap onto a second line if the labels are long.
 // Returns "" (nothing) if none are set, so it never leaves an empty gap.
+// ---- profile strength -----------------------------------------------
+// Gate steps (required before scoring unlocks) — shared by the profile
+// card and the full #profile-strength page. Same keys and bulk flows as
+// the original onboarding feature.
+function buildGateSteps(st, lists) {
+  const sk = k => st["strength_skip_" + k] === "1";
+  return [
+    { key:"email",      label:"Verify your email",            done: st.email_verified === "1", action:null, skip:null },
+    { key:"experience", label:"Add your work experience",
+      done: lists.jobs.length > 0 || st.step_experience_done === "1" || sk("work"),
+      action: () => openBulkExperience(), skip: () => strengthSkip("work") },
+    { key:"skills",     label:"Add at least 3 skills",
+      done: lists.skills.length >= 3 || st.step_skills_done === "1" || sk("skills3"),
+      action: () => openBulkSkills(), skip: () => strengthSkip("skills3") },
+    { key:"extras",     label:"Add certifications & education",
+      done: (lists.certs.length || lists.edu.length) > 0 || st.step_extras_done === "1" || (sk("edu") && sk("cert")),
+      action: () => openExtrasFlow(), skip: () => strengthSkip("extras") },
+  ];
+}
+
+// Persist a skip. Skipped items count as complete everywhere (strength
+// AND the gate). "extras" fans out to both of its underlying items.
+async function strengthSkip(key) {
+  const writes = key === "extras"
+    ? [["strength_skip_edu","1"],["strength_skip_cert","1"],["step_extras_done","1"]]
+    : [["strength_skip_" + key, "1"]];
+  for (const [k, v] of writes) await api("/settings/set.php","POST",{ key:k, value:v });
+  refreshAfterProfileChange();
+}
+
+// Reverse a skip (from the full page). Work history also clears the
+// legacy "no work experience" flag so the item genuinely reopens.
+async function strengthUnskip(key) {
+  const writes = [["strength_skip_" + key, "0"]];
+  if (key === "work") writes.push(["step_experience_done","0"]);
+  for (const [k, v] of writes) await api("/settings/set.php","POST",{ key:k, value:v });
+  refreshAfterProfileChange();
+}
+
+// Modal save handlers call this instead of renderProfile() directly, so
+// completing an item from the #profile-strength page refreshes THAT page
+// rather than yanking the user back to the profile.
+function refreshAfterProfileChange() {
+  if (location.hash === "#profile-strength") renderStrengthPage();
+  else renderProfile();
+}
+
+// ---- full checklist page (#profile-strength) --------------------------
+async function renderStrengthPage() {
+  const view = $("view");
+  view.innerHTML = `<div class="in-loading">Loading…</div>`;
+
+  const [prof, jobs, edu, certs, skills, settings] = await Promise.all([
+    api("/profile/get.php"),
+    api("/profile/jobs/list.php"),
+    api("/profile/education/list.php"),
+    api("/profile/certs/list.php"),
+    api("/profile/skills/list.php"),
+    api("/settings/get.php"),
+  ]);
+
+  const p = prof.data?.data || {};
+  const attrs = p.attributes || {};
+  const headline = effectiveHeadline(attrs, jobs.data?.data);
+  const st = settings.data?.data || {};
+  const lists = {
+    jobs:      jobs.data?.data      || [],
+    edu:       edu.data?.data       || [],
+    certs:     certs.data?.data     || [],
+    skills:    skills.data?.data    || [],
+  };
+  const gateSteps = buildGateSteps(st, lists);
+  const gateDone = gateSteps.every(s => s.done);
+  const strength = computeStrength(p, attrs, headline, lists, st);
+  const tier = strengthTier(strength.pct);
+  const ctx = { p, attrs, headline };
+
+  view.innerHTML = "";
+  const page = el(`
+    <div class="in-strpage">
+      <a class="in-strpage-back" href="#profile">← Back to profile</a>
+      <div class="in-strength">
+        <div class="in-str-head">
+          <div class="in-str-titles">
+            <div class="in-str-title">Profile strength <span class="in-str-tier ${tier.cls}">${tier.name}</span></div>
+            <div class="in-str-sub">${strength.doneCount} of ${strength.total} complete${gateDone ? "" : " · finish the required steps to unlock scoring"}</div>
+          </div>
+          <div class="in-str-pct">${strength.pct}%</div>
+        </div>
+        <div class="in-str-bar"><div class="in-str-fill" style="width:${strength.pct}%"></div></div>
+      </div>
+      <div id="strp-sections"></div>
+    </div>`);
+  view.appendChild(page);
+  const sections = page.querySelector("#strp-sections");
+
+  // Required layer first, if the gate is still open.
+  if (!gateDone) {
+    const req = el(`<div class="in-strength"><div class="in-str-req-title">Required to unlock scoring</div></div>`);
+    gateSteps.filter(s => !s.done).forEach(s => {
+      const row = el(`
+        <div class="in-str-step">
+          <span class="in-str-step-label">${esc(s.label)}</span>
+          ${s.skip ? `<button class="in-str-skiplink">Skip</button>` : ""}
+          ${s.action ? `<button class="in-str-go">Start →</button>` : ""}
+        </div>`);
+      if (s.action) row.querySelector(".in-str-go").onclick = s.action;
+      if (s.skip) row.querySelector(".in-str-skiplink").onclick = s.skip;
+      req.appendChild(row);
+    });
+    sections.appendChild(req);
+  }
+
+  // Full checklist, grouped. Done items show as checked; undone ones are
+  // actionable. Everything stays visible so the page reads as a checklist
+  // being completed, not a shrinking nag list.
+  const group = (title, sub, items) => {
+    const card = el(`
+      <div class="in-strength">
+        <div class="in-str-req-title">${esc(title)}</div>
+        <div class="in-strp-groupsub">${esc(sub)}</div>
+      </div>`);
+    items.forEach(i => {
+      const row = el(i.done
+        ? `<div class="in-str-row done">
+             <span class="in-strp-check">✓</span>
+             <span class="in-str-row-label">${esc(i.label)}</span>
+             ${i.skipped ? `<span class="in-strp-skipnote">skipped</span><button class="in-strp-undo">Undo</button>` : ""}
+           </div>`
+        : `<div class="in-str-row">
+             <span class="in-str-dot ${i.score ? "score" : ""}"></span>
+             <span class="in-str-row-label">${esc(i.label)}</span>
+             <span class="in-str-row-why">${esc(i.why)}</span>
+             <button class="in-str-skiplink" title="Doesn't apply to me — mark it complete">Skip</button>
+             <button class="in-str-row-go">Add</button>
+           </div>`);
+      if (!i.done) {
+        row.querySelector(".in-str-row-go").onclick = () => strengthAction(i.act, ctx);
+        row.querySelector(".in-str-skiplink").onclick = () => strengthSkip(i.key);
+      } else if (i.skipped) {
+        row.querySelector(".in-strp-undo").onclick = () => strengthUnskip(i.key);
+      }
+      card.appendChild(row);
+    });
+    sections.appendChild(card);
+  };
+
+  group("Boosts your score", "These feed the profile-strength part of your Integrally score.",
+    strength.items.filter(i => i.score));
+  group("Polishes your profile", "These help visitors — they never affect your score.",
+    strength.items.filter(i => !i.score));
+}
+
+// The full completeness checklist for the modern profile. Score-relevant
+// items intentionally mirror ScoreEngine.php's profile_strength
+// thresholds (work history, 3+ skills, education, cert) so
+// every suggestion the card makes genuinely nudges the user's score —
+// but the score itself is computed server-side from relevance and is
+// never derived from this percentage. Presentation items (avatar,
+// headline, bio, etc.) never touch the score at all.
+function computeStrength(p, attrs, headline, L, st) {
+  const val = k => (attrs[k]?.value || "").trim();
+  const sk = k => st["strength_skip_" + k] === "1";
+  const hasSocial = !!(val("linkedin_url") || val("twitter_url") || val("website_url"));
+  // real = the thing actually exists; skipped = marked "doesn't apply".
+  // Both count as done. Work history also honors the legacy
+  // step_experience_done flag from the old "no work experience" checkbox.
+  const mk = (key, label, why, real, score, act, skipFlag) => ({
+    key, label, why, score, act, real,
+    skipped: !real && skipFlag, done: real || skipFlag,
+  });
+  const items = [
+    // score-relevant
+    mk("work",    "Add your work history",   "Counts toward your score",                  L.jobs.length >= 1,   true,  "job",   sk("work") || st.step_experience_done === "1"),
+    mk("skills3", "Add at least 3 skills",   "Counts toward your score",                  L.skills.length >= 3, true,  "skill", sk("skills3")),
+    mk("edu",     "Add your education",      "Counts toward your score",                  L.edu.length >= 1,    true,  "edu",   sk("edu")),
+    mk("cert",    "Add a certification",     "Counts toward your score",                  L.certs.length >= 1,  true,  "cert",  sk("cert")),
+    // presentation
+    mk("avatar",   "Add a profile picture",  "Helps people recognize you",                !!p.profile_pic,      false, "core",  sk("avatar")),
+    mk("headline", "Set a headline",         "The first line visitors read",              !!headline,           false, "core",  sk("headline")),
+    mk("location", "Add your location",      "Shown on your profile",                     !!(p.city || p.country), false, "core", sk("location")),
+    mk("bio",      "Write a short bio",      "Tell visitors who you are",                 !!val("bio"),         false, "bio",   sk("bio")),
+    mk("social",   "Link a social profile",  "LinkedIn, X, or your website",              hasSocial,            false, "core",  sk("social")),
+    mk("resume",   "Upload your resume",     "Private — used when you apply to jobs",     !!p.resume,           false, "core",  sk("resume")),
+  ];
+  const doneCount = items.filter(i => i.done).length;
+  return { items, doneCount, total: items.length, pct: Math.round((doneCount / items.length) * 100) };
+}
+
+function strengthTier(pct) {
+  if (pct >= 100) return { name:"Complete",        cls:"t4" };
+  if (pct >= 70)  return { name:"Strong",          cls:"t3" };
+  if (pct >= 40)  return { name:"Taking shape",    cls:"t2" };
+  return           { name:"Getting started", cls:"t1" };
+}
+
+// Suggestions the user tapped "Not now" on — session-only, so nothing is
+// nagged twice in a sitting but everything comes back next visit.
+const STRENGTH_SNOOZED = new Set();
+
+function strengthAction(act, ctx) {
+  const { p, attrs, headline } = ctx;
+  const val = k => (attrs[k]?.value || "").trim();
+  switch (act) {
+    case "job":      addJob();      break;
+    case "skill":    addSkill();    break;
+    case "edu":      addEdu();      break;
+    case "cert":     addCert();     break;
+    case "bio":      editBio(val("bio"), val("motto")); break;
+    case "core":     editCore(p, headline, attrs);      break;
+  }
+}
+
+// Owner-only avatar ring. Public profiles never call this.
+// The viewBox is 4x the rendered pixel size (432 units drawn into 108px).
+// A 1:1 viewBox makes the browser rasterize the arc straight into a
+// 108-pixel grid, which is what made the curve look jagged; oversampling
+// the coordinate space lets it compute the curve at high resolution and
+// scale down smoothly.
+function avatarWithRing(p, initial, strength) {
+  const inner = `<div class="in-avatar">${p.profile_pic ? `<img src="${esc(p.profile_pic)}" alt="">` : esc(initial)}</div>`;
+  if (!strength || strength.pct >= 100) return inner;
+  // Slider-thumb style: the percentage pill rides the leading edge of the
+  // fill. clamp() keeps it on the track at extreme percentages.
+  return `
+    <div class="in-avatar-strength" title="Profile strength: ${strength.pct}%">
+      ${inner}
+      <div class="in-avatar-strtrack">
+        <div class="in-avatar-strfill" style="width:${strength.pct}%"></div>
+        <button class="in-avatar-pct" id="avatar-pct-badge" title="Profile strength"
+          style="left:clamp(22px, ${strength.pct}%, calc(100% - 22px))">${strength.pct}%</button>
+      </div>
+    </div>`;
+}
+
+function renderStrengthCard(ctx) {
+  const { st, gateSteps, gateDone, strength } = ctx;
+  const tier = strengthTier(strength.pct);
+  const remaining = strength.items.filter(i => !i.done);
+
+  const card = el(`
+    <div class="in-strength">
+      <div class="in-str-head">
+        <div class="in-str-titles">
+          <div class="in-str-title">Profile strength <span class="in-str-tier ${tier.cls}">${tier.name}</span></div>
+          <div class="in-str-sub">${strength.doneCount} of ${strength.total} complete${gateDone ? "" : " · finish the required steps to unlock scoring"}</div>
+        </div>
+        <div class="in-str-pct">${strength.pct}%</div>
+        ${gateDone ? `<button class="in-str-hide" title="Hide — the ring on your avatar brings this back">✕</button>` : ""}
+      </div>
+      <div class="in-str-bar"><div class="in-str-fill" style="width:${strength.pct}%"></div></div>
+      <div class="in-str-body"></div>
+      <a class="in-str-pagelink" href="#profile-strength">${gateDone
+        ? `See everything left (${remaining.length}) →`
+        : `View all steps →`}</a>
+    </div>`);
+
+  const body = card.querySelector(".in-str-body");
+
+  if (!gateDone) {
+    // Required layer — same steps and settings keys as the original
+    // onboarding flow; bulk menus and skip paths unchanged. Only the
+    // first two undone steps show here; the rest live on the full page.
+    const undone = gateSteps.filter(s => !s.done);
+    const req = el(`<div class="in-str-req"><div class="in-str-req-title">Required to unlock scoring</div></div>`);
+    undone.slice(0, 2).forEach(s => {
+      const row = el(`
+        <div class="in-str-step">
+          <span class="in-str-step-label">${esc(s.label)}</span>
+          ${s.skip ? `<button class="in-str-skiplink">Skip</button>` : ""}
+          ${s.action ? `<button class="in-str-go">Start →</button>` : ""}
+        </div>`);
+      if (s.action) row.querySelector(".in-str-go").onclick = s.action;
+      if (s.skip) row.querySelector(".in-str-skiplink").onclick = s.skip;
+      req.appendChild(row);
+    });
+    body.appendChild(req);
+  } else {
+    // Next best action — score-relevant items first (array order), one
+    // suggestion at a time. "Not now" cycles; if everything's been
+    // snoozed this session, start the cycle over.
+    let pool = remaining.filter(i => !STRENGTH_SNOOZED.has(i.key));
+    if (!pool.length && remaining.length) { STRENGTH_SNOOZED.clear(); pool = remaining; }
+    const next = pool[0];
+    if (next) {
+      const row = el(`
+        <div class="in-str-next">
+          <div class="in-str-next-info">
+            <div class="in-str-next-label">${esc(next.label)}</div>
+            <div class="in-str-next-why">${next.score ? `<span class="in-str-scoretag">▲ score</span>` : ""}${esc(next.why)}</div>
+          </div>
+          <button class="in-btn primary in-str-next-go">Add</button>
+          <button class="in-str-skiplink" title="Doesn't apply to me — mark it complete">Skip</button>
+          ${remaining.length > 1 ? `<button class="in-str-next-skip">Not now</button>` : ""}
+        </div>`);
+      row.querySelector(".in-str-next-go").onclick = () => strengthAction(next.act, ctx);
+      row.querySelector(".in-str-skiplink").onclick = () => strengthSkip(next.key);
+      const snooze = row.querySelector(".in-str-next-skip");
+      if (snooze) snooze.onclick = () => {
+        STRENGTH_SNOOZED.add(next.key);
+        card.replaceWith(renderStrengthCard(ctx));
+      };
+      body.appendChild(row);
+    }
+  }
+
+  const hideBtn = card.querySelector(".in-str-hide");
+  if (hideBtn) hideBtn.onclick = async () => {
+    card.remove();
+    st.strength_hidden = "1";
+    await api("/settings/set.php", "POST", { key:"strength_hidden", value:"1" });
+    toast("Hidden — tap the ring on your avatar to bring it back");
+  };
+
+  return card;
+}
+
 function socialLinksHtml(attrs) {
   const websiteLabel = (attrs.website_label?.value || "").trim() || "Website";
   const links = [
@@ -667,7 +957,7 @@ function editBio(currentBio, currentMotto) {
     const value = $("bio-input").value.trim();
     const r = await api("/profile/set-attribute.php", "POST", { key: "bio", value });
     await api("/profile/set-attribute.php", "POST", { key: "motto", value: $("bio-motto").value.trim() });
-    if (r.ok && r.data?.success) { closeModal(); renderProfile(); }
+    if (r.ok && r.data?.success) { closeModal(); refreshAfterProfileChange(); }
     else { alert(r.data?.error || "Could not save bio."); }
   };
 }
@@ -706,13 +996,8 @@ async function refreshChipSection(kind) {
   const card = document.querySelector(`[data-section="${kind}"]`);
   if (!card) return;
   const body = card.querySelector(".body");
-  if (kind === "skill") {
-    const res = await api("/profile/skills/list.php");
-    fillChips(body, res.data?.data, s => `${esc(s.name)}`, s => ({ id:s.id, kind:"skill" }));
-  } else {
-    const res = await api("/profile/interests/list.php");
-    fillChips(body, res.data?.data, i => esc(i.name), i => ({ id:i.id, kind:"interest" }));
-  }
+  const res = await api("/profile/skills/list.php");
+  fillChips(body, res.data?.data, s => `${esc(s.name)}`, s => ({ id:s.id, kind:"skill" }));
 }
 
 // ---- admin: edit another user's core profile -------------------------
@@ -926,7 +1211,7 @@ function editCore(p, headline, attrs) {
         setNavAvatar(ME.profile_pic, (ME.username || "?").charAt(0).toUpperCase());
       }
     }
-    closeModal(); renderProfile();
+    closeModal(); refreshAfterProfileChange();
   };
 }
 
@@ -1133,7 +1418,7 @@ function addJob(existing) {
   currentCb.onchange();  // reflect initial current-job state (edit mode)
 
   const noneBtn = $("j-none");
-  if (noneBtn) noneBtn.onclick = async () => { await api("/settings/set.php","POST",{key:"step_experience_done",value:"1"}); closeModal(); renderProfile(); };
+  if (noneBtn) noneBtn.onclick = async () => { await api("/settings/set.php","POST",{key:"step_experience_done",value:"1"}); closeModal(); refreshAfterProfileChange(); };
   $("save-job").onclick = async () => {
     const title = $("j-title").value.trim(); if (!title) return;
     const company = $("j-company").value.trim();
@@ -1149,7 +1434,7 @@ function addJob(existing) {
         end_date: currentCb.checked ? "" : $("j-end").value,
         description:$("j-desc").value.trim()
       });
-      closeModal(); renderProfile();
+      closeModal(); refreshAfterProfileChange();
     } else {
       // Read every field BEFORE closeModal(). closeModal() sets the
       // modal's innerHTML to "", so any $("j-…") lookup after it returns
@@ -1171,7 +1456,7 @@ function addJob(existing) {
       if (isCurrent) {
         offerShareJob(title, company, startDate);
       }
-      renderProfile();
+      refreshAfterProfileChange();
     }
   };
 }
@@ -1199,7 +1484,7 @@ function addEdu(existing) {
     const payload = { institution:$("e-inst").value.trim(), degree:$("e-deg").value.trim(), field:$("e-field").value.trim(), start_year:$("e-start").value, end_year:$("e-end").value };
     if (isEdit) await api("/profile/education/update.php","POST",{ id:existing.id, ...payload });
     else        await api("/profile/education/add.php","POST", payload);
-    closeModal(); renderProfile();
+    closeModal(); refreshAfterProfileChange();
   };
 }
 
@@ -1215,8 +1500,8 @@ function addCert(existing) {
     const name = $("c-name").value.trim(); if (!name) return;
     const issuer = $("c-issuer").value.trim();
     const payload = { name, issuer, issue_date:$("c-issue").value, expiry_date:$("c-exp").value };
-    if (isEdit) { await api("/profile/certs/update.php","POST",{ id:existing.id, ...payload }); closeModal(); renderProfile(); }
-    else        { await api("/profile/certs/add.php","POST", payload); closeModal(); offerShareCert(name, issuer); renderProfile(); }
+    if (isEdit) { await api("/profile/certs/update.php","POST",{ id:existing.id, ...payload }); closeModal(); refreshAfterProfileChange(); }
+    else        { await api("/profile/certs/add.php","POST", payload); closeModal(); offerShareCert(name, issuer); refreshAfterProfileChange(); }
   };
 }
 
@@ -1229,18 +1514,6 @@ function addSkill() {
     const name = $("s-name").value.trim(); if (!name) return;
     await api("/profile/skills/add.php","POST",{ name });
     closeModal(); refreshChipSection("skill");
-  };
-}
-
-function addInterest() {
-  openModal(`
-    <h3>Add interest</h3>
-    <label>Interest *</label><input id="i-name" placeholder="e.g. Cloud Architecture">
-    <div class="in-modal-actions"><button class="in-btn ghost" onclick="closeModal()">Cancel</button><button class="in-btn primary" id="save-int">Add</button></div>`);
-  $("save-int").onclick = async () => {
-    const name = $("i-name").value.trim(); if (!name) return;
-    await api("/profile/interests/add.php","POST",{ name });
-    closeModal(); refreshChipSection("interest");
   };
 }
 
@@ -1277,7 +1550,7 @@ function scoreMe() {
     const target_value = input.value.trim(); if (!target_value) return;
     const btn = $("run-score"); btn.disabled = true; btn.textContent = "Scoring…";
     const r = await api("/score/score-me.php","POST",{ target_type:typeSel.value, target_value });
-    if (r.ok && r.data?.success) { closeModal(); renderProfile(); }
+    if (r.ok && r.data?.success) { closeModal(); refreshAfterProfileChange(); }
     else if (r.data?.code === "entry_cap") { showEntryCapModal(); }
     else { btn.disabled = false; btn.textContent = "Score"; alert(r.data?.error || "Could not score right now."); }
   };
@@ -1313,11 +1586,10 @@ const RECORD_ENDPOINTS = { jobs:"/profile/jobs/delete.php", education:"/profile/
 async function removeRecord(kind, id) {
   if (!confirm("Remove this entry?")) return;
   await api(RECORD_ENDPOINTS[kind], "POST", { id });
-  renderProfile();
+  refreshAfterProfileChange();
 }
 async function removeChip(ref) {
-  if (ref.kind === "skill") await api("/profile/skills/remove.php","POST",{ skill_id:ref.id });
-  else await api("/profile/interests/remove.php","POST",{ interest_id:ref.id });
+  await api("/profile/skills/remove.php","POST",{ skill_id:ref.id });
   refreshChipSection(ref.kind);
 }
 
@@ -1424,7 +1696,6 @@ function openBulkExperience() {
     <p class="bulk-intro">Add each role you've held. You can add as many as you like, then save them all at once.</p>
     <div id="bulk-jobs"></div>
     <button class="bulk-addrow" id="bulk-job-add">+ Add another role</button>
-    <label class="bulk-none"><input type="checkbox" id="bulk-job-none"> I have no work experience to add</label>
     <div class="in-modal-actions"><button class="in-btn ghost" onclick="closeModal()">Cancel</button><button class="in-btn primary" id="bulk-job-save">Save &amp; complete</button></div>`);
   const wrap = $("bulk-jobs");
   const addRow = () => {
@@ -1448,25 +1719,19 @@ function openBulkExperience() {
   };
   addRow();
   $("bulk-job-add").onclick = addRow;
-  $("bulk-job-none").onchange = (e) => { wrap.style.opacity = e.target.checked ? ".4" : "1"; wrap.style.pointerEvents = e.target.checked ? "none" : "auto"; $("bulk-job-add").disabled = e.target.checked; };
   $("bulk-job-save").onclick = async () => {
-    const none = $("bulk-job-none").checked;
     const btn = $("bulk-job-save"); btn.disabled = true; btn.textContent = "Saving…";
-    if (none) {
-      await api("/settings/set.php","POST",{ key:"step_experience_done", value:"1" });
-    } else {
-      const rows = [...wrap.querySelectorAll(".bulk-row")];
-      const jobs = rows.map(r => ({
-        title: r.querySelector(".bj-title").value.trim(),
-        company_name: r.querySelector(".bj-company").value.trim(),
-        start_date: r.querySelector(".bj-start").value,
-        end_date: r.querySelector(".bj-current").checked ? "" : r.querySelector(".bj-end").value,
-      })).filter(j => j.title);
-      if (!jobs.length) { btn.disabled = false; btn.textContent = "Save & complete"; alert("Add at least one role, or check “I have no work experience.”"); return; }
-      for (const j of jobs) await api("/profile/jobs/add.php","POST", j);
-      await api("/settings/set.php","POST",{ key:"step_experience_done", value:"1" });
-    }
-    closeModal(); renderProfile();
+    const rows = [...wrap.querySelectorAll(".bulk-row")];
+    const jobs = rows.map(r => ({
+      title: r.querySelector(".bj-title").value.trim(),
+      company_name: r.querySelector(".bj-company").value.trim(),
+      start_date: r.querySelector(".bj-start").value,
+      end_date: r.querySelector(".bj-current").checked ? "" : r.querySelector(".bj-end").value,
+    })).filter(j => j.title);
+    if (!jobs.length) { btn.disabled = false; btn.textContent = "Save & complete"; alert("Add at least one role, or Cancel if you have none — you can skip this step from the profile strength card."); return; }
+    for (const j of jobs) await api("/profile/jobs/add.php","POST", j);
+    await api("/settings/set.php","POST",{ key:"step_experience_done", value:"1" });
+    closeModal(); refreshAfterProfileChange();
   };
 }
 
@@ -1497,29 +1762,17 @@ function openBulkSkills() {
     saveBtn.disabled = true; saveBtn.textContent = "Saving…";
     for (const name of pending) await api("/profile/skills/add.php","POST",{ name });
     await api("/settings/set.php","POST",{ key:"step_skills_done", value:"1" });
-    closeModal(); renderProfile();
+    closeModal(); refreshAfterProfileChange();
   };
 }
 
 function openExtrasFlow() {
   openModal(`
     <h3>Round out your profile</h3>
-    <p class="bulk-intro">Add any interests, education, and certifications you have. All optional — skip anything that doesn't apply, then finish.</p>
-    <div class="extras-sec"><div class="extras-label">Interests</div>
-      <div class="bulk-skill-input"><input id="ex-int-field" placeholder="e.g. Cloud Architecture"><button class="in-btn primary" id="ex-int-add" style="flex:none;padding:9px 14px">Add</button></div>
-      <div class="bulk-skill-chips" id="ex-int-chips"></div></div>
+    <p class="bulk-intro">Add any education and certifications you have. All optional — skip anything that doesn't apply, then finish.</p>
     <div class="extras-sec"><div class="extras-label">Education</div><div id="ex-edu-rows"></div><button class="bulk-addrow" id="ex-edu-add">+ Add education</button></div>
     <div class="extras-sec"><div class="extras-label">Certifications</div><div id="ex-cert-rows"></div><button class="bulk-addrow" id="ex-cert-add">+ Add certification</button></div>
     <div class="in-modal-actions"><button class="in-btn ghost" id="ex-skip">I have none of these</button><button class="in-btn primary" id="ex-save">Save &amp; complete</button></div>`);
-  const intPending = [];
-  const intChips = $("ex-int-chips"), intField = $("ex-int-field");
-  const refreshInt = () => {
-    intChips.innerHTML = "";
-    intPending.forEach((name, i) => { const chip = el(`<span class="in-chip">${esc(name)} <button class="x">✕</button></span>`); chip.querySelector(".x").onclick = () => { intPending.splice(i,1); refreshInt(); }; intChips.appendChild(chip); });
-  };
-  const addInt = () => { const v = intField.value.trim(); if (v && !intPending.some(s => s.toLowerCase() === v.toLowerCase())) intPending.push(v); intField.value = ""; intField.focus(); refreshInt(); };
-  $("ex-int-add").onclick = addInt;
-  intField.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); addInt(); } });
   const eduWrap = $("ex-edu-rows");
   $("ex-edu-add").onclick = () => {
     const row = el(`<div class="bulk-row"><button class="bulk-row-x">✕</button><input class="ee-inst" placeholder="Institution"><input class="ee-deg" placeholder="Degree"><div class="job-ta-wrap"><input class="ee-field" placeholder="Field of study" autocomplete="off"></div><div class="bulk-dates"><div class="bulk-date-field"><label>Start year</label><input class="ee-start" type="number" placeholder="2018"></div><div class="bulk-date-field"><label>End year</label><input class="ee-end" type="number" placeholder="2022"></div></div></div>`);
@@ -1537,10 +1790,11 @@ function openExtrasFlow() {
     const row = el(`<div class="bulk-row"><button class="bulk-row-x">✕</button><input class="ec-name" placeholder="Certification name *"><input class="ec-issuer" placeholder="Issuer"><div class="bulk-dates"><div class="bulk-date-field"><label>Issued</label><input class="ec-issue" type="date"></div><div class="bulk-date-field"><label>Expires</label><input class="ec-exp" type="date"></div></div></div>`);
     row.querySelector(".bulk-row-x").onclick = () => row.remove(); certWrap.appendChild(row);
   };
-  $("ex-skip").onclick = async () => { await api("/settings/set.php","POST",{ key:"step_extras_done", value:"1" }); closeModal(); renderProfile(); };
+  // "I have none of these" now also marks the underlying strength items
+  // (education + certification) as skipped/complete, not just the gate.
+  $("ex-skip").onclick = async () => { closeModal(); await strengthSkip("extras"); };
   $("ex-save").onclick = async () => {
     const btn = $("ex-save"); btn.disabled = true; btn.textContent = "Saving…";
-    for (const name of intPending) await api("/profile/interests/add.php","POST",{ name });
     for (const r of eduWrap.querySelectorAll(".bulk-row")) {
       const inst = r.querySelector(".ee-inst").value.trim(), deg = r.querySelector(".ee-deg").value.trim();
       if (!inst && !deg) continue;
@@ -1551,7 +1805,7 @@ function openExtrasFlow() {
       await api("/profile/certs/add.php","POST",{ name, issuer:r.querySelector(".ec-issuer").value.trim(), issue_date:r.querySelector(".ec-issue").value, expiry_date:r.querySelector(".ec-exp").value });
     }
     await api("/settings/set.php","POST",{ key:"step_extras_done", value:"1" });
-    closeModal(); renderProfile();
+    closeModal(); refreshAfterProfileChange();
   };
 }
 
@@ -1564,13 +1818,12 @@ async function renderPublicProfile(uuid) {
   // Any signed-in identity — user OR company — can follow a user; skip
   // the status call only for signed-out visitors.
   const canFollow = !!(ME || CO);
-  const [prof, jobs, edu, certs, skills, interests, scores, fstat, counts] = await Promise.all([
+  const [prof, jobs, edu, certs, skills, scores, fstat, counts] = await Promise.all([
     api("/profile/get.php?uuid=" + encodeURIComponent(uuid)),
     api("/profile/jobs/list.php?uuid=" + encodeURIComponent(uuid)),
     api("/profile/education/list.php?uuid=" + encodeURIComponent(uuid)),
     api("/profile/certs/list.php?uuid=" + encodeURIComponent(uuid)),
     api("/profile/skills/list.php?uuid=" + encodeURIComponent(uuid)),
-    api("/profile/interests/list.php?uuid=" + encodeURIComponent(uuid)),
     api("/score/latest.php?uuid=" + encodeURIComponent(uuid)),
     canFollow ? api("/follow/status.php?type=user&uuid=" + encodeURIComponent(uuid)) : Promise.resolve(null),
     api("/follow/counts.php?type=user&uuid=" + encodeURIComponent(uuid)),
@@ -1653,7 +1906,6 @@ async function renderPublicProfile(uuid) {
     const chips = pubAi.skills.map(s => `<span class="in-chip in-ai-chip">${esc(s)}</span>`).join("");
     rightCol.appendChild(el(`<div class="in-card2 in-ai-display"><h2><span class="in-ai-spark">✦</span> AI Skillset</h2><div class="in-chips body">${chips}</div></div>`));
   }
-  roChips(rightCol, "Interests", interests.data?.data, i => esc(i.name));
 }
 function roSection(col, title, items, rowHtml) {
   const card = el(`<div class="in-card2"><h2>${title}</h2><div class="body"></div></div>`);

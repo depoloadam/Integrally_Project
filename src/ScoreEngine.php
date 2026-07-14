@@ -20,7 +20,7 @@ require_once __DIR__ . '/EducationCatalog.php';
 
 class ScoreEngine
 {
-    const VERSION = 'category-relevance-v2.1';
+    const VERSION = 'category-relevance-v2.2';
 
     // ------------------------------------------------------------------
     // Tunable weights (must sum to 100). Adjust ratios here — the logic
@@ -211,11 +211,15 @@ class ScoreEngine
         ];
 
         // ---- 5) General profile strength ------------------------------
+        // Interests removed from the product UI (v2.2): their 2 points
+        // were redistributed to education (3->4) and certifications
+        // (2->3) so the 15-point ceiling stays reachable. gatherProfile
+        // still returns interests for any other consumer; they simply
+        // no longer score.
         $sc = count($profile['skills']);
         $strength  = $sc >= 3 ? 4 : ($sc >= 1 ? 2 : 0);
-        $strength += $eduCount >= 1 ? 3 : 0;
-        $strength += count($profile['certifications']) >= 1 ? 2 : 0;
-        $strength += count($profile['interests']) >= 1 ? 2 : 0;
+        $strength += $eduCount >= 1 ? 4 : 0;
+        $strength += count($profile['certifications']) >= 1 ? 3 : 0;
         $jc = count($profile['jobs']);
         $strength += $jc >= 2 ? 4 : ($jc >= 1 ? 2 : 0);
         $strength  = min(self::W_PROFILE_STRENGTH, $strength);
