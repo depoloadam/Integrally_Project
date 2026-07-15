@@ -307,7 +307,7 @@ function openApplyModal(j) {
     <div style="margin-bottom:12px">
       <label>Resume</label>
       <div class="ep-check-group" style="display:flex;flex-direction:column;gap:6px">
-        <label class="ep-check"><input type="radio" name="ap-resume" value="current" checked> Use my current resume</label>
+        <label class="ep-check" id="ap-resume-current-wrap"><input type="radio" name="ap-resume" value="current" checked> <span id="ap-resume-current-label">Use my current resume</span></label>
         <label class="ep-check"><input type="radio" name="ap-resume" value="upload"> Upload a different file</label>
         <label class="ep-check"><input type="radio" name="ap-resume" value="none"> Don't include a resume</label>
       </div>
@@ -333,6 +333,12 @@ function openApplyModal(j) {
         if (fileInput) fileInput.style.display = (radio.value === "upload" && radio.checked) ? "block" : "none";
       };
     });
+
+    // Populate the "current resume" row with the actual file on record so
+    // the user can verify what they're attaching (previously a blind
+    // choice). If there's no resume on file, that option can't be used —
+    // disable it and fall the selection back to "Upload a different file".
+    loadApplyCurrentResume();
   }
 
   $("ap-submit").onclick = async () => {
@@ -385,4 +391,46 @@ function openApplyModal(j) {
       errEl.textContent = r.data?.error || "Could not submit your application.";
     }
   };
+}
+
+// Fills the "Use my current resume" row in the apply modal with the real
+// file on record — its name plus a View link (opens the private
+// resume-download endpoint) — so the applicant can verify what they're
+// attaching instead of choosing blind. When there's no resume on file,
+// that option is unusable: it's disabled, relabeled, and the selection
+// falls back to "Upload a different file".
+async function loadApplyCurrentResume() {
+  const wrap = $("ap-resume-current-wrap");
+  const label = $("ap-resume-current-label");
+  if (!wrap || !label) return;
+
+  const r = await api("/profile/get.php");
+  // Modal may have been closed/replaced while the request was in flight.
+  if (!$("ap-resume-current-label")) return;
+
+  const resume = r.data?.data?.resume || null;
+  const radio = wrap.querySelector('input[name="ap-resume"]');
+
+  if (resume && resume.name) {
+    // Show the filename and a View link next to the option.
+    label.innerHTML =
+      `Use my current resume ` +
+      `<a href="${API_BASE}/profile/resume-download.php" target="_blank" rel="noopener" ` +
+      `class="ap-resume-view" onclick="event.stopPropagation()">Download</a>` +
+      `<span class="ap-resume-name">${esc(resume.name)}</span>`;
+  } else {
+    // Nothing on file — disable this option and move the default to Upload.
+    label.textContent = "No resume on file";
+    wrap.classList.add("ap-resume-disabled");
+    if (radio) {
+      radio.disabled = true;
+      radio.checked = false;
+    }
+    const uploadRadio = document.querySelector('input[name="ap-resume"][value="upload"]');
+    if (uploadRadio) {
+      uploadRadio.checked = true;
+      const fileInput = $("ap-resume-file");
+      if (fileInput) fileInput.style.display = "block";
+    }
+  }
 }

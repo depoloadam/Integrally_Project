@@ -1442,6 +1442,15 @@ textarea.jf-input { resize:vertical; }
 .in-modal .ep-check input[type="checkbox"],
 .in-modal .ep-check input[type="radio"] { width:16px; height:16px; min-width:16px; flex:none; margin:0; padding:0; accent-color:var(--in-accent); cursor:pointer; }
 
+/* Apply modal: the "current resume" row shows the file on record so the
+   applicant can verify it. View link opens the private download endpoint;
+   the filename sits muted after it. */
+.ap-resume-view { color:var(--in-accent); font-weight:600; text-decoration:none; }
+.ap-resume-view:hover { text-decoration:underline; }
+.ap-resume-name { color:var(--in-muted); font-size:12px; font-weight:400; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+.in-modal .ep-check.ap-resume-disabled { color:var(--in-muted); cursor:default; }
+.in-modal .ep-check.ap-resume-disabled input[type="radio"] { cursor:default; }
+
 /* =====================================================================
    Job applications
    ===================================================================== */
