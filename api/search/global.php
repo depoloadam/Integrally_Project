@@ -61,13 +61,20 @@ $excludeCompanyId = $actor['type'] === 'company' ? $actor['id'] : 0;
 
 // ---- users -----------------------------------------------------------
 if ($type === 'all' || $type === 'users') {
+    // Discoverability: users may opt out of appearing in search via the
+    // 'discoverable' setting (settings tab). Absent row = discoverable.
+    // We LEFT JOIN user_settings and keep rows where the flag is missing
+    // or not explicitly '0'.
     $stmt = $pdo->prepare(
-        "SELECT id, uuid, username, first_name, last_name, city, state, profile_pic, is_verified
-         FROM users
-         WHERE is_active = 1 AND id <> ?
-           AND (username LIKE ? OR first_name LIKE ? OR last_name LIKE ?
-                OR CONCAT(first_name,' ',last_name) LIKE ? OR city LIKE ?)
-         ORDER BY username ASC
+        "SELECT u.id, u.uuid, u.username, u.first_name, u.last_name, u.city, u.state, u.profile_pic, u.is_verified
+         FROM users u
+         LEFT JOIN user_settings us
+                ON us.user_id = u.id AND us.setting_key = 'discoverable'
+         WHERE u.is_active = 1 AND u.id <> ?
+           AND (us.setting_value IS NULL OR us.setting_value <> '0')
+           AND (u.username LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ?
+                OR CONCAT(u.first_name,' ',u.last_name) LIKE ? OR u.city LIKE ?)
+         ORDER BY u.username ASC
          LIMIT 50"
     );
     $stmt->execute([$excludeUserId, $like, $like, $like, $like, $like]);

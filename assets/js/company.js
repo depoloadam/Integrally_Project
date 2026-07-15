@@ -1000,6 +1000,9 @@ async function renderCompanySettings() {
 
   const tabs = [
     { key: "details",       label: "Company details" },
+    { key: "appearance",    label: "Appearance" },
+    { key: "publicprofile", label: "Public profile" },
+    { key: "applications",  label: "Applications" },
     { key: "notifications", label: "Notifications" },
     { key: "account",       label: "Account" },
   ];
@@ -1033,6 +1036,9 @@ function paintCompanySettingsPanel(panel) {
   const { me, st } = CO_SETTINGS_DATA || { me: {}, st: {} };
   panel.innerHTML = "";
   if (CO_SETTINGS_TAB === "details")            renderCoSetDetails(panel, me);
+  else if (CO_SETTINGS_TAB === "appearance")    renderCoSetAppearance(panel, st);
+  else if (CO_SETTINGS_TAB === "publicprofile") renderCoSetPublicProfile(panel, st);
+  else if (CO_SETTINGS_TAB === "applications")  renderCoSetApplications(panel, st);
   else if (CO_SETTINGS_TAB === "notifications") renderCoSetNotifications(panel, st);
   else if (CO_SETTINGS_TAB === "account")       renderCoSetAccount(panel);
 }
@@ -1077,11 +1083,216 @@ function renderCoSetDetails(panel, me) {
   };
 }
 
+// Small shared helper for company boolean toggles (mirrors the user side).
+function coWireToggle(panel, id, key, msgId, onSaved) {
+  const btn = panel.querySelector("#" + id);
+  if (!btn) return;
+  btn.onclick = async () => {
+    const turningOn = !btn.classList.contains("on");
+    btn.disabled = true;
+    const r = await api("/company/settings-set.php", "POST", { key, value: turningOn ? "1" : "0" });
+    btn.disabled = false;
+    const msg = panel.querySelector("#" + msgId);
+    if (r.ok && r.data?.success) {
+      btn.classList.toggle("on", turningOn);
+      btn.setAttribute("aria-checked", turningOn);
+      if (CO_SETTINGS_DATA) CO_SETTINGS_DATA.st[key] = turningOn ? "1" : "0";
+      if (onSaved) onSaved(turningOn);
+      if (msg) { msg.className = "in-set-msg ok"; msg.textContent = "Saved."; }
+    } else if (msg) { msg.className = "in-set-msg err"; msg.textContent = r.data?.error || "Could not save."; }
+  };
+}
+
+// ---- Appearance tab: theme + reduced motion (both live) --------------
+function renderCoSetAppearance(panel, st) {
+  const theme = (st.theme === "dark" || st.theme === "light") ? st.theme : "system";
+  const reduceOn = st.reduced_motion === "1";
+  const opt = (val, label, sub) => `
+    <button class="in-theme-opt ${theme === val ? "active" : ""}" data-theme-opt="${val}">
+      <span class="in-theme-swatch tsw-${val}"></span>
+      <span class="in-theme-opt-txt"><span class="in-theme-opt-label">${label}</span><span class="in-theme-opt-sub">${sub}</span></span>
+    </button>`;
+  panel.appendChild(el(`
+    <div class="in-set-section">
+      <h3>Theme</h3>
+      <div class="in-set-toggle-sub" style="margin-bottom:12px">Choose how Integrally looks. “System” follows your device setting.</div>
+      <div class="in-theme-opts">
+        ${opt("light", "Light", "The classic bright look.")}
+        ${opt("dark", "Dark", "Easier on the eyes at night.")}
+        ${opt("system", "System", "Match my device.")}
+      </div>
+    </div>
+    <div class="in-set-section">
+      <h3>Motion</h3>
+      <div class="in-set-toggle">
+        <div>
+          <div class="in-set-toggle-label">Reduce motion</div>
+          <div class="in-set-toggle-sub">Minimise animations and transitions across the app.</div>
+        </div>
+        <button class="in-toggle ${reduceOn ? "on" : ""}" id="co-toggle-reduce-motion" role="switch" aria-checked="${reduceOn}"><span class="in-toggle-knob"></span></button>
+      </div>
+      <div class="in-set-msg" id="co-appearance-msg"></div>
+    </div>`));
+
+  panel.querySelectorAll("[data-theme-opt]").forEach(btn => {
+    btn.onclick = async () => {
+      const val = btn.dataset.themeOpt;
+      panel.querySelectorAll("[data-theme-opt]").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      applyTheme(val);   // live, instant
+      if (CO_SETTINGS_DATA) CO_SETTINGS_DATA.st.theme = val;
+      const r = await api("/company/settings-set.php", "POST", { key:"theme", value: val });
+      const msg = panel.querySelector("#co-appearance-msg");
+      if (r.ok && r.data?.success) { msg.className = "in-set-msg ok"; msg.textContent = "Saved."; }
+      else { msg.className = "in-set-msg err"; msg.textContent = r.data?.error || "Could not save."; }
+    };
+  });
+  panel.querySelector("#co-toggle-reduce-motion").onclick = async () => {
+    const btn = panel.querySelector("#co-toggle-reduce-motion");
+    const turningOn = !btn.classList.contains("on");
+    applyReducedMotion(turningOn);   // live
+    btn.disabled = true;
+    const r = await api("/company/settings-set.php", "POST", { key:"reduced_motion", value: turningOn ? "1" : "0" });
+    btn.disabled = false;
+    const msg = panel.querySelector("#co-appearance-msg");
+    if (r.ok && r.data?.success) {
+      btn.classList.toggle("on", turningOn);
+      btn.setAttribute("aria-checked", turningOn);
+      if (CO_SETTINGS_DATA) CO_SETTINGS_DATA.st.reduced_motion = turningOn ? "1" : "0";
+      msg.className = "in-set-msg ok"; msg.textContent = "Saved.";
+    } else {
+      applyReducedMotion(!turningOn);   // revert on failure
+      msg.className = "in-set-msg err"; msg.textContent = r.data?.error || "Could not save.";
+    }
+  };
+}
+
+// ---- Public profile tab: what shows on the company's public page -----
+function renderCoSetPublicProfile(panel, st) {
+  const showEmployees = st.show_employee_count !== "0";   // default on
+  const showFollowers = st.show_follower_count !== "0";   // default on
+  const showActivity  = st.show_activity_feed !== "0";    // default on
+  panel.appendChild(el(`
+    <div class="in-set-section">
+      <h3>Public profile</h3>
+      <div class="in-set-toggle-sub" style="margin-bottom:12px">Control what visitors see on your company page.</div>
+      <div class="in-set-toggle">
+        <div>
+          <div class="in-set-toggle-label">Show employee count</div>
+          <div class="in-set-toggle-sub">Display how many people list your company as their employer.</div>
+        </div>
+        <button class="in-toggle ${showEmployees ? "on" : ""}" id="co-toggle-employees" role="switch" aria-checked="${showEmployees}"><span class="in-toggle-knob"></span></button>
+      </div>
+      <div class="in-set-toggle" style="margin-top:16px">
+        <div>
+          <div class="in-set-toggle-label">Show follower count</div>
+          <div class="in-set-toggle-sub">Display how many people and companies follow you.</div>
+        </div>
+        <button class="in-toggle ${showFollowers ? "on" : ""}" id="co-toggle-followers" role="switch" aria-checked="${showFollowers}"><span class="in-toggle-knob"></span></button>
+      </div>
+      <div class="in-set-toggle" style="margin-top:16px">
+        <div>
+          <div class="in-set-toggle-label">Show activity feed</div>
+          <div class="in-set-toggle-sub">Display your recent posts on your public company page.</div>
+        </div>
+        <button class="in-toggle ${showActivity ? "on" : ""}" id="co-toggle-activity" role="switch" aria-checked="${showActivity}"><span class="in-toggle-knob"></span></button>
+      </div>
+      <div class="in-set-msg" id="co-pp-msg"></div>
+    </div>`));
+  coWireToggle(panel, "co-toggle-employees", "show_employee_count", "co-pp-msg");
+  coWireToggle(panel, "co-toggle-followers", "show_follower_count", "co-pp-msg");
+  coWireToggle(panel, "co-toggle-activity",  "show_activity_feed",  "co-pp-msg");
+}
+
+// ---- Applications tab: hiring preferences ----------------------------
+function renderCoSetApplications(panel, st) {
+  const defaultChannel = (st.default_apply_channel === "external") ? "external" : "native";
+  const showScores = st.show_applicant_scores !== "0";   // default on
+  const autoClose  = st.autoclose_filled === "1";        // default off (dormant)
+  panel.appendChild(el(`
+    <div class="in-set-section">
+      <h3>Application preferences</h3>
+      <div class="in-set-toggle-sub" style="margin-bottom:12px">Defaults applied when you post a new job. You can still override per job.</div>
+      <label>Default apply method</label>
+      <select id="co-apply-channel">
+        <option value="native"${defaultChannel === "native" ? " selected" : ""}>Native — applicants apply through Integrally</option>
+        <option value="external"${defaultChannel === "external" ? " selected" : ""}>External — send applicants to your own link</option>
+      </select>
+      <div class="in-set-toggle" style="margin-top:16px">
+        <div>
+          <div class="in-set-toggle-label">Show applicant self-scores</div>
+          <div class="in-set-toggle-sub">When on, applicants' relevant self-scores appear in your ranked applicant list (only for applicants who chose to share them).</div>
+        </div>
+        <button class="in-toggle ${showScores ? "on" : ""}" id="co-toggle-scores" role="switch" aria-checked="${showScores}"><span class="in-toggle-knob"></span></button>
+      </div>
+      <div class="in-set-toggle" style="margin-top:16px">
+        <div>
+          <div class="in-set-toggle-label">Auto-close jobs when filled <span class="in-soon-pill">Coming soon</span></div>
+          <div class="in-set-toggle-sub">Automatically stop accepting applications once you mark a role filled. Ships with the accept/reject flow.</div>
+        </div>
+        <button class="in-toggle ${autoClose ? "on" : ""}" id="co-toggle-autoclose" role="switch" aria-checked="${autoClose}"><span class="in-toggle-knob"></span></button>
+      </div>
+      <div class="in-set-msg" id="co-app-msg"></div>
+    </div>`));
+  panel.querySelector("#co-apply-channel").onchange = async (e) => {
+    const val = e.target.value === "external" ? "external" : "native";
+    const r = await api("/company/settings-set.php", "POST", { key:"default_apply_channel", value: val });
+    const msg = panel.querySelector("#co-app-msg");
+    if (r.ok && r.data?.success) {
+      if (CO_SETTINGS_DATA) CO_SETTINGS_DATA.st.default_apply_channel = val;
+      msg.className = "in-set-msg ok"; msg.textContent = "Saved.";
+    } else { msg.className = "in-set-msg err"; msg.textContent = r.data?.error || "Could not save."; }
+  };
+  coWireToggle(panel, "co-toggle-scores",    "show_applicant_scores", "co-app-msg");
+  coWireToggle(panel, "co-toggle-autoclose", "autoclose_filled",      "co-app-msg");
+}
+
 function renderCoSetNotifications(panel, st) {
-  // Reuse the shared preferences UI; companies save via their own endpoint.
-  renderNotificationPrefs(panel, {
-    settings: st,
-    save: (key, value) => api("/company/settings-set.php", "POST", { key, value }),
+  // Company-specific events (distinct from the user notification set).
+  // In-app 'applicant' + 'follower' are live; email delivery is dormant.
+  const on = (k) => st["notify_" + k] !== "0";       // default ON
+  const emailOn = (k) => st["email_" + k] === "1";    // default OFF (dormant)
+  const liveTypes = [
+    { key: "applicant", label: "New applicants", sub: "When someone applies to one of your jobs." },
+    { key: "follower",  label: "New followers",  sub: "When a person or company follows you." },
+    { key: "message_request", label: "Message requests", sub: "When someone sends your company a message request." },
+  ];
+  const row = (t, kind, checked, disabled) => `
+    <div class="in-set-toggle${disabled ? " disabled" : ""}" style="margin-top:14px">
+      <div>
+        <div class="in-set-toggle-label">${esc(t.label)}</div>
+        <div class="in-set-toggle-sub">${esc(t.sub)}</div>
+      </div>
+      <button class="in-toggle ${checked ? "on" : ""}" data-conp="${kind}:${t.key}" role="switch" aria-checked="${checked}" ${disabled ? "disabled" : ""}><span class="in-toggle-knob"></span></button>
+    </div>`;
+  panel.appendChild(el(`
+    <div class="in-set-section">
+      <h3>In-app notifications</h3>
+      <div class="in-set-toggle-sub" style="margin-bottom:4px">Control what shows up in your company's notification bell.</div>
+      ${liveTypes.map(t => row(t, "app", on(t.key), false)).join("")}
+    </div>
+    <div class="in-set-section">
+      <h3>Email notifications <span class="in-soon-pill">Coming soon</span></h3>
+      <div class="in-set-toggle-sub" style="margin-bottom:4px">Email delivery isn't live yet — set your preferences now and they'll apply once it launches.</div>
+      ${liveTypes.map(t => row(t, "email", emailOn(t.key), false)).join("")}
+    </div>
+    <div class="in-set-msg" id="co-notif-msg"></div>`));
+  panel.querySelectorAll("[data-conp]").forEach(btn => {
+    btn.onclick = async () => {
+      const [kind, type] = btn.dataset.conp.split(":");
+      const key = (kind === "email" ? "email_" : "notify_") + type;
+      const turningOn = !btn.classList.contains("on");
+      btn.disabled = true;
+      const r = await api("/company/settings-set.php", "POST", { key, value: turningOn ? "1" : "0" });
+      btn.disabled = false;
+      const msg = panel.querySelector("#co-notif-msg");
+      if (r.ok && r.data?.success) {
+        btn.classList.toggle("on", turningOn);
+        btn.setAttribute("aria-checked", turningOn);
+        if (CO_SETTINGS_DATA) CO_SETTINGS_DATA.st[key] = turningOn ? "1" : "0";
+        msg.className = "in-set-msg ok"; msg.textContent = "Saved.";
+      } else { msg.className = "in-set-msg err"; msg.textContent = r.data?.error || "Could not save."; }
+    };
   });
 }
 

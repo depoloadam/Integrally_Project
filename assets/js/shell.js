@@ -144,6 +144,37 @@ function toast(message, kind = "ok") {
     setTimeout(() => t.remove(), 300);
   }, 2600);
 }
+
+// ---- Theme + motion --------------------------------------------------
+// Applied to <html> so CSS var overrides in app.css ([data-theme="dark"])
+// take effect globally. 'system' follows the OS preference live.
+// Persisted server-side in user_settings ('theme','reduced_motion') so the
+// choice syncs across devices; applied during boot() once settings load.
+let THEME_MQ = null;
+function applyTheme(theme) {
+  const root = document.documentElement;
+  const mode = (theme === "dark" || theme === "light" || theme === "system") ? theme : "system";
+  const resolve = () => {
+    let eff = mode;
+    if (mode === "system") {
+      eff = (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
+    }
+    if (eff === "dark") root.setAttribute("data-theme", "dark");
+    else root.removeAttribute("data-theme");
+  };
+  // (Re)bind the OS listener only while in system mode.
+  if (THEME_MQ) { THEME_MQ.onchange = null; THEME_MQ = null; }
+  if (mode === "system" && window.matchMedia) {
+    THEME_MQ = window.matchMedia("(prefers-color-scheme: dark)");
+    THEME_MQ.onchange = resolve;
+  }
+  resolve();
+}
+function applyReducedMotion(on) {
+  document.documentElement.classList.toggle("in-reduce-motion", !!on);
+}
+window.applyTheme = applyTheme;
+
 // Close on overlay click, but ONLY when the press started on the overlay
 // itself. Without the mousedown guard, selecting text inside the modal and
 // releasing the mouse outside it registers as an overlay click and closes
@@ -430,6 +461,13 @@ async function boot() {
     if (adminBtn) adminBtn.style.display = (ME.role === "admin") ? "" : "none";
     if (typeof setupNotifications === "function") setupNotifications();
     if (typeof setupMessaging === "function") setupMessaging();
+    // Apply persisted appearance prefs (theme + reduced motion) as early as
+    // we can. Non-blocking: the route renders regardless of this resolving.
+    api("/settings/get.php").then(r => {
+      const st = (r.ok && r.data?.data) ? r.data.data : {};
+      applyTheme(st.theme || "system");
+      applyReducedMotion(st.reduced_motion === "1");
+    }).catch(() => {});
     routeFromHash();
   } else if (CO) {
     // ---- COMPANY identity ---- (no user signed in)
@@ -446,6 +484,13 @@ async function boot() {
     updateCompanyNav();
     if (typeof setupNotifications === "function") setupNotifications();
     if (typeof hideMessaging === "function") hideMessaging();   // v1: users only
+    // Apply persisted appearance prefs (theme + reduced motion). Company
+    // prefs live in company_settings, fetched via the company endpoint.
+    api("/company/settings-get.php").then(r => {
+      const st = (r.ok && r.data?.data) ? r.data.data : {};
+      applyTheme(st.theme || "system");
+      applyReducedMotion(st.reduced_motion === "1");
+    }).catch(() => {});
     const raw = location.hash.replace(/^#/, "");
     if (raw === "jobs" || raw === "notifications" || raw === "connect"
         || raw.startsWith("job/") || raw.startsWith("company")

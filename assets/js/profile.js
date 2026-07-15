@@ -2136,8 +2136,10 @@ async function renderSettings(tab) {
 
   const tabs = [
     { key:"account",       label:"Account" },
+    { key:"appearance",    label:"Appearance" },
     { key:"privacy",       label:"Privacy" },
     { key:"notifications", label:"Notifications" },
+    { key:"connections",   label:"Connections" },
     ...(isAdmin ? [{ key:"admin", label:"Admin" }] : []),
     { key:"danger",        label:"Change Account" },
   ];
@@ -2174,8 +2176,10 @@ function paintSettingsPanel(panel) {
   const { p, st } = SETTINGS_DATA || { p:{}, st:{} };
   panel.innerHTML = "";
   if (SETTINGS_TAB === "account")            renderSetAccount(panel, p);
+  else if (SETTINGS_TAB === "appearance")    renderSetAppearance(panel, st);
   else if (SETTINGS_TAB === "privacy")       renderSetPrivacy(panel, st);
   else if (SETTINGS_TAB === "notifications") renderSetNotifications(panel);
+  else if (SETTINGS_TAB === "connections")   renderSetConnections(panel);
   else if (SETTINGS_TAB === "admin")         renderSetAdmin(panel);
   else if (SETTINGS_TAB === "danger")        renderSetDanger(panel);
 }
@@ -2221,7 +2225,45 @@ function renderSetPrivacy(panel, st) {
   const hideScoresOn = st.hide_all_scores === "1";
   const shareScoresOn = st.share_scores_with_companies !== "0";   // default on
   const shareHiddenOn = st.share_hidden_scores_with_companies === "1";   // default off
+  const discoverableOn = st.discoverable !== "0";                 // default on (live)
+  const showCityOn = st.show_city !== "0";                        // default on
+  const readReceiptsOn = st.read_receipts !== "0";               // default on (dormant)
+  const msgConnOnly = st.messages_connections_only === "1";      // default off (dormant)
   panel.appendChild(el(`
+    <div class="in-set-section">
+      <h3>Discoverability</h3>
+      <div class="in-set-toggle">
+        <div>
+          <div class="in-set-toggle-label">Show me in search</div>
+          <div class="in-set-toggle-sub">When off, your profile won't appear in other people's search results. Direct profile links still work.</div>
+        </div>
+        <button class="in-toggle ${discoverableOn ? "on" : ""}" id="toggle-discoverable" role="switch" aria-checked="${discoverableOn}"><span class="in-toggle-knob"></span></button>
+      </div>
+      <div class="in-set-toggle" style="margin-top:16px">
+        <div>
+          <div class="in-set-toggle-label">Show my city on my profile</div>
+          <div class="in-set-toggle-sub">When off, your city is hidden from your public profile. Your country still shows.</div>
+        </div>
+        <button class="in-toggle ${showCityOn ? "on" : ""}" id="toggle-show-city" role="switch" aria-checked="${showCityOn}"><span class="in-toggle-knob"></span></button>
+      </div>
+    </div>
+    <div class="in-set-section">
+      <h3>Messaging</h3>
+      <div class="in-set-toggle">
+        <div>
+          <div class="in-set-toggle-label">Send read receipts <span class="in-soon-pill">Coming soon</span></div>
+          <div class="in-set-toggle-sub">When on, people can see when you've read their message. Saving works now; enforcement lands with the next messaging update.</div>
+        </div>
+        <button class="in-toggle ${readReceiptsOn ? "on" : ""}" id="toggle-read-receipts" role="switch" aria-checked="${readReceiptsOn}"><span class="in-toggle-knob"></span></button>
+      </div>
+      <div class="in-set-toggle" style="margin-top:16px">
+        <div>
+          <div class="in-set-toggle-label">Only allow messages from connections <span class="in-soon-pill">Coming soon</span></div>
+          <div class="in-set-toggle-sub">When on, only people you follow can start a conversation. Saving works now; enforcement lands with the next messaging update.</div>
+        </div>
+        <button class="in-toggle ${msgConnOnly ? "on" : ""}" id="toggle-msg-conn" role="switch" aria-checked="${msgConnOnly}"><span class="in-toggle-knob"></span></button>
+      </div>
+    </div>
     <div class="in-set-section">
       <h3>Privacy & preferences</h3>
       <div class="in-set-toggle">
@@ -2254,6 +2296,29 @@ function renderSetPrivacy(panel, st) {
       </div>
       <div class="in-set-msg" id="set-privacy-msg"></div>
     </div>`));
+  // Shared handler for a simple boolean setting toggle. onSaved runs after a
+  // successful save (used by share-scores to show/hide its sub-row).
+  const wireToggle = (id, key, onSaved) => {
+    const btn = $(id);
+    if (!btn) return;
+    btn.onclick = async () => {
+      const turningOn = !btn.classList.contains("on");
+      btn.disabled = true;
+      const r = await api("/settings/set.php", "POST", { key, value: turningOn ? "1" : "0" });
+      btn.disabled = false;
+      const msg = $("set-privacy-msg");
+      if (r.ok && r.data?.success) {
+        btn.classList.toggle("on", turningOn);
+        btn.setAttribute("aria-checked", turningOn);
+        if (onSaved) onSaved(turningOn);
+        msg.className = "in-set-msg ok"; msg.textContent = "Saved.";
+      } else { msg.className = "in-set-msg err"; msg.textContent = r.data?.error || "Could not save."; }
+    };
+  };
+  wireToggle("toggle-discoverable",  "discoverable");
+  wireToggle("toggle-show-city",     "show_city");
+  wireToggle("toggle-read-receipts", "read_receipts");
+  wireToggle("toggle-msg-conn",      "messages_connections_only");
   $("toggle-following").onclick = async () => {
     const btn = $("toggle-following");
     const turningOn = !btn.classList.contains("on");
@@ -2309,6 +2374,125 @@ function renderSetPrivacy(panel, st) {
     } else { msg.className = "in-set-msg err"; msg.textContent = r.data?.error || "Could not save."; }
   };
 }
+// ---- Appearance tab: theme + reduced motion (both live) --------------
+function renderSetAppearance(panel, st) {
+  const theme = (st.theme === "dark" || st.theme === "light") ? st.theme : "system";
+  const reduceOn = st.reduced_motion === "1";
+  const opt = (val, label, sub) => `
+    <button class="in-theme-opt ${theme === val ? "active" : ""}" data-theme-opt="${val}">
+      <span class="in-theme-swatch tsw-${val}"></span>
+      <span class="in-theme-opt-txt"><span class="in-theme-opt-label">${label}</span><span class="in-theme-opt-sub">${sub}</span></span>
+    </button>`;
+  panel.appendChild(el(`
+    <div class="in-set-section">
+      <h3>Theme</h3>
+      <div class="in-set-toggle-sub" style="margin-bottom:12px">Choose how Integrally looks. “System” follows your device setting.</div>
+      <div class="in-theme-opts">
+        ${opt("light", "Light", "The classic bright look.")}
+        ${opt("dark", "Dark", "Easier on the eyes at night.")}
+        ${opt("system", "System", "Match my device.")}
+      </div>
+    </div>
+    <div class="in-set-section">
+      <h3>Motion</h3>
+      <div class="in-set-toggle">
+        <div>
+          <div class="in-set-toggle-label">Reduce motion</div>
+          <div class="in-set-toggle-sub">Minimise animations and transitions across the app.</div>
+        </div>
+        <button class="in-toggle ${reduceOn ? "on" : ""}" id="toggle-reduce-motion" role="switch" aria-checked="${reduceOn}"><span class="in-toggle-knob"></span></button>
+      </div>
+      <div class="in-set-msg" id="set-appearance-msg"></div>
+    </div>`));
+
+  panel.querySelectorAll("[data-theme-opt]").forEach(btn => {
+    btn.onclick = async () => {
+      const val = btn.dataset.themeOpt;
+      panel.querySelectorAll("[data-theme-opt]").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      applyTheme(val);   // live, instant
+      if (SETTINGS_DATA) SETTINGS_DATA.st.theme = val;
+      const r = await api("/settings/set.php", "POST", { key:"theme", value: val });
+      const msg = $("set-appearance-msg");
+      if (r.ok && r.data?.success) { msg.className = "in-set-msg ok"; msg.textContent = "Saved."; }
+      else { msg.className = "in-set-msg err"; msg.textContent = r.data?.error || "Could not save."; }
+    };
+  });
+  $("toggle-reduce-motion").onclick = async () => {
+    const btn = $("toggle-reduce-motion");
+    const turningOn = !btn.classList.contains("on");
+    applyReducedMotion(turningOn);   // live
+    btn.disabled = true;
+    const r = await api("/settings/set.php", "POST", { key:"reduced_motion", value: turningOn ? "1" : "0" });
+    btn.disabled = false;
+    const msg = $("set-appearance-msg");
+    if (r.ok && r.data?.success) {
+      btn.classList.toggle("on", turningOn);
+      btn.setAttribute("aria-checked", turningOn);
+      if (SETTINGS_DATA) SETTINGS_DATA.st.reduced_motion = turningOn ? "1" : "0";
+      msg.className = "in-set-msg ok"; msg.textContent = "Saved.";
+    } else {
+      applyReducedMotion(!turningOn);   // revert on failure
+      msg.className = "in-set-msg err"; msg.textContent = r.data?.error || "Could not save.";
+    }
+  };
+}
+
+// ---- Connections tab: manage people you've blocked -------------------
+async function renderSetConnections(panel) {
+  panel.appendChild(el(`
+    <div class="in-set-section">
+      <h3>Blocked people</h3>
+      <div class="in-set-toggle-sub" style="margin-bottom:12px">People you've blocked can't message you, and you can't message them. Unblocking is immediate.</div>
+      <div id="blocked-list"><div class="in-loading" style="padding:14px 0">Loading…</div></div>
+      <div class="in-set-msg" id="set-conn-msg"></div>
+    </div>`));
+  const listWrap = $("blocked-list");
+  const res = await api("/blocks/list.php");
+  const rows = res.data?.data || [];
+  if (!res.ok || !res.data?.success) {
+    listWrap.innerHTML = `<div class="in-empty">Couldn't load your blocked list.</div>`;
+    return;
+  }
+  if (!rows.length) {
+    listWrap.innerHTML = `<div class="in-empty" style="padding:10px 0">You haven't blocked anyone.</div>`;
+    return;
+  }
+  listWrap.innerHTML = "";
+  rows.forEach(u => {
+    const initial = (u.name || u.username || "?").charAt(0).toUpperCase();
+    const avatar = u.profile_pic
+      ? `<img src="${esc(u.profile_pic)}" alt="" class="in-blk-avatar">`
+      : `<span class="in-blk-avatar in-blk-avatar-fallback">${esc(initial)}</span>`;
+    const rowEl = el(`
+      <div class="in-blk-row">
+        ${avatar}
+        <div class="in-blk-meta">
+          <div class="in-blk-name">${esc(u.name)}</div>
+          <div class="in-blk-user">@${esc(u.username)}</div>
+        </div>
+        <button class="in-btn ghost in-blk-unblock" style="flex:none;padding:7px 14px">Unblock</button>
+      </div>`);
+    rowEl.querySelector(".in-blk-unblock").onclick = async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true; btn.textContent = "…";
+      const r = await api("/blocks/unblock.php", "POST", { uuid: u.uuid });
+      const msg = $("set-conn-msg");
+      if (r.ok && r.data?.success) {
+        rowEl.remove();
+        msg.className = "in-set-msg ok"; msg.textContent = `Unblocked ${u.name}.`;
+        if (!listWrap.querySelector(".in-blk-row")) {
+          listWrap.innerHTML = `<div class="in-empty" style="padding:10px 0">You haven't blocked anyone.</div>`;
+        }
+      } else {
+        btn.disabled = false; btn.textContent = "Unblock";
+        msg.className = "in-set-msg err"; msg.textContent = r.data?.error || "Could not unblock.";
+      }
+    };
+    listWrap.appendChild(rowEl);
+  });
+}
+
 function renderSetNotifications(panel) {
   const st = (SETTINGS_DATA && SETTINGS_DATA.st) || {};
   renderNotificationPrefs(panel, {

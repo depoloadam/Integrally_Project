@@ -1560,3 +1560,88 @@ a.ap-title:hover { color:var(--in-accent); }
 }
 .in-audit-target { max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .in-audit-detail { font-size:12.5px; color:var(--in-muted); white-space:nowrap; }
+
+/* =====================================================================
+   Settings additions — appearance (theme picker), connections (blocked
+   list), reduced-motion, and the dark theme. Added in the settings sweep.
+   ===================================================================== */
+
+/* ---- Theme picker (Appearance tab) ---- */
+.in-theme-opts { display:flex; gap:10px; flex-wrap:wrap; }
+.in-theme-opt {
+  flex:1; min-width:150px; display:flex; align-items:center; gap:11px;
+  padding:12px 13px; border:1.5px solid var(--in-line); border-radius:11px;
+  background:var(--in-card); cursor:pointer; text-align:left; transition:border-color .12s, box-shadow .12s;
+}
+.in-theme-opt:hover { border-color:var(--in-accent); }
+.in-theme-opt.active { border-color:var(--in-accent); box-shadow:0 0 0 3px rgba(13,148,136,.14); }
+.in-theme-swatch { width:34px; height:34px; border-radius:8px; flex:none; border:1px solid var(--in-line); }
+.tsw-light  { background:linear-gradient(135deg,#ffffff 50%,#f5f8f9 50%); }
+.tsw-dark   { background:linear-gradient(135deg,#1a2b34 50%,#0f1a20 50%); }
+.tsw-system { background:linear-gradient(135deg,#ffffff 50%,#1a2b34 50%); }
+.in-theme-opt-txt { display:flex; flex-direction:column; gap:1px; }
+.in-theme-opt-label { font-weight:600; font-size:14px; color:var(--in-ink); }
+.in-theme-opt-sub { font-size:12px; color:var(--in-muted); }
+
+/* ---- Blocked-people list (Connections tab) ---- */
+.in-blk-row {
+  display:flex; align-items:center; gap:12px; padding:10px 0;
+  border-bottom:1px solid var(--in-line);
+}
+.in-blk-row:last-child { border-bottom:0; }
+.in-blk-avatar { width:38px; height:38px; border-radius:50%; flex:none; object-fit:cover; }
+.in-blk-avatar-fallback {
+  display:inline-flex; align-items:center; justify-content:center;
+  background:var(--in-accent); color:#fff; font-weight:700; font-size:15px;
+}
+.in-blk-meta { flex:1; min-width:0; }
+.in-blk-name { font-weight:600; font-size:14px; color:var(--in-ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.in-blk-user { font-size:12.5px; color:var(--in-muted); }
+
+/* ---- Reduced motion: kill transitions/animations app-wide ---- */
+html.in-reduce-motion *,
+html.in-reduce-motion *::before,
+html.in-reduce-motion *::after {
+  transition-duration:.001ms !important;
+  animation-duration:.001ms !important;
+  animation-iteration-count:1 !important;
+  scroll-behavior:auto !important;
+}
+
+/* =====================================================================
+   DARK THEME
+   Remaps the core palette variables. Covers backgrounds, surfaces, text,
+   lines, and inputs across the app. A handful of accent-tinted badge
+   backgrounds are still defined with literal light hex elsewhere in this
+   file; those are overridden below where they'd otherwise clash. Deeper
+   per-component polish can follow, but the core surfaces read correctly.
+   ===================================================================== */
+[data-theme="dark"] {
+  --in-ink:#e6eef2; --in-ink-soft:#b3c4cc; --in-muted:#8ba3ad;
+  --in-line:#283b45; --in-bg:#0f1a20; --in-card:#16242c;
+  --in-accent:#2dd4bf; --in-accent-d:#14b8a6; --in-teal-bright:#5eead4;
+  --in-error:#f0776b; --in-success:#3ecf8e;
+}
+/* Inputs, selects, textareas — force dark surfaces (many set literal #fff). */
+[data-theme="dark"] input,
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  background:var(--in-card); color:var(--in-ink); border-color:var(--in-line);
+}
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder { color:var(--in-muted); }
+/* Cards and common surfaces that hardcode white/near-white. */
+[data-theme="dark"] .in-card,
+[data-theme="dark"] .in-card2,
+[data-theme="dark"] .in-dropdown,
+[data-theme="dark"] .in-modal,
+[data-theme="dark"] .in-set-panel,
+[data-theme="dark"] .in-theme-opt,
+[data-theme="dark"] .in-toast {
+  background:var(--in-card); color:var(--in-ink);
+}
+/* Light-tinted "soon" pill + error boxes: soften for dark. */
+[data-theme="dark"] .in-soon-pill { background:#123; border-color:var(--in-line); color:var(--in-teal-bright); }
+[data-theme="dark"] .in-set-placeholder { background:rgba(255,255,255,.03); }
+/* Modal/overlay scrim a touch deeper so cards separate from backdrop. */
+[data-theme="dark"] .in-overlay { background:rgba(0,0,0,.6); }
