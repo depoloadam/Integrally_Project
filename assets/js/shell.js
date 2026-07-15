@@ -623,10 +623,9 @@ dropdown.querySelectorAll("[data-menu]").forEach(b => {
       location.hash = "";
       location.reload();
     } else if (action === "edit") {
-      if (location.hash !== "#profile") location.hash = "profile";
-      const prof = await api("/profile/get.php");
-      const p = prof.data?.data || {};
-      editCore(p, p.attributes?.headline?.value || "", p.attributes || {});
+      location.hash = "edit-profile";
+    } else if (action === "jobsearch") {
+      location.hash = "job-search";
     } else if (action === "settings") {
       location.hash = "settings";
     }
@@ -794,6 +793,18 @@ function routeFromHash() {
   if (raw === "profile-strength") {
     document.querySelectorAll("[data-nav]").forEach(x => x.classList.remove("active"));
     renderStrengthPage();
+    return;
+  }
+  if (raw === "edit-profile") {
+    if (!ME) { renderSignedOut(); return; }
+    document.querySelectorAll("[data-nav]").forEach(x => x.classList.remove("active"));
+    renderEditProfilePage();
+    return;
+  }
+  if (raw === "job-search") {
+    if (!ME) { renderSignedOut(); return; }
+    document.querySelectorAll("[data-nav]").forEach(x => x.classList.remove("active"));
+    renderJobSearchPage();
     return;
   }
   if (raw.startsWith("score-history/")) {

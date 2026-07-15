@@ -1074,71 +1074,86 @@ function adminEditProfile(p, headline, uuid) {
 }
 
 // ---- edit core (own profile) -----------------------------------------
-function editCore(p, headline, attrs) {
-  attrs = attrs || {};
-  // The passed `headline` is the *effective* display value (may be the
-  // current-job string, or "" when the headline is disabled). The input
-  // must show the raw custom text so saving never clobbers it.
+// Legacy entry point: "Edit profile" used to open a modal. It's now a
+// dedicated page (#edit-profile). Callers just navigate; the page fetches
+// its own fresh data, so the old (p, headline, attrs) args are ignored.
+function editCore() {
+  location.hash = "edit-profile";
+}
+
+// ---- full Edit Profile page (#edit-profile) ---------------------------
+// Mirrors renderStrengthPage: self-fetches, renders into #view. The form
+// card carries `in-modal wide` so every field/label/tab style written
+// scoped to `.in-modal` applies unchanged in page context; `.in-editpage`
+// neutralizes the modal-box chrome so it fills the standard main column.
+async function renderEditProfilePage() {
+  const view = $("view");
+  view.innerHTML = `<div class="in-loading">Loading…</div>`;
+
+  const [prof, jobs] = await Promise.all([
+    api("/profile/get.php"),
+    api("/profile/jobs/list.php"),
+  ]);
+  const p = prof.data?.data || {};
+  const attrs = p.attributes || {};
+  const headline = effectiveHeadline(attrs, jobs.data?.data);
+
+  // The stored `headline` attribute is the raw custom text; show it so
+  // saving never clobbers it, regardless of the effective display value.
   const customHeadline = (attrs.headline?.value || "").trim();
   const avatarState = { avatarUrl: p.profile_pic || null };
   const linkedin = attrs.linkedin_url?.value || "";
   const twitter  = attrs.twitter_url?.value || "";
   const website  = attrs.website_url?.value || "";
   const websiteLabel = attrs.website_label?.value || "";
-  const resume = p.resume || null;   // { name, uploaded_at } | null
 
-  openModal(`
-    <h3>Edit profile</h3>
-    <div class="in-modal-tabs">
-      <button class="in-modal-tab active" data-etab="profile">Profile</button>
-      <button class="in-modal-tab" data-etab="social">Social</button>
-      <button class="in-modal-tab" data-etab="jobsearch">Job Search</button>
-    </div>
-    <div data-epanel="profile">
-      <div class="ep-top">
-        <div class="ep-avatar"><div id="f-avatar"></div></div>
-        <div class="ep-identity">
-          <label>Username</label><input id="f-username" value="${esc(p.username||"")}">
-          <label>Headline</label><input id="f-headline" value="${esc(customHeadline)}" placeholder="e.g. IT Automation Specialist">
-          <div class="ep-headline-opts">
-            <label class="ep-check"><input type="checkbox" id="f-headline-enabled" ${(attrs.headline_enabled?.value ?? "1") !== "0" ? "checked" : ""}> Show headline on my profile</label>
-            <label class="ep-check" id="f-headline-job-wrap"><input type="checkbox" id="f-headline-job" ${(attrs.headline_source?.value || "custom") === "job" ? "checked" : ""}> Use my current job instead</label>
+  view.innerHTML = "";
+  view.appendChild(el(`
+    <div class="in-editpage">
+      <a class="in-strpage-back" href="#profile">← Back to profile</a>
+      <div class="in-modal wide" id="editpage-card">
+        <h3>Edit profile</h3>
+        <div class="in-modal-tabs">
+          <button class="in-modal-tab active" data-etab="profile">Profile</button>
+          <button class="in-modal-tab" data-etab="social">Social</button>
+        </div>
+        <div data-epanel="profile">
+          <div class="ep-top">
+            <div class="ep-avatar"><div id="f-avatar"></div></div>
+            <div class="ep-identity">
+              <label>Username</label><input id="f-username" value="${esc(p.username||"")}">
+              <label>Headline</label><input id="f-headline" value="${esc(customHeadline)}" placeholder="e.g. IT Automation Specialist">
+              <div class="ep-headline-opts">
+                <label class="ep-check"><input type="checkbox" id="f-headline-enabled" ${(attrs.headline_enabled?.value ?? "1") !== "0" ? "checked" : ""}> Show headline on my profile</label>
+                <label class="ep-check" id="f-headline-job-wrap"><input type="checkbox" id="f-headline-job" ${(attrs.headline_source?.value || "custom") === "job" ? "checked" : ""}> Use my current job instead</label>
+              </div>
+              <label>Motto <span class="ep-hint">(replaces "About" on your profile)</span></label><input id="f-motto-core" maxlength="80" value="${esc(attrs.motto?.value || "")}" placeholder="e.g. Build things that matter">
+            </div>
           </div>
-          <label>Motto <span class="ep-hint">(replaces "About" on your profile)</span></label><input id="f-motto-core" maxlength="80" value="${esc(attrs.motto?.value || "")}" placeholder="e.g. Build things that matter">
+          <div class="ep-sep"><span>Location</span></div>
+          <div class="ep-grid">
+            <div><label>City</label><input id="f-city" value="${esc(p.city||"")}"></div>
+            <div><label>Country</label><select id="f-country"></select></div>
+            <div class="ep-span" id="f-sub-wrap"></div>
+          </div>
+        </div>
+        <div data-epanel="social" style="display:none">
+          <div class="ep-sep"><span>Links</span></div>
+          <div class="ep-grid">
+            <div><label>LinkedIn URL</label><input id="f-linkedin" value="${esc(linkedin)}" placeholder="linkedin.com/in/yourname"></div>
+            <div><label>Twitter / X URL</label><input id="f-twitter" value="${esc(twitter)}" placeholder="x.com/yourname"></div>
+            <div><label>Personal website</label><input id="f-website" value="${esc(website)}" placeholder="yourdomain.com"></div>
+            <div><label>Website display name</label><input id="f-website-label" value="${esc(websiteLabel)}" placeholder="e.g. My Portfolio"></div>
+          </div>
+        </div>
+        <div class="in-modal-actions">
+          <a class="in-btn ghost" href="#profile" style="text-decoration:none;text-align:center">Cancel</a>
+          <button class="in-btn primary" id="save-core">Save</button>
         </div>
       </div>
-      <div class="ep-sep"><span>Location</span></div>
-      <div class="ep-grid">
-        <div><label>City</label><input id="f-city" value="${esc(p.city||"")}"></div>
-        <div><label>Country</label><select id="f-country"></select></div>
-        <div class="ep-span" id="f-sub-wrap"></div>
-      </div>
-    </div>
-    <div data-epanel="social" style="display:none">
-      <div class="ep-sep"><span>Links</span></div>
-      <div class="ep-grid">
-        <div><label>LinkedIn URL</label><input id="f-linkedin" value="${esc(linkedin)}" placeholder="linkedin.com/in/yourname"></div>
-        <div><label>Twitter / X URL</label><input id="f-twitter" value="${esc(twitter)}" placeholder="x.com/yourname"></div>
-        <div><label>Personal website</label><input id="f-website" value="${esc(website)}" placeholder="yourdomain.com"></div>
-        <div><label>Website display name</label><input id="f-website-label" value="${esc(websiteLabel)}" placeholder="e.g. My Portfolio"></div>
-      </div>
-    </div>
-    <div data-epanel="jobsearch" style="display:none">
-      <div class="in-resume-note">Your resume is private. It's stored securely, never shown on your profile, and only you can download it.</div>
-      <label>Resume</label>
-      <div class="in-resume-row" id="f-resume-row"></div>
-      <input type="file" id="f-resume-file" accept=".pdf,.doc,.docx" style="display:none">
-      <div class="in-set-msg" id="f-resume-msg"></div>
-      <div class="ep-sep"><span>My applications</span></div>
-      <div id="f-applications"><div class="in-loading" style="padding:14px">Loading…</div></div>
-    </div>
-    <div class="in-modal-actions">
-      <button class="in-btn ghost" onclick="closeModal()">Cancel</button>
-      <button class="in-btn primary" id="save-core">Save</button>
-    </div>`, { wide: true });
+    </div>`));
 
-  // ---- tabs ----
-  const modal = $("modal");
+  const modal = $("editpage-card");
 
   // ---- headline display options ----
   // The "current job" option only applies while the headline is shown,
@@ -1162,6 +1177,65 @@ function editCore(p, headline, attrs) {
       });
     };
   });
+
+  mountAvatarPicker("f-avatar", avatarState, { shape: "circle", fallbackChar: p.username || "?" });
+  geoInitCountryModal($("f-country"), $("f-sub-wrap"), { subId: "f-sub", preselect: { country: p.country || "", state: p.state || "" } });
+  $("save-core").onclick = async () => {
+    const r = await api("/profile/update.php", "POST", {
+      username:$("f-username").value.trim(), city:$("f-city").value.trim(),
+      state:geoGetSubdivisionBy($("f-sub-wrap"),"f-sub"), country:$("f-country").value.trim(),
+      profile_pic: avatarState.avatarUrl || "",
+    });
+    await api("/profile/set-attribute.php", "POST", { key:"headline", value:$("f-headline").value.trim() });
+    await api("/profile/set-attribute.php", "POST", { key:"headline_enabled", value:$("f-headline-enabled").checked ? "1" : "0" });
+    await api("/profile/set-attribute.php", "POST", { key:"headline_source", value:$("f-headline-job").checked ? "job" : "custom" });
+    await api("/profile/set-attribute.php", "POST", { key:"motto", value:$("f-motto-core").value.trim() });
+    await api("/profile/set-attribute.php", "POST", { key:"linkedin_url", value:$("f-linkedin").value.trim() });
+    await api("/profile/set-attribute.php", "POST", { key:"twitter_url", value:$("f-twitter").value.trim() });
+    await api("/profile/set-attribute.php", "POST", { key:"website_url", value:$("f-website").value.trim() });
+    await api("/profile/set-attribute.php", "POST", { key:"website_label", value:$("f-website-label").value.trim() });
+    // Keep the in-memory user in sync so the nav + composer update without
+    // needing a page refresh.
+    if (r.ok && r.data?.success && ME) {
+      ME = { ...ME, ...r.data.data };
+      if (typeof setNavAvatar === "function") {
+        setNavAvatar(ME.profile_pic, (ME.username || "?").charAt(0).toUpperCase());
+      }
+    }
+    // Dedicated page: no modal to close. Return to the profile. If we're
+    // somehow already on #profile, render explicitly so edits reflect.
+    if (location.hash === "#profile") renderProfile();
+    else location.hash = "profile";
+  };
+}
+
+// ---- Job Search page (#job-search) ------------------------------------
+// Split out of the old Edit-profile modal's "Job Search" tab. Holds the
+// private resume (upload/replace/download/remove) and the read-only list
+// of the user's own applications. Self-fetches like the other pages.
+async function renderJobSearchPage() {
+  const view = $("view");
+  view.innerHTML = `<div class="in-loading">Loading…</div>`;
+
+  const prof = await api("/profile/get.php");
+  const p = prof.data?.data || {};
+  const resume = p.resume || null;   // { name, uploaded_at } | null
+
+  view.innerHTML = "";
+  view.appendChild(el(`
+    <div class="in-editpage">
+      <a class="in-strpage-back" href="#profile">← Back to profile</a>
+      <div class="in-modal wide" id="jobsearch-card">
+        <h3>Job Search</h3>
+        <div class="in-resume-note">Your resume is private. It's stored securely, never shown on your profile, and only you can download it.</div>
+        <label>Resume</label>
+        <div class="in-resume-row" id="f-resume-row"></div>
+        <input type="file" id="f-resume-file" accept=".pdf,.doc,.docx" style="display:none">
+        <div class="in-set-msg" id="f-resume-msg"></div>
+        <div class="ep-sep"><span>My applications</span></div>
+        <div id="f-applications"><div class="in-loading" style="padding:14px">Loading…</div></div>
+      </div>
+    </div>`));
 
   // ---- resume row (upload / replace / download / remove) ----
   const resumeState = { current: resume };
@@ -1230,41 +1304,14 @@ function editCore(p, headline, attrs) {
     }
     $("f-resume-file").value = "";
   };
-
-  mountAvatarPicker("f-avatar", avatarState, { shape: "circle", fallbackChar: p.username || "?" });
-  geoInitCountryModal($("f-country"), $("f-sub-wrap"), { subId: "f-sub", preselect: { country: p.country || "", state: p.state || "" } });
-  $("save-core").onclick = async () => {
-    const r = await api("/profile/update.php", "POST", {
-      username:$("f-username").value.trim(), city:$("f-city").value.trim(),
-      state:geoGetSubdivisionBy($("f-sub-wrap"),"f-sub"), country:$("f-country").value.trim(),
-      profile_pic: avatarState.avatarUrl || "",
-    });
-    await api("/profile/set-attribute.php", "POST", { key:"headline", value:$("f-headline").value.trim() });
-    await api("/profile/set-attribute.php", "POST", { key:"headline_enabled", value:$("f-headline-enabled").checked ? "1" : "0" });
-    await api("/profile/set-attribute.php", "POST", { key:"headline_source", value:$("f-headline-job").checked ? "job" : "custom" });
-    await api("/profile/set-attribute.php", "POST", { key:"motto", value:$("f-motto-core").value.trim() });
-    await api("/profile/set-attribute.php", "POST", { key:"linkedin_url", value:$("f-linkedin").value.trim() });
-    await api("/profile/set-attribute.php", "POST", { key:"twitter_url", value:$("f-twitter").value.trim() });
-    await api("/profile/set-attribute.php", "POST", { key:"website_url", value:$("f-website").value.trim() });
-    await api("/profile/set-attribute.php", "POST", { key:"website_label", value:$("f-website-label").value.trim() });
-    // Keep the in-memory user in sync so the nav + composer update without
-    // needing a page refresh.
-    if (r.ok && r.data?.success && ME) {
-      ME = { ...ME, ...r.data.data };
-      if (typeof setNavAvatar === "function") {
-        setNavAvatar(ME.profile_pic, (ME.username || "?").charAt(0).toUpperCase());
-      }
-    }
-    closeModal(); refreshAfterProfileChange();
-  };
 }
 
-// ---- My applications (inside the Job Search tab) ----------------------
+// ---- My applications (Job Search page) --------------------------------
 async function loadMyApplications() {
   const box = $("f-applications");
   if (!box) return;
   await renderApplicationsInto(box, {
-    empty: `You haven't applied to any jobs yet. Browse the <a href="#jobs" onclick="closeModal()">jobs board</a> to get started.`,
+    empty: `You haven't applied to any jobs yet. Browse the <a href="#jobs">jobs board</a> to get started.`,
     onWithdraw: loadMyApplications,
   });
 }
