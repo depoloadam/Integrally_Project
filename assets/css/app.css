@@ -1462,38 +1462,31 @@ textarea.jf-input { resize:vertical; }
 /* Apply modal: the "current resume" row shows the file on record so the
    applicant can verify it. View link opens the private download endpoint;
    the filename sits muted after it. */
-.ap-resume-viewer { position:relative; display:inline-block; margin-left:10px; vertical-align:baseline; }
 .ap-resume-viewbtn {
-  background:none; border:0; padding:0; cursor:pointer;
+  background:none; border:0; padding:0; margin-left:10px; cursor:pointer;
   color:var(--in-accent); font-weight:600; font-size:12.5px; font-family:inherit;
+  vertical-align:baseline;
 }
 .ap-resume-viewbtn:hover, .ap-resume-viewbtn:focus-visible { text-decoration:underline; outline:none; }
-/* The popover container reaches all the way DOWN to the button (bottom:100%)
-   and pads the gap itself, so there's no dead space between the trigger and
-   the card — the cursor stays within a hovered element the whole way up.
-   `padding-top` here is the visual gap; the transparent padding is still part
-   of the hover target. */
-.ap-resume-pop {
-  position:absolute; bottom:100%; left:0; z-index:130;
-  display:none; padding-bottom:8px;   /* the bridge — hoverable, invisible */
-}
+/* Popover lives on <body> with position:fixed (set inline), so it escapes
+   the modal's overflow-y:auto clipping. z-index sits above the modal. */
+.ap-resume-pop { z-index:200; }
 .ap-resume-pop-inner {
   position:relative;
   min-width:200px; max-width:300px;
   background:var(--in-card); border:1px solid var(--in-line); border-radius:9px;
-  box-shadow:0 6px 20px rgba(0,0,0,.14); padding:10px 12px;
+  box-shadow:0 8px 24px rgba(0,0,0,.18); padding:11px 13px;
   white-space:normal;
 }
-/* Reveal on hover of the wrapper (button + bridge + card all count), or on
-   keyboard focus of the button or anything inside the popover. */
-.ap-resume-viewer:hover .ap-resume-pop,
-.ap-resume-viewbtn:focus-visible + .ap-resume-pop,
-.ap-resume-pop:hover,
-.ap-resume-pop:focus-within { display:block; }
-/* Little arrow under the card, pointing down toward the button. */
-.ap-resume-pop-inner::after {
+/* Arrow points toward the button — down when the card is above it, up when
+   the card was flipped below. */
+.ap-resume-pop.above .ap-resume-pop-inner::after {
   content:""; position:absolute; top:100%; left:16px;
   border:6px solid transparent; border-top-color:var(--in-card);
+}
+.ap-resume-pop.below .ap-resume-pop-inner::after {
+  content:""; position:absolute; bottom:100%; left:16px;
+  border:6px solid transparent; border-bottom-color:var(--in-card);
 }
 .ap-resume-pop-name {
   display:block; font-size:12.5px; color:var(--in-ink); font-weight:500;

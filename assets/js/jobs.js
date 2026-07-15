@@ -494,24 +494,93 @@ async function loadApplyCurrentResume() {
 
   if (resume && resume.name) {
     // Keep the row compact no matter how long the filename is: the label
-    // stays "Use my current resume", and the details (filename + download)
-    // live in a small popover behind a "View current resume" button that
-    // reveals on hover/focus. This avoids the filename wrapping under the
-    // radio label.
+    // stays "Use my current resume" with a "View current resume" button.
+    // The details popover is appended to <body> with position:fixed and
+    // toggled on click — the same escape-the-modal pattern the typeahead
+    // uses, because .in-modal has overflow-y:auto which clips any absolutely
+    // positioned child (that clipping is exactly what made the earlier
+    // hover version render as bare, cut-off text).
     label.innerHTML =
       `Use my current resume` +
-      `<span class="ap-resume-viewer">` +
-        `<button type="button" class="ap-resume-viewbtn" ` +
-          `onclick="event.preventDefault();event.stopPropagation()">View current resume</button>` +
-        `<span class="ap-resume-pop" role="dialog">` +
-          `<span class="ap-resume-pop-inner">` +
-            `<span class="ap-resume-pop-name">${esc(resume.name)}</span>` +
-            `<a class="ap-resume-pop-dl" href="${API_BASE}/profile/resume-download.php" ` +
-              `target="_blank" rel="noopener" ` +
-              `onclick="event.stopPropagation()">Download</a>` +
-          `</span>` +
-        `</span>` +
-      `</span>`;
+      `<button type="button" class="ap-resume-viewbtn" id="ap-resume-viewbtn">View current resume</button>`;
+
+    const btn = $("ap-resume-viewbtn");
+    const dlUrl = `${API_BASE}/profile/resume-download.php`;
+
+    // Build the popover once, on <body>, fixed-position.
+    let pop = null;
+    const buildPop = () => {
+      pop = document.createElement("div");
+      pop.className = "ap-resume-pop";
+      pop.style.position = "fixed";
+      pop.style.display = "none";
+      const inner = document.createElement("div");
+      inner.className = "ap-resume-pop-inner";
+      const nm = document.createElement("div");
+      nm.className = "ap-resume-pop-name";
+      nm.textContent = resume.name;   // textContent -> no injection
+      const dl = document.createElement("a");
+      dl.className = "ap-resume-pop-dl";
+      dl.href = dlUrl; dl.target = "_blank"; dl.rel = "noopener";
+      dl.textContent = "Download";
+      inner.appendChild(nm); inner.appendChild(dl);
+      pop.appendChild(inner);
+      document.body.appendChild(pop);
+    };
+
+    const position = () => {
+      const r = btn.getBoundingClientRect();
+      // Prefer above the button; flip below if there isn't room up top.
+      pop.style.left = r.left + "px";
+      pop.style.display = "block";           // measure with it visible
+      const ph = pop.offsetHeight;
+      if (r.top - ph - 8 >= 8) {
+        pop.style.top = (r.top - ph - 8) + "px";
+        pop.classList.remove("below"); pop.classList.add("above");
+      } else {
+        pop.style.top = (r.bottom + 8) + "px";
+        pop.classList.remove("above"); pop.classList.add("below");
+      }
+    };
+
+    let open = false;
+    const closePop = () => {
+      if (pop) pop.style.display = "none";
+      open = false;
+      document.removeEventListener("scroll", onScrollResize, true);
+      window.removeEventListener("resize", onScrollResize);
+    };
+    const onScrollResize = () => { if (open) position(); };
+    const openPop = () => {
+      if (!pop) buildPop();
+      position();
+      open = true;
+      document.addEventListener("scroll", onScrollResize, true);
+      window.addEventListener("resize", onScrollResize);
+    };
+
+    btn.onclick = (e) => {
+      e.preventDefault(); e.stopPropagation();
+      open ? closePop() : openPop();
+    };
+    // Clicking inside the popover shouldn't close it (except the download,
+    // which navigates in a new tab anyway).
+    document.addEventListener("click", (e) => {
+      if (!open) return;
+      if (pop && pop.contains(e.target)) return;
+      if (e.target === btn) return;
+      closePop();
+    });
+    // When the modal closes, its DOM is wiped but our body-level popover is
+    // not — clean it up so it can't linger.
+    const overlay = $("overlay");
+    if (overlay) {
+      const cleanup = () => {
+        if (pop && pop.parentNode) pop.parentNode.removeChild(pop);
+        overlay.removeEventListener("click", cleanup);
+      };
+      overlay.addEventListener("click", cleanup);
+    }
   } else {
     // Nothing on file — disable this option and move the default to Upload.
     label.textContent = "No resume on file";
