@@ -273,7 +273,7 @@ function renderApplyRow(applyRow, j) {
           q.disabled = true;
           const r = await api("/applications/apply.php", "POST", { job_uuid: j.uuid, apply_channel: "external" });
           if (r.ok && r.data?.success) renderMarked();
-          else { q.disabled = false; alert(r.data?.error || "Could not mark as applied."); }
+          else { q.disabled = false; toast(r.data?.error || "Could not mark as applied.", "err"); }
         };
         markWrap.appendChild(q);
       };

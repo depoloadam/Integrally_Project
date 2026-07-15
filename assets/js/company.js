@@ -116,7 +116,7 @@ function editCompanyDescription(current, onSaved) {
       closeModal();
       if (onSaved) onSaved();
     } else {
-      alert(r.data?.error || "Could not save the description.");
+      toast(r.data?.error || "Could not save the description.", "err");
       btn.disabled = false; btn.textContent = "Save";
     }
   };
@@ -414,7 +414,7 @@ async function loadCompanyJobs() {
         if (!(await confirmDialog(`Close "${j.title}"? It will no longer appear in public job listings, but you can reopen it by editing the posting.`, { confirmText: "Close posting", danger: true }))) return;
         const res = await api("/jobs/update.php", "POST", { uuid: j.uuid, status: "closed" });
         if (res.ok && res.data?.success) loadCompanyJobs();
-        else alert(res.data?.error || "Could not close the job.");
+        else toast(res.data?.error || "Could not close the job.", "err");
       };
     }
     box.appendChild(row);
@@ -943,7 +943,7 @@ async function renderCompanyProfile(uuid) {
         const n = (parseInt(cnt.textContent, 10) || 0) + (nowFollowing ? 1 : -1);
         cnt.textContent = `${n} follower${n === 1 ? "" : "s"}`;
       } else {
-        alert(r.data?.error || "Could not update follow status.");
+        toast(r.data?.error || "Could not update follow status.", "err");
       }
       followBtn.disabled = false;
     };

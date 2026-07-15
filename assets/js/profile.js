@@ -313,7 +313,7 @@ function renderScoreRow(s, showOwnerControls) {
         s.hidden = next;
         row.replaceWith(renderScoreRow(s, true));
       } else {
-        alert(r.data?.error || "Could not update visibility.");
+        toast(r.data?.error || "Could not update visibility.", "err");
       }
     };
 
@@ -396,7 +396,7 @@ async function runScoreRemoval(s, scope, onDone) {
     else refreshAfterProfileChange();   // rebuild the latest-per-target panel
   } else {
     ids.forEach(id => { const b = $(id); if (b) b.disabled = false; });
-    alert(r.data?.error || "Could not remove the score.");
+    toast(r.data?.error || "Could not remove the score.", "err");
   }
 }
 // Renders into `slot`. `scoreId` optionally pins the comparison to a
@@ -1002,7 +1002,7 @@ function editBio(currentBio, currentMotto) {
     const r = await api("/profile/set-attribute.php", "POST", { key: "bio", value });
     await api("/profile/set-attribute.php", "POST", { key: "motto", value: $("bio-motto").value.trim() });
     if (r.ok && r.data?.success) { closeModal(); refreshAfterProfileChange(); }
-    else { alert(r.data?.error || "Could not save bio."); }
+    else { toast(r.data?.error || "Could not save bio.", "err"); }
   };
 }
 
@@ -1069,7 +1069,7 @@ function adminEditProfile(p, headline, uuid) {
       country: $("af-country").value.trim(),
     });
     if (r.ok && r.data?.success) { closeModal(); renderPublicProfile(uuid); }
-    else { alert(r.data?.error || "Could not update profile."); }
+    else { toast(r.data?.error || "Could not update profile.", "err"); }
   };
 }
 
@@ -1412,7 +1412,7 @@ async function renderApplicationsInto(box, opts = {}) {
       btn.disabled = true;
       const r2 = await api("/applications/withdraw.php", "POST", { uuid: btn.dataset.uuid });
       if (r2.ok && r2.data?.success) onWithdraw();
-      else { btn.disabled = false; alert(r2.data?.error || "Could not update."); }
+      else { btn.disabled = false; toast(r2.data?.error || "Could not update.", "err"); }
     };
   });
 }
@@ -1638,7 +1638,7 @@ function addCert(existing) {
     const name = $("c-name").value.trim(); if (!name) return;
     const issuer = $("c-issuer").value.trim();
     const expiry = $("c-has-exp").checked ? $("c-exp").value : "";
-    if ($("c-has-exp").checked && !expiry) { alert("Enter an expiration date, or uncheck “This certification expires.”"); return; }
+    if ($("c-has-exp").checked && !expiry) { toast("Enter an expiration date, or uncheck “This certification expires.”", "err"); return; }
     const payload = { name, issuer, issue_date:$("c-issue").value, expiry_date:expiry };
     if (isEdit) { await api("/profile/certs/update.php","POST",{ id:existing.id, ...payload }); closeModal(); refreshAfterProfileChange(); }
     else        { await api("/profile/certs/add.php","POST", payload); closeModal(); offerShareCert(name, issuer); refreshAfterProfileChange(); }
@@ -1692,7 +1692,7 @@ function scoreMe() {
     const r = await api("/score/score-me.php","POST",{ target_type:typeSel.value, target_value });
     if (r.ok && r.data?.success) { closeModal(); refreshAfterProfileChange(); }
     else if (r.data?.code === "entry_cap") { showEntryCapModal(); }
-    else { btn.disabled = false; btn.textContent = "Score"; alert(r.data?.error || "Could not score right now."); }
+    else { btn.disabled = false; btn.textContent = "Score"; toast(r.data?.error || "Could not score right now.", "err"); }
   };
 }
 
@@ -1913,7 +1913,7 @@ function openBulkExperience() {
       start_date: r.querySelector(".bj-start").value,
       end_date: r.querySelector(".bj-current").checked ? "" : r.querySelector(".bj-end").value,
     })).filter(j => j.title);
-    if (!jobs.length) { btn.disabled = false; btn.textContent = "Save & complete"; alert("Add at least one role, or Cancel if you have none — you can skip this step from the profile strength card."); return; }
+    if (!jobs.length) { btn.disabled = false; btn.textContent = "Save & complete"; toast("Add at least one role, or Cancel if you have none — you can skip this step from the profile strength card.", "err"); return; }
     for (const j of jobs) await api("/profile/jobs/add.php","POST", j);
     await api("/settings/set.php","POST",{ key:"step_experience_done", value:"1" });
     closeModal(); refreshAfterProfileChange();
@@ -2069,7 +2069,7 @@ async function renderPublicProfile(uuid) {
       const r = await api(endpoint, "POST", { target_type:"user", target_uuid:uuid });
       btn.disabled = false;
       if (r.ok && r.data?.success) { btn.classList.toggle("following"); btn.textContent = btn.classList.contains("following") ? "Following" : "Follow"; }
-      else { alert(r.data?.error || "Could not update follow status."); }
+      else { toast(r.data?.error || "Could not update follow status.", "err"); }
     };
   }
   // admin: edit this user's core profile fields

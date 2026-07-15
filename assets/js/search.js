@@ -246,7 +246,7 @@ function entityRow(res) {
         btn.classList.toggle("following");
         btn.textContent = btn.classList.contains("following") ? "Following" : "Follow";
       } else {
-        alert(resp.data?.error || "Could not update follow status.");
+        toast(resp.data?.error || "Could not update follow status.", "err");
       }
       btn.disabled = false;
     };

@@ -951,7 +951,7 @@ function renderPost(it, opts = {}) {
       if (!(await confirmDialog(msg, { confirmText: "Delete", danger: true }))) return;
       const r = await api("/posts/delete.php", "POST", { id: it.post_id });
       if (r.ok && r.data?.success) card.remove();
-      else alert(r.data?.error || "Could not delete the post.");
+      else toast(r.data?.error || "Could not delete the post.", "err");
     };
   }
 
@@ -1028,6 +1028,11 @@ async function loadComments(postId, box, commentBtn, canEngage, setOpen) {
         if (dr.ok && dr.data?.success) {
           row.remove();
           updateCount(listEl.querySelectorAll(".pc-item").length);
+          // If that was the last comment, restore the empty-state line.
+          if (!listEl.querySelector(".pc-item")) {
+            listEl.appendChild(el(`<div class="in-empty" style="padding:8px 0">No comments yet.${canEngage ? " Be the first." : ""}</div>`));
+          }
+          syncHide();
         }
       };
     }
@@ -1059,8 +1064,9 @@ async function loadComments(postId, box, commentBtn, canEngage, setOpen) {
         listEl.appendChild(addCommentEl(cr.data.data));
         input.value = "";
         updateCount(listEl.querySelectorAll(".pc-item").length);
+        syncHide();
       } else {
-        alert(cr.data?.error || "Could not post comment.");
+        toast(cr.data?.error || "Could not post comment.", "err");
       }
       send.disabled = false;
     };
@@ -1068,9 +1074,21 @@ async function loadComments(postId, box, commentBtn, canEngage, setOpen) {
     input.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
   }
 
-  if (setOpen) {
-    const hideRow = el(`<button class="pc-hide">Hide comments ▴</button>`);
-    hideRow.onclick = () => setOpen(false);
-    box.appendChild(hideRow);
-  }
+  // "Hide comments" should exist only while there's a thread to hide, and
+  // stay in sync as comments are added to / removed from an empty thread.
+  const syncHide = () => {
+    if (!setOpen) return;
+    const has = listEl.querySelectorAll(".pc-item").length > 0;
+    let hideRow = box.querySelector(".pc-hide");
+    if (has && !hideRow) {
+      hideRow = el(`<button class="pc-hide">Hide comments ▴</button>`);
+      hideRow.onclick = () => setOpen(false);
+      box.appendChild(hideRow);   // always the last child
+    } else if (!has && hideRow) {
+      hideRow.remove();
+    } else if (has && hideRow) {
+      box.appendChild(hideRow);   // keep it after the composer
+    }
+  };
+  syncHide();
 }

@@ -12,6 +12,11 @@
 //   Response::error('Email already in use.', 409);
 // =====================================================================
 
+// Runtime safety net (env-aware error display + global exception handler).
+// Required here because every endpoint already includes Response.php, so
+// this protects all of them without touching each file.
+require_once __DIR__ . '/bootstrap.php';
+
 class Response
 {
     /**

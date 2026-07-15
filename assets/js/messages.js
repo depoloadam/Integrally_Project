@@ -241,14 +241,14 @@ async function renderThread(convId) {
   if (acceptBtn) acceptBtn.onclick = async () => {
     const r2 = await api("/messages/accept.php", "POST", { conversation_id: convId });
     if (r2.ok && r2.data?.success) { renderThread(convId); loadConversationList(convId); }
-    else alert(r2.data?.error || "Could not accept the request.");
+    else toast(r2.data?.error || "Could not accept the request.", "err");
   };
   const declineBtn = $("msgs-decline");
   if (declineBtn) declineBtn.onclick = async () => {
     if (!(await confirmDialog("Decline this message request? The conversation will be removed.", { confirmText: "Decline", danger: true }))) return;
     const r2 = await api("/messages/decline.php", "POST", { conversation_id: convId });
     if (r2.ok && r2.data?.success) { location.hash = "messages"; refreshMsgBadge(); }
-    else alert(r2.data?.error || "Could not decline the request.");
+    else toast(r2.data?.error || "Could not decline the request.", "err");
   };
 
   const input = $("msgs-input"), sendBtn = $("msgs-send");
@@ -263,7 +263,7 @@ async function renderThread(convId) {
       await refreshOpenThread(convId);
       loadConversationList(convId);
     } else {
-      alert(r2.data?.error || "Could not send the message.");
+      toast(r2.data?.error || "Could not send the message.", "err");
     }
   };
   if (sendBtn) sendBtn.onclick = doSend;
@@ -318,7 +318,7 @@ function renderThreadMessages(messages, peerLastReadId, convId) {
         if (typeof convId === "number") { refreshOpenThread(convId); loadConversationList(convId); }
       } else {
         btn.disabled = false;
-        alert(r.data?.error || "Could not delete the message.");
+        toast(r.data?.error || "Could not delete the message.", "err");
       }
     };
   });
@@ -377,17 +377,17 @@ function wireThreadMenu(convId, conv) {
         const r = await api("/messages/mute.php", "POST",
           { conversation_id: convId, muted: conv.muted ? "0" : "1" });
         if (r.ok && r.data?.success) { renderThread(convId); loadConversationList(convId); }
-        else alert(r.data?.error || "Could not update mute setting.");
+        else toast(r.data?.error || "Could not update mute setting.", "err");
       } else if (act === "block") {
         if (conv.i_blocked) {
           const r = await api("/messages/unblock.php", "POST", { conversation_id: convId });
           if (r.ok && r.data?.success) { renderThread(convId); loadConversationList(convId); }
-          else alert(r.data?.error || "Could not unblock this user.");
+          else toast(r.data?.error || "Could not unblock this user.", "err");
         } else {
           if (!(await confirmDialog("Block this user? Neither of you will be able to send messages until you unblock them.", { confirmText: "Block", danger: true }))) return;
           const r = await api("/messages/block.php", "POST", { conversation_id: convId });
           if (r.ok && r.data?.success) { renderThread(convId); loadConversationList(convId); }
-          else alert(r.data?.error || "Could not block this user.");
+          else toast(r.data?.error || "Could not block this user.", "err");
         }
       }
     };
