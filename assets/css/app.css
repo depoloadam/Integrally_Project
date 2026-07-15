@@ -1462,9 +1462,48 @@ textarea.jf-input { resize:vertical; }
 /* Apply modal: the "current resume" row shows the file on record so the
    applicant can verify it. View link opens the private download endpoint;
    the filename sits muted after it. */
-.ap-resume-view { color:var(--in-accent); font-weight:600; text-decoration:none; }
-.ap-resume-view:hover { text-decoration:underline; }
-.ap-resume-name { color:var(--in-muted); font-size:12px; font-weight:400; margin-left:8px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+.ap-resume-viewer { position:relative; display:inline-block; margin-left:10px; vertical-align:baseline; }
+.ap-resume-viewbtn {
+  background:none; border:0; padding:0; cursor:pointer;
+  color:var(--in-accent); font-weight:600; font-size:12.5px; font-family:inherit;
+}
+.ap-resume-viewbtn:hover, .ap-resume-viewbtn:focus-visible { text-decoration:underline; outline:none; }
+/* The popover container reaches all the way DOWN to the button (bottom:100%)
+   and pads the gap itself, so there's no dead space between the trigger and
+   the card — the cursor stays within a hovered element the whole way up.
+   `padding-top` here is the visual gap; the transparent padding is still part
+   of the hover target. */
+.ap-resume-pop {
+  position:absolute; bottom:100%; left:0; z-index:130;
+  display:none; padding-bottom:8px;   /* the bridge — hoverable, invisible */
+}
+.ap-resume-pop-inner {
+  position:relative;
+  min-width:200px; max-width:300px;
+  background:var(--in-card); border:1px solid var(--in-line); border-radius:9px;
+  box-shadow:0 6px 20px rgba(0,0,0,.14); padding:10px 12px;
+  white-space:normal;
+}
+/* Reveal on hover of the wrapper (button + bridge + card all count), or on
+   keyboard focus of the button or anything inside the popover. */
+.ap-resume-viewer:hover .ap-resume-pop,
+.ap-resume-viewbtn:focus-visible + .ap-resume-pop,
+.ap-resume-pop:hover,
+.ap-resume-pop:focus-within { display:block; }
+/* Little arrow under the card, pointing down toward the button. */
+.ap-resume-pop-inner::after {
+  content:""; position:absolute; top:100%; left:16px;
+  border:6px solid transparent; border-top-color:var(--in-card);
+}
+.ap-resume-pop-name {
+  display:block; font-size:12.5px; color:var(--in-ink); font-weight:500;
+  word-break:break-word; margin-bottom:8px; line-height:1.4;
+}
+.ap-resume-pop-dl {
+  display:inline-block; font-size:12.5px; font-weight:600;
+  color:var(--in-accent); text-decoration:none;
+}
+.ap-resume-pop-dl:hover { text-decoration:underline; }
 .in-modal .ep-check.ap-resume-disabled { color:var(--in-muted); cursor:default; }
 .in-modal .ep-check.ap-resume-disabled input[type="radio"] { cursor:default; }
 

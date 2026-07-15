@@ -320,7 +320,7 @@ function openApplyModal(j) {
   // be able to see, and lets them fix them inline before submitting. Values
   // are loaded live from the profile after the modal opens.
   const contactHtml = `
-    <div class="ap-contact" id="ap-contact">
+    <div class="ap-contact" id="ap-contact" style="margin-top:20px">
       <div class="ap-contact-head">
         <span>📇 Contact info shared with this employer</span>
         <button type="button" class="ap-contact-edit" id="ap-contact-edit">Edit</button>
@@ -493,12 +493,25 @@ async function loadApplyCurrentResume() {
   const radio = wrap.querySelector('input[name="ap-resume"]');
 
   if (resume && resume.name) {
-    // Show the filename and a View link next to the option.
+    // Keep the row compact no matter how long the filename is: the label
+    // stays "Use my current resume", and the details (filename + download)
+    // live in a small popover behind a "View current resume" button that
+    // reveals on hover/focus. This avoids the filename wrapping under the
+    // radio label.
     label.innerHTML =
-      `Use my current resume ` +
-      `<a href="${API_BASE}/profile/resume-download.php" target="_blank" rel="noopener" ` +
-      `class="ap-resume-view" onclick="event.stopPropagation()">Download</a>` +
-      `<span class="ap-resume-name">${esc(resume.name)}</span>`;
+      `Use my current resume` +
+      `<span class="ap-resume-viewer">` +
+        `<button type="button" class="ap-resume-viewbtn" ` +
+          `onclick="event.preventDefault();event.stopPropagation()">View current resume</button>` +
+        `<span class="ap-resume-pop" role="dialog">` +
+          `<span class="ap-resume-pop-inner">` +
+            `<span class="ap-resume-pop-name">${esc(resume.name)}</span>` +
+            `<a class="ap-resume-pop-dl" href="${API_BASE}/profile/resume-download.php" ` +
+              `target="_blank" rel="noopener" ` +
+              `onclick="event.stopPropagation()">Download</a>` +
+          `</span>` +
+        `</span>` +
+      `</span>`;
   } else {
     // Nothing on file — disable this option and move the default to Upload.
     label.textContent = "No resume on file";
