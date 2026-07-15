@@ -28,7 +28,7 @@ $stmt = $pdo->prepare(
     'SELECT a.*, j.uuid AS job_uuid, j.title AS job_title, j.status AS job_status,
             j.accept_until, j.company_id, j.apply_form,
             u.uuid AS user_uuid, u.username, u.first_name, u.last_name,
-            u.profile_pic, u.city, u.state, u.country
+            u.profile_pic, u.city, u.state, u.country, u.email, u.phone, u.phone_verified
      FROM job_applications a
      JOIN jobs j  ON j.id = a.job_id
      JOIN users u ON u.id = a.user_id
@@ -192,5 +192,16 @@ Response::success([
         'full_name' => $full !== '' ? $full : null,
         'avatar'    => $a['profile_pic'],
         'location'  => $loc ? implode(', ', $loc) : null,
+    ],
+    // Contact info is LIVE from the candidate's current profile (not a
+    // frozen snapshot) — an applicant who updates their number changes what
+    // the employer sees. The company reveals this behind an explicit "See
+    // contact information" action in the UI. A future re-auth step will gate
+    // the reveal server-side; for now availability is returned so the button
+    // can render, with the values included for the reveal.
+    'contact' => [
+        'email'          => $a['email'] ?: null,
+        'phone'          => $a['phone'] ?: null,
+        'phone_verified' => (int) ($a['phone_verified'] ?? 0),
     ],
 ]);

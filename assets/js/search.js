@@ -262,7 +262,7 @@ function jobRow(res) {
   const chips = [];
   if (res.employment_type) chips.push(esc(empMap[res.employment_type] || res.employment_type));
   if (res.remote_policy)   chips.push(esc(remoteMap[res.remote_policy] || res.remote_policy));
-  const salary = fmtSalary(res.salary_min, res.salary_max, res.salary_currency);
+  const salary = fmtSalary(res.salary_min, res.salary_max, res.salary_currency, res.pay_period);
 
   const detailBits = [];
   if (res.subtitle) detailBits.push(esc(res.subtitle));
@@ -285,11 +285,13 @@ function jobRow(res) {
   return row;
 }
 
-function fmtSalary(min, max, cur) {
+function fmtSalary(min, max, cur, period) {
   if (min == null && max == null) return "";
+  const hourly = period === "hourly";
   const sym = cur === "USD" || !cur ? "$" : (cur + " ");
-  const k = (n) => (n >= 1000 ? Math.round(n / 1000) + "k" : String(n));
-  if (min != null && max != null) return `${sym}${k(min)}–${k(max)}`;
-  if (min != null) return `${sym}${k(min)}+`;
-  return `Up to ${sym}${k(max)}`;
+  const suf = hourly ? "/hr" : "/yr";
+  const k = (n) => hourly ? String(n) : (n >= 1000 ? Math.round(n / 1000) + "k" : String(n));
+  if (min != null && max != null) return `${sym}${k(min)}–${k(max)}${suf}`;
+  if (min != null) return `${sym}${k(min)}+${suf}`;
+  return `Up to ${sym}${k(max)}${suf}`;
 }

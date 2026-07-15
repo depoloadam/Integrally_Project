@@ -56,9 +56,13 @@ $profile = [
 
 // Private fields only for the owner.
 if ($isOwner) {
-    $profile['email']         = $user['email'];
-    $profile['is_verified']   = (int) $user['is_verified'];
-    $profile['auth_provider'] = $user['auth_provider'];
+    $profile['email']          = $user['email'];
+    $profile['is_verified']    = (int) $user['is_verified'];
+    $profile['auth_provider']  = $user['auth_provider'];
+    // Phone is always private — owner only here. Employers get it through
+    // the application detail endpoint, never through public profile.
+    $profile['phone']          = $user['phone'] ?? null;
+    $profile['phone_verified'] = (int) ($user['phone_verified'] ?? 0);
 }
 
 // --- Flexible attributes ---------------------------------------------

@@ -86,6 +86,10 @@ if (array_key_exists('salary_currency', $in)) {
     if (strlen($v) !== 3) Response::error('salary_currency must be a 3-letter code.', 422);
     $sets[] = 'salary_currency = ?'; $params[] = $v;
 }
+if (array_key_exists('pay_period', $in)) {
+    $v = ((string) $in['pay_period'] === 'hourly') ? 'hourly' : 'annual';
+    $sets[] = 'pay_period = ?'; $params[] = $v;
+}
 if (array_key_exists('apply_url', $in)) {
     $v = trim((string) $in['apply_url']);
     if ($v !== '' && !preg_match('#^https?://#i', $v)) Response::error('apply_url must start with http(s)://', 422);

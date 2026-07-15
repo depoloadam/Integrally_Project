@@ -83,7 +83,7 @@ $applicantSelect = $mine
 
 $stmt = $pdo->prepare(
     "SELECT j.uuid, j.title, j.location, j.employment_type, j.remote_policy,
-            j.salary_min, j.salary_max, j.salary_currency, j.status, j.created_at,
+            j.salary_min, j.salary_max, j.salary_currency, j.pay_period, j.status, j.created_at,
             c.uuid AS company_uuid, c.name AS company_name, c.logo AS company_logo,
             c.industry AS company_industry{$applicantSelect}
      FROM jobs j

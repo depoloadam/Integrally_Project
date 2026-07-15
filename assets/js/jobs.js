@@ -12,11 +12,13 @@ const EMP_LABELS = {
 };
 const REMOTE_LABELS = { onsite: "On-site", hybrid: "Hybrid", remote: "Remote" };
 
-function fmtSalary(min, max, cur) {
+function fmtSalary(min, max, cur, period) {
   if (min == null && max == null) return "";
-  const c = (n) => n.toLocaleString("en-US", { style: "currency", currency: cur || "USD", maximumFractionDigits: 0 });
-  if (min != null && max != null) return `${c(min)} – ${c(max)}`;
-  return min != null ? `From ${c(min)}` : `Up to ${c(max)}`;
+  const hourly = period === "hourly";
+  const c = (n) => n.toLocaleString("en-US", { style: "currency", currency: cur || "USD", maximumFractionDigits: hourly ? 2 : 0 });
+  const suf = hourly ? "/hr" : "/yr";
+  if (min != null && max != null) return `${c(min)} – ${c(max)}${suf}`;
+  return min != null ? `From ${c(min)}${suf}` : `Up to ${c(max)}${suf}`;
 }
 
 async function renderJobs() {
@@ -128,7 +130,7 @@ async function loadJobs() {
       j.remote_policy ? REMOTE_LABELS[j.remote_policy] : "",
       j.employment_type ? EMP_LABELS[j.employment_type] : "",
     ].filter(Boolean);
-    const salary = fmtSalary(j.salary_min, j.salary_max, j.salary_currency);
+    const salary = fmtSalary(j.salary_min, j.salary_max, j.salary_currency, j.pay_period);
     const logoChar = (j.company_name || "?").charAt(0).toUpperCase();
 
     const row = el(`
@@ -176,7 +178,7 @@ async function renderJobDetail(uuid) {
     j.remote_policy ? REMOTE_LABELS[j.remote_policy] : "",
     j.employment_type ? EMP_LABELS[j.employment_type] : "",
   ].filter(Boolean);
-  const salary = fmtSalary(j.salary_min, j.salary_max, j.salary_currency);
+  const salary = fmtSalary(j.salary_min, j.salary_max, j.salary_currency, j.pay_period);
   const logoChar = (c.name || "?").charAt(0).toUpperCase();
 
   view.innerHTML = "";
@@ -314,16 +316,33 @@ function openApplyModal(j) {
       <input type="file" id="ap-resume-file" accept=".pdf,.doc,.docx" style="display:none;margin-top:8px">
     </div>` : "";
 
+  // Contact box: shows the applicant which contact details the company will
+  // be able to see, and lets them fix them inline before submitting. Values
+  // are loaded live from the profile after the modal opens.
+  const contactHtml = `
+    <div class="ap-contact" id="ap-contact">
+      <div class="ap-contact-head">
+        <span>📇 Contact info shared with this employer</span>
+        <button type="button" class="ap-contact-edit" id="ap-contact-edit">Edit</button>
+      </div>
+      <div class="ap-contact-body" id="ap-contact-view">
+        <div class="in-loading" style="padding:4px 0;font-size:13px">Loading…</div>
+      </div>
+    </div>`;
+
   openModal(`
     <h2>Apply — ${esc(j.title)}</h2>
     ${form.collect_score ? `<p class="in-msg-modal-hint">Your Integrally score for this role will be included with your application.</p>` : ""}
     ${qHtml || (!form.collect_resume ? `<p class="in-msg-modal-hint">This is a one-click application. The company will see your profile${form.collect_score ? " and score" : ""}.</p>` : "")}
     ${resumeHtml}
+    ${contactHtml}
     <div class="in-set-msg" id="ap-err"></div>
     <div class="in-modal-actions">
       <button class="in-btn ghost" onclick="closeModal()">Cancel</button>
       <button class="in-btn primary" id="ap-submit">Submit application</button>
     </div>`);
+
+  loadApplyContact();
 
   // Show the file picker only when "upload" is chosen.
   if (form.collect_resume) {
@@ -390,6 +409,68 @@ function openApplyModal(j) {
     } else {
       errEl.textContent = r.data?.error || "Could not submit your application.";
     }
+  };
+}
+
+// Fills the apply modal's contact box with the applicant's live email +
+// phone (from their profile), and offers an inline edit so they can fix the
+// number before submitting. Editing saves straight to the profile, which is
+// the source of truth the employer later reads — there's no separate
+// snapshot, so what they confirm here is exactly what the company sees.
+async function loadApplyContact() {
+  const view = $("ap-contact-view");
+  if (!view) return;
+  const r = await api("/profile/get.php");
+  if (!$("ap-contact-view")) return;   // modal closed while loading
+  const p = r.data?.data || {};
+  const email = p.email || "";
+  let phone = p.phone || "";
+
+  const render = () => {
+    const v = $("ap-contact-view");
+    if (!v) return;
+    v.innerHTML = `
+      <div class="ap-contact-line"><span class="ap-contact-k">Email</span><span class="ap-contact-val">${email ? esc(email) : "<em style='color:var(--in-muted)'>none on file</em>"}</span></div>
+      <div class="ap-contact-line"><span class="ap-contact-k">Phone</span><span class="ap-contact-val">${phone ? esc(phone) : "<em style='color:var(--in-muted)'>none on file</em>"}</span></div>
+      <div class="ap-contact-note">The company can view this after you apply. Email is always shared; phone only if you provide one.</div>`;
+  };
+  render();
+
+  const editBtn = $("ap-contact-edit");
+  if (editBtn) editBtn.onclick = () => {
+    const v = $("ap-contact-view");
+    if (!v) return;
+    // Email is account-level (changed via settings), so only phone is
+    // editable inline here.
+    v.innerHTML = `
+      <div class="ap-contact-line"><span class="ap-contact-k">Email</span><span class="ap-contact-val">${email ? esc(email) : "<em style='color:var(--in-muted)'>none on file</em>"}</span></div>
+      <div class="ap-contact-edit-row">
+        <label class="ap-contact-k" for="ap-phone-edit">Phone</label>
+        <input id="ap-phone-edit" type="tel" value="${esc(phone)}" placeholder="+1 (555) 123-4567">
+      </div>
+      <div class="ap-contact-editnote" id="ap-contact-editnote"></div>
+      <div class="ap-contact-edit-actions">
+        <button type="button" class="in-btn ghost" id="ap-phone-cancel" style="padding:6px 12px">Cancel</button>
+        <button type="button" class="in-btn primary" id="ap-phone-save" style="padding:6px 12px">Save phone</button>
+      </div>`;
+    editBtn.style.display = "none";
+    $("ap-phone-cancel").onclick = () => { editBtn.style.display = ""; render(); };
+    $("ap-phone-save").onclick = async () => {
+      const val = $("ap-phone-edit").value.trim();
+      const note = $("ap-contact-editnote");
+      const btn = $("ap-phone-save");
+      btn.disabled = true;
+      const res = await api("/profile/update.php", "POST", { phone: val });
+      btn.disabled = false;
+      if (res.ok && res.data?.success) {
+        phone = val;   // reflect saved value
+        editBtn.style.display = "";
+        render();
+      } else {
+        note.textContent = res.data?.error || "Could not save phone.";
+        note.className = "ap-contact-editnote err";
+      }
+    };
   };
 }
 

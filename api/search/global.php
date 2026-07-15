@@ -145,7 +145,7 @@ if ($type === 'all' || $type === 'companies') {
 if ($type === 'all' || $type === 'jobs') {
     $stmt = $pdo->prepare(
         "SELECT j.uuid, j.title, j.location, j.employment_type, j.remote_policy,
-                j.salary_min, j.salary_max, j.salary_currency,
+                j.salary_min, j.salary_max, j.salary_currency, j.pay_period,
                 c.uuid AS company_uuid, c.name AS company_name, c.logo AS company_logo
          FROM jobs j
          JOIN companies c ON c.id = j.company_id
@@ -169,6 +169,7 @@ if ($type === 'all' || $type === 'jobs') {
             'salary_min'      => $r['salary_min'] !== null ? (int) $r['salary_min'] : null,
             'salary_max'      => $r['salary_max'] !== null ? (int) $r['salary_max'] : null,
             'salary_currency' => $r['salary_currency'] ?: null,
+            'pay_period'      => $r['pay_period'] ?? 'annual',
         ];
     }
 }

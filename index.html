@@ -243,6 +243,10 @@
         </ul>
 
         <div class="in-field">
+          <label for="reg-phone">Phone <span class="opt">(optional, private)</span></label>
+          <input type="tel" id="reg-phone" autocomplete="tel" placeholder="+1 (555) 123-4567" />
+        </div>
+        <div class="in-field">
           <label for="reg-country">Country <span class="opt">(optional)</span></label>
           <select id="reg-country" autocomplete="country-name"></select>
         </div>
@@ -345,6 +349,7 @@
       confirm_password: $("reg-pass2").value,
       country:          $("reg-country").value.trim(),
       state:            geoGetSubdivision($("reg-sub-wrap")),
+      phone:            $("reg-phone").value.trim(),
     };
     if (!payload.first_name || !payload.last_name || !payload.email ||
         !payload.username || !payload.password) {

@@ -83,6 +83,7 @@ Response::success([
     'salary_min'      => $job['salary_min'] !== null ? (int) $job['salary_min'] : null,
     'salary_max'      => $job['salary_max'] !== null ? (int) $job['salary_max'] : null,
     'salary_currency' => $job['salary_currency'],
+    'pay_period'      => $job['pay_period'] ?? 'annual',
     'apply_url'       => $job['apply_url'],
     'apply_method'    => $job['apply_method'] ?? 'native',
     'apply_form'      => $applyForm,

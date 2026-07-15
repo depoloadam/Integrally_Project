@@ -1135,6 +1135,7 @@ async function renderEditProfilePage() {
             <div><label>City</label><input id="f-city" value="${esc(p.city||"")}"></div>
             <div><label>Country</label><select id="f-country"></select></div>
             <div class="ep-span" id="f-sub-wrap"></div>
+            <div class="ep-span"><label>Phone <span class="ep-hint">(private — never shown on your public profile; shared with a company only when you apply to their job)</span></label><input id="f-phone" type="tel" value="${esc(p.phone||"")}" placeholder="+1 (555) 123-4567"></div>
           </div>
         </div>
         <div data-epanel="social" style="display:none">
@@ -1184,6 +1185,7 @@ async function renderEditProfilePage() {
     const r = await api("/profile/update.php", "POST", {
       username:$("f-username").value.trim(), city:$("f-city").value.trim(),
       state:geoGetSubdivisionBy($("f-sub-wrap"),"f-sub"), country:$("f-country").value.trim(),
+      phone:$("f-phone").value.trim(),
       profile_pic: avatarState.avatarUrl || "",
     });
     await api("/profile/set-attribute.php", "POST", { key:"headline", value:$("f-headline").value.trim() });

@@ -531,6 +531,14 @@ async function openApplicantDetail(appUuid) {
     ? `<a class="in-btn ghost" style="flex:none;padding:8px 16px;text-decoration:none;display:inline-block" href="${API_BASE}/applications/resume.php?uuid=${encodeURIComponent(a.uuid)}" target="_blank">📎 Download resume (${esc(a.resume.name || "file")})</a>`
     : `<div class="in-empty" style="padding:8px">No resume attached.</div>`;
 
+  const contact = a.contact || {};
+  const contactHtml = `
+    <div class="ep-sep"><span>Contact information</span></div>
+    <div id="ja-contact-wrap">
+      <button class="in-btn ghost" id="ja-see-contact" style="flex:none;padding:8px 16px">See contact information</button>
+      <div class="in-empty" style="padding:6px 0;font-size:12px">Hidden until you choose to view it.</div>
+    </div>`;
+
   modal.innerHTML = `
     <h2 style="margin-bottom:2px">${esc(name)}</h2>
     <div style="color:var(--in-muted);font-size:13px;margin-bottom:4px">
@@ -545,11 +553,30 @@ async function openApplicantDetail(appUuid) {
     ${answersHtml}
     <div class="ep-sep"><span>Resume</span></div>
     ${resumeHtml}
+    ${contactHtml}
 
     <div class="in-modal-actions">
       <button class="in-btn ghost" onclick="closeModal()">Close</button>
       <a class="in-btn primary" href="#user/${esc(cand.uuid)}" onclick="closeModal()" style="text-decoration:none">View full profile</a>
     </div>`;
+
+  // Reveal contact info on demand. Kept behind a click so it isn't shown
+  // casually; a future step will require the employer to re-authenticate
+  // here before the reveal.
+  const seeBtn = $("ja-see-contact");
+  if (seeBtn) seeBtn.onclick = () => {
+    const wrap = $("ja-contact-wrap");
+    if (!wrap) return;
+    const email = contact.email || "";
+    const phone = contact.phone || "";
+    const verified = contact.phone_verified ? ` <span class="ja-verified">✓ verified</span>` : "";
+    wrap.innerHTML = `
+      <div class="ja-contact">
+        <div class="ja-contact-line"><span class="ja-contact-k">Email</span>${email ? `<a href="mailto:${esc(email)}" class="ja-contact-val">${esc(email)}</a>` : `<span class="ja-contact-val"><em style="color:var(--in-muted)">Not provided</em></span>`}</div>
+        <div class="ja-contact-line"><span class="ja-contact-k">Phone</span>${phone ? `<a href="tel:${esc(phone.replace(/[^0-9+]/g,""))}" class="ja-contact-val">${esc(phone)}${verified}</a>` : `<span class="ja-contact-val"><em style="color:var(--in-muted)">Not provided</em></span>`}</div>
+        <div class="ja-contact-note">This is the candidate's current contact information from their profile.</div>
+      </div>`;
+  };
 }
 
 // ---- job editor PAGE (create + edit) --------------------------------
@@ -600,11 +627,24 @@ async function openJobEditor(uuid = null) {
         </div>
       </div>
       <label class="jf-checkrow">
-        <input type="checkbox" id="job-salary-on"> Include a salary range
+        <input type="checkbox" id="job-salary-on"> Include pay range
       </label>
-      <div class="jf-row" id="job-salary-fields">
-        <div><label class="jf-label">Salary min</label><input class="jf-input" id="job-smin" type="number" value="${j.salary_min ?? ""}" placeholder="80000"></div>
-        <div><label class="jf-label">Salary max</label><input class="jf-input" id="job-smax" type="number" value="${j.salary_max ?? ""}" placeholder="120000"></div>
+      <div id="job-salary-fields">
+        <div class="jf-row" style="margin-bottom:10px">
+          <div><label class="jf-label">Pay type</label>
+            <select class="jf-input" id="job-pay-period">
+              <option value="annual"${(j.pay_period || "annual") === "annual" ? " selected" : ""}>Salary (per year)</option>
+              <option value="hourly"${j.pay_period === "hourly" ? " selected" : ""}>Hourly (per hour)</option>
+            </select>
+          </div>
+          <div><label class="jf-label">Currency</label>
+            <input class="jf-input" id="job-scur" type="text" maxlength="3" value="${esc(j.salary_currency || "USD")}" placeholder="USD" style="text-transform:uppercase">
+          </div>
+        </div>
+        <div class="jf-row">
+          <div><label class="jf-label" id="job-smin-label">Min per year</label><input class="jf-input" id="job-smin" type="number" value="${j.salary_min ?? ""}" placeholder="80000"></div>
+          <div><label class="jf-label" id="job-smax-label">Max per year</label><input class="jf-input" id="job-smax" type="number" value="${j.salary_max ?? ""}" placeholder="120000"></div>
+        </div>
       </div>
       <div class="ep-sep"><span>Applications</span></div>
       <div class="jf-row">
@@ -655,6 +695,19 @@ async function openJobEditor(uuid = null) {
   const syncSalary = () => { salaryFields.style.display = salaryToggle.checked ? "" : "none"; };
   syncSalary();
   salaryToggle.onchange = syncSalary;
+
+  // Pay-period swaps the min/max labels + placeholders between annual and
+  // hourly so the numbers the company types read sensibly.
+  const payPeriodSel = $("job-pay-period");
+  const syncPayPeriod = () => {
+    const hourly = payPeriodSel.value === "hourly";
+    $("job-smin-label").textContent = hourly ? "Min per hour" : "Min per year";
+    $("job-smax-label").textContent = hourly ? "Max per hour" : "Max per year";
+    $("job-smin").placeholder = hourly ? "20" : "80000";
+    $("job-smax").placeholder = hourly ? "35" : "120000";
+  };
+  syncPayPeriod();
+  payPeriodSel.onchange = syncPayPeriod;
 
   const descEditor = mountRichEditor("job-desc-editor", {
     placeholder: "Role, responsibilities, requirements…",
@@ -734,6 +787,8 @@ async function openJobEditor(uuid = null) {
       // Send salary only when the toggle is on; otherwise clear it.
       salary_min: salaryOn ? $("job-smin").value : "",
       salary_max: salaryOn ? $("job-smax").value : "",
+      salary_currency: salaryOn ? ($("job-scur").value.trim().toUpperCase() || "USD") : "USD",
+      pay_period: salaryOn ? payPeriodSel.value : "annual",
       status: $("job-status").value,
       apply_method: applyMethodSel.value,
       accept_until: $("job-accept-until").value || "",

@@ -54,6 +54,7 @@ if ($salaryMin !== null && $salaryMax !== null && $salaryMin > $salaryMax) {
 }
 $currency = strtoupper(trim($in['salary_currency'] ?? 'USD'));
 if (strlen($currency) !== 3) $currency = 'USD';
+$payPeriod = ($in['pay_period'] ?? 'annual') === 'hourly' ? 'hourly' : 'annual';
 
 $applyUrl = trim($in['apply_url'] ?? '');
 if ($applyUrl !== '' && !preg_match('#^https?://#i', $applyUrl)) {
@@ -90,9 +91,9 @@ $uuid = Auth::uuid();
 $stmt = $pdo->prepare(
     'INSERT INTO jobs
        (uuid, company_id, title, description, location, employment_type,
-        remote_policy, salary_min, salary_max, salary_currency, apply_url,
+        remote_policy, salary_min, salary_max, salary_currency, pay_period, apply_url,
         apply_method, apply_form, accept_until, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
 );
 $stmt->execute([
     $uuid, $companyId, $title,
@@ -100,7 +101,7 @@ $stmt->execute([
     trim($in['location'] ?? '') ?: null,
     $employmentType ?: null,
     $remotePolicy ?: null,
-    $salaryMin, $salaryMax, $currency,
+    $salaryMin, $salaryMax, $currency, $payPeriod,
     $applyUrl ?: null,
     $applyMethod, $applyForm, $acceptUntil,
     $status,

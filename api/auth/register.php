@@ -74,6 +74,17 @@ $country = trim($in['country'] ?? '') ?: null;
 $city    = trim($in['city']    ?? '') ?: null;   // still accepted if sent
 $state   = trim($in['state']   ?? '') ?: null;
 
+// Optional phone. Same validation as profile/update.php. Empty -> NULL.
+$phone = trim($in['phone'] ?? '');
+if ($phone !== '') {
+    $digits = preg_replace('/\D+/', '', $phone);
+    if (!preg_match('/^[0-9+()\-.\s]{7,32}$/', $phone) || strlen($digits) < 7 || strlen($digits) > 15) {
+        Response::error('Please enter a valid phone number, or leave it blank.', 422);
+    }
+} else {
+    $phone = null;
+}
+
 $pdo = Database::conn();
 
 // --- Enforce one-account-per-email (and unique username) -------------
@@ -96,13 +107,13 @@ try {
     $stmt = $pdo->prepare(
         'INSERT INTO users
            (uuid, email, username, first_name, middle_initial, last_name,
-            password_hash, city, state, country)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            password_hash, city, state, country, phone)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
     $stmt->execute([
         $uuid, $email, $username,
         $firstName, ($middleInitial === '' ? null : $middleInitial), $lastName,
-        $hash, $city, $state, $country,
+        $hash, $city, $state, $country, $phone,
     ]);
 } catch (PDOException $e) {
     if ($e->getCode() === '23000') {

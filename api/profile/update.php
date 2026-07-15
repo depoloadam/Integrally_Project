@@ -41,7 +41,7 @@ if (!empty($in['target_uuid'])) {
 }
 
 // Whitelist the fields a user may change here.
-$allowed = ['username', 'city', 'state', 'country', 'profile_pic'];
+$allowed = ['username', 'city', 'state', 'country', 'profile_pic', 'phone'];
 $updates = [];
 $params  = [];
 
@@ -63,6 +63,23 @@ foreach ($allowed as $field) {
             }
             $updates[] = 'username = ?';
             $params[]  = $val;
+        } elseif ($field === 'phone') {
+            // Optional. Store a lightly-normalised value (keep +, digits,
+            // spaces, dashes, parens). Empty clears it. Editing the number
+            // resets verification (reserved for the future verify flow).
+            if ($val !== '') {
+                if (!preg_match('/^[0-9+()\-.\s]{7,32}$/', $val)) {
+                    Response::error('Please enter a valid phone number.', 422);
+                }
+                $digits = preg_replace('/\D+/', '', $val);
+                if (strlen($digits) < 7 || strlen($digits) > 15) {
+                    Response::error('Please enter a valid phone number.', 422);
+                }
+            }
+            $updates[] = 'phone = ?';
+            $params[]  = ($val === '' ? null : $val);
+            // Any change to the number invalidates prior verification.
+            $updates[] = 'phone_verified = 0';
         } elseif ($field === 'profile_pic') {
             // Accept a URL (from the upload endpoint) or empty to clear it.
             if ($val !== '' && !preg_match('#^https?://#i', $val) && $val[0] !== '/') {
@@ -87,7 +104,7 @@ $pdo->prepare($sql)->execute($params);
 
 // Return the refreshed core profile.
 $stmt = $pdo->prepare(
-    'SELECT uuid, username, email, city, state, country, profile_pic
+    'SELECT uuid, username, email, city, state, country, phone, phone_verified, profile_pic
      FROM users WHERE id = ? LIMIT 1'
 );
 $stmt->execute([$targetId]);
