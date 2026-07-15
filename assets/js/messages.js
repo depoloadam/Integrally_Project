@@ -245,7 +245,7 @@ async function renderThread(convId) {
   };
   const declineBtn = $("msgs-decline");
   if (declineBtn) declineBtn.onclick = async () => {
-    if (!confirm("Decline this message request? The conversation will be removed.")) return;
+    if (!(await confirmDialog("Decline this message request? The conversation will be removed.", { confirmText: "Decline", danger: true }))) return;
     const r2 = await api("/messages/decline.php", "POST", { conversation_id: convId });
     if (r2.ok && r2.data?.success) { location.hash = "messages"; refreshMsgBadge(); }
     else alert(r2.data?.error || "Could not decline the request.");
@@ -310,7 +310,7 @@ function renderThreadMessages(messages, peerLastReadId, convId) {
   // Wire delete buttons.
   scroll.querySelectorAll(".in-msg-del").forEach(btn => {
     btn.onclick = async () => {
-      if (!confirm("Delete this message? This can't be undone.")) return;
+      if (!(await confirmDialog("Delete this message? This can't be undone.", { confirmText: "Delete", danger: true }))) return;
       const msgId = Number(btn.dataset.msg);
       btn.disabled = true;
       const r = await api("/messages/delete.php", "POST", { message_id: msgId });
@@ -384,7 +384,7 @@ function wireThreadMenu(convId, conv) {
           if (r.ok && r.data?.success) { renderThread(convId); loadConversationList(convId); }
           else alert(r.data?.error || "Could not unblock this user.");
         } else {
-          if (!confirm(`Block this user? Neither of you will be able to send messages until you unblock them.`)) return;
+          if (!(await confirmDialog("Block this user? Neither of you will be able to send messages until you unblock them.", { confirmText: "Block", danger: true }))) return;
           const r = await api("/messages/block.php", "POST", { conversation_id: convId });
           if (r.ok && r.data?.success) { renderThread(convId); loadConversationList(convId); }
           else alert(r.data?.error || "Could not block this user.");

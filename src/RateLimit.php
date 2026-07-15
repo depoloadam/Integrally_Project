@@ -45,7 +45,14 @@
 
 class RateLimit
 {
-    /** Allow traffic through if the limiter itself breaks. See header. */
+    /**
+     * Allow traffic through if the limiter itself breaks. See header.
+     *
+     * @launch-blocker  MUST be flipped to `false` before production.
+     * While true, a broken/missing rate_limits table silently disables
+     * throttling everywhere. Grep the repo for "@launch-blocker" as a
+     * pre-deploy checklist step.
+     */
     const FAIL_OPEN = true;
 
     /**
@@ -241,6 +248,10 @@ class RateLimit
     public static function clientIp(): string
     {
         // --- AFTER the AWS move, uncomment this block ------------------
+        // @launch-blocker (AWS): behind an ALB/CloudFront, REMOTE_ADDR is
+        // the balancer, so every anonymous visitor collapses into one
+        // rate-limit bucket. Uncomment to trust the last X-Forwarded-For
+        // hop at migration time.
         // if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
         //     $hops = explode(',', $_SERVER['HTTP_X_FORWARDED_FOR']);
         //     $ip   = trim(end($hops));

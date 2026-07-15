@@ -49,7 +49,7 @@ $mediaUrl = trim($in['media_url'] ?? '') ?: null;
 
 // Post type: 'text' by default. Whitelist known structured types so a
 // client can't invent arbitrary ones. Add new types here as you build them.
-$allowedTypes = ['text', 'cert', 'job'];
+$allowedTypes = ['text', 'cert', 'job', 'edu'];
 $postType = $in['post_type'] ?? 'text';
 if (!in_array($postType, $allowedTypes, true)) {
     $postType = 'text';

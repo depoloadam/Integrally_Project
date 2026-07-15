@@ -266,7 +266,7 @@ async function loadAdminUsers() {
           const what = newRole === "admin"
             ? `Grant ADMIN access to @${u.username}? They'll have full control of the admin dashboard.`
             : `Remove ADMIN access from @${u.username}?`;
-          if (!confirm(what)) { select.value = u.role; return; }
+          if (!(await confirmDialog(what, { confirmText: "Change role" }))) { select.value = u.role; return; }
         }
 
         select.disabled = true;
@@ -284,7 +284,7 @@ async function loadAdminUsers() {
       toggleBtn.onclick = async () => {
         const nowActive = !!Number(u.is_active);
         const verb = nowActive ? "Deactivate" : "Activate";
-        if (nowActive && !confirm(`Deactivate @${u.username}? They won't be able to sign in until reactivated.`)) return;
+        if (nowActive && !(await confirmDialog(`Deactivate @${u.username}? They won't be able to sign in until reactivated.`, { confirmText: "Deactivate", danger: true }))) return;
         toggleBtn.disabled = true;
         toggleBtn.textContent = verb.replace(/e$/, "ing…");
         const res = await api("/admin/set-active.php", "POST", { uuid: u.uuid, active: !nowActive });
@@ -397,7 +397,7 @@ async function loadAdminCompanies() {
     const toggleBtn = row.querySelector(".in-admin-toggle");
     toggleBtn.onclick = async () => {
       const nowActive = !!Number(c.is_active);
-      if (nowActive && !confirm(`Deactivate ${c.name}? They won't be able to sign in until reactivated.`)) return;
+      if (nowActive && !(await confirmDialog(`Deactivate ${c.name}? They won't be able to sign in until reactivated.`, { confirmText: "Deactivate", danger: true }))) return;
       toggleBtn.disabled = true;
       const res = await api("/admin/set-company-active.php", "POST", { uuid: c.uuid, active: !nowActive });
       if (res.ok && res.data?.success) {
@@ -505,7 +505,7 @@ async function loadAdminPosts() {
       </tr>`);
 
     row.querySelector("[data-del]").onclick = async () => {
-      if (!confirm(`Delete this post by ${p.author_name}? This can't be undone.`)) return;
+      if (!(await confirmDialog(`Delete this post by ${p.author_name}? This can't be undone.`, { confirmText: "Delete", danger: true }))) return;
       const res = await api("/posts/delete.php", "POST", { id: p.id });
       if (res.ok && res.data?.success) { adminNotify(msg, "ok", "Post deleted."); loadAdminPosts(); }
       else { adminNotify(msg, "err", res.data?.error || "Could not delete the post."); }
@@ -602,7 +602,7 @@ async function loadAdminJobs() {
         <td><button class="del" data-del title="Delete">✕</button></td>
       </tr>`);
     row.querySelector("[data-del]").onclick = async () => {
-      if (!confirm(`Delete "${j.title}" by ${j.company_name}? This can't be undone.`)) return;
+      if (!(await confirmDialog(`Delete "${j.title}" by ${j.company_name}? This can't be undone.`, { confirmText: "Delete", danger: true }))) return;
       const res = await api("/admin/delete-job.php", "POST", { uuid: j.uuid });
       if (res.ok && res.data?.success) { adminNotify(msg, "ok", `Deleted "${j.title}".`); loadAdminJobs(); }
       else { adminNotify(msg, "err", res.data?.error || "Could not delete the job."); }

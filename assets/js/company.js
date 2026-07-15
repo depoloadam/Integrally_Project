@@ -60,8 +60,8 @@ function updateCompanyNav() {
 // (company.html). This helper navigates there, warning a signed-in
 // USER first, since company login clears the user session (single-
 // identity model enforced server-side).
-function goCompanyAuth(register = false) {
-  if (ME && !confirm("Company accounts are separate from your personal account. Continuing will sign you out of your personal account. Continue?")) return;
+async function goCompanyAuth(register = false) {
+  if (ME && !(await confirmDialog("Company accounts are separate from your personal account. Continuing will sign you out of your personal account. Continue?", { confirmText: "Continue" }))) return;
   window.location.href = COMPANY_AUTH_PAGE + (register ? "#register" : "");
 }
 window.goCompanyAuth = goCompanyAuth;
@@ -411,7 +411,7 @@ async function loadCompanyJobs() {
     if (closeBtn) {
       closeBtn.onclick = async (e) => {
         e.stopPropagation(); menu.classList.remove("show");
-        if (!confirm(`Close "${j.title}"? It will no longer appear in public job listings, but you can reopen it by editing the posting.`)) return;
+        if (!(await confirmDialog(`Close "${j.title}"? It will no longer appear in public job listings, but you can reopen it by editing the posting.`, { confirmText: "Close posting", danger: true }))) return;
         const res = await api("/jobs/update.php", "POST", { uuid: j.uuid, status: "closed" });
         if (res.ok && res.data?.success) loadCompanyJobs();
         else alert(res.data?.error || "Could not close the job.");
@@ -912,24 +912,66 @@ async function renderCompanyProfile(uuid) {
 
   // Posts by this company (public profile). Wrapped so a rendering error
   // can't take down the rest of the profile; the cause is logged.
+  // Paged with a "See more" button (same shape as the user profile's
+  // Activity feed) — previously this pulled the endpoint's legacy 50-post
+  // cap in one shot, burying the rest of the profile and leaving post #51+
+  // permanently unreachable.
   try {
+    const COMPANY_POSTS_PAGE = 10;
     const postsCard = el(`<div class="in-card2"><h2 style="text-transform:none;font-size:18px">Posts</h2><div id="cp-posts"><div class="in-loading">Loading…</div></div></div>`);
     wrap.appendChild(postsCard);
-    const pr = await api("/posts/personal.php?type=company&uuid=" + encodeURIComponent(uuid));
+    const pbox = postsCard.querySelector("#cp-posts");
+
+    const fetchPage = (offset) => api(
+      "/posts/personal.php?type=company&uuid=" + encodeURIComponent(uuid) +
+      "&limit=" + COMPANY_POSTS_PAGE + "&offset=" + offset
+    );
+
+    const pr = await fetchPage(0);
     const pdata = pr.data?.data || {};
     const posts = pdata.posts || [];
     const author = pdata.author || { type: "company", uuid, name: c.name, avatar: c.logo };
-    const pbox = postsCard.querySelector("#cp-posts");
     pbox.innerHTML = "";
+
     if (!posts.length) {
       pbox.appendChild(el(`<div class="in-empty">No posts yet.</div>`));
     } else {
       const listEl = el(`<div class="in-post-list" style="padding:0"></div>`);
-      posts.forEach(p => {
+      const addPosts = (rows) => rows.forEach(p => {
         try { listEl.appendChild(renderPost({ ...p, post_id: p.post_id ?? p.id, author })); }
         catch (err) { console.error("renderPost failed for company post", p, err); }
       });
+      addPosts(posts);
       pbox.appendChild(listEl);
+
+      let offset = posts.length;
+      if (pdata.has_more) {
+        const moreWrap = el(`<div class="feed-more-wrap"></div>`);
+        const btn = el(`<button class="in-btn ghost feed-more">See more…</button>`);
+        moreWrap.appendChild(btn);
+        pbox.appendChild(moreWrap);
+
+        btn.onclick = async () => {
+          btn.disabled = true;
+          btn.textContent = "Loading…";
+          const r = await fetchPage(offset);
+          if (!r.ok || !r.data?.success) {
+            btn.disabled = false;
+            btn.textContent = "See more…";
+            toast("Could not load more posts.", "err");
+            return;
+          }
+          const more = r.data.data.posts || [];
+          offset += more.length;
+          addPosts(more);
+          if (r.data.data.has_more && more.length) {
+            btn.disabled = false;
+            btn.textContent = "See more…";
+          } else {
+            moreWrap.remove();
+          }
+        };
+      }
     }
   } catch (err) {
     console.error("Company profile posts section failed:", err);

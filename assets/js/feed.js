@@ -602,7 +602,7 @@ function buildComposer(opts) {
       toast(`Posts are limited to ${POST_MAX_CHARS.toLocaleString()} characters — this one is ${plain.length.toLocaleString()}.`, "err");
       return;
     }
-    if (!plain && attachedUrl && !hasCard) { if (!confirm("Post this image without any text?")) return; }
+    if (!plain && attachedUrl && !hasCard) { if (!(await confirmDialog("Post this image without any text?", { confirmText: "Post" }))) return; }
 
     const btn = composer.querySelector("#comp-post"); btn.disabled = true; btn.textContent = "Posting…";
     const payload = { body: html, visibility: composer.querySelector("#comp-vis").value, media_url: attachedUrl };
@@ -853,6 +853,25 @@ function renderPost(it, opts = {}) {
         </div>
       </div>
       ${it.body ? `<div class="post-body rich-content" style="margin-top:12px">${it.body}</div>` : ""}`;
+  } else if (it.post_type === "edu" && it.meta) {
+    const m = it.meta;
+    // Name line: "Degree, Field" when both exist, else whichever is present.
+    const nameParts = [m.degree, m.field].filter(Boolean).map(esc);
+    const name = nameParts.join(", ") || esc(m.institution || "");
+    // Sub-line: "Institution · 2026" — drop missing parts so no stray dot.
+    const bits = [];
+    if (nameParts.length && m.institution) bits.push(esc(m.institution));
+    if (m.year_label) bits.push(esc(m.year_label));
+    contentHtml = `
+      <div class="post-milestone edu">
+        <div class="ms-icon">📚</div>
+        <div class="ms-text">
+          <div class="ms-label">Completed education</div>
+          <div class="ms-name">${name}</div>
+          ${bits.length ? `<div class="ms-sub">${bits.join(" · ")}</div>` : ""}
+        </div>
+      </div>
+      ${it.body ? `<div class="post-body rich-content" style="margin-top:12px">${it.body}</div>` : ""}`;
   } else {
     // Body is server-sanitized rich-text HTML (src/RichText.php), safe to render.
     contentHtml = it.body ? `<div class="post-body rich-content">${it.body}</div>` : "";
@@ -929,7 +948,7 @@ function renderPost(it, opts = {}) {
     card.querySelector(".post-del").onclick = async () => {
       const msg = isMine ? "Delete this post? This cannot be undone."
                          : "Delete this post as admin? This cannot be undone.";
-      if (!confirm(msg)) return;
+      if (!(await confirmDialog(msg, { confirmText: "Delete", danger: true }))) return;
       const r = await api("/posts/delete.php", "POST", { id: it.post_id });
       if (r.ok && r.data?.success) card.remove();
       else alert(r.data?.error || "Could not delete the post.");
@@ -1004,7 +1023,7 @@ async function loadComments(postId, box, commentBtn, canEngage, setOpen) {
       </div>`);
     if (c.mine) {
       row.querySelector(".pc-del").onclick = async () => {
-        if (!confirm("Delete this comment?")) return;
+        if (!(await confirmDialog("Delete this comment?", { confirmText: "Delete", danger: true }))) return;
         const dr = await api("/posts/comment-delete.php", "POST", { id: c.id });
         if (dr.ok && dr.data?.success) {
           row.remove();

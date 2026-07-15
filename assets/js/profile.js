@@ -1186,7 +1186,7 @@ function editCore(p, headline, attrs) {
       $("f-resume-dl").onclick = () => { window.open(API_BASE + "/profile/resume-download.php", "_blank"); };
       $("f-resume-replace").onclick = () => $("f-resume-file").click();
       $("f-resume-remove").onclick = async () => {
-        if (!confirm("Remove your resume? The file will be deleted.")) return;
+        if (!(await confirmDialog("Remove your resume? The file will be deleted.", { confirmText: "Remove", danger: true }))) return;
         const r = await api("/profile/resume-delete.php", "POST");
         const msg = $("f-resume-msg");
         if (r.ok && r.data?.success) { resumeState.current = null; paintResume(); msg.className = "in-set-msg ok"; msg.textContent = "Resume removed."; }
@@ -1359,7 +1359,7 @@ async function renderApplicationsInto(box, opts = {}) {
       const msg = isExt
         ? "Remove this tracking entry? It only affects your own applications list."
         : "Withdraw this application? This can't be undone.";
-      if (!confirm(msg)) return;
+      if (!(await confirmDialog(msg, { confirmText: "Remove", danger: true }))) return;
       btn.disabled = true;
       const r2 = await api("/applications/withdraw.php", "POST", { uuid: btn.dataset.uuid });
       if (r2.ok && r2.data?.success) onWithdraw();
@@ -1507,12 +1507,17 @@ function addJob(existing) {
 
 function addEdu(existing) {
   const isEdit = !!(existing && existing.id);
+  // Sensible bounds for the year fields: no year 1, and up to a few years
+  // out so people can list an expected graduation. The placeholder shows a
+  // plausible year instead of the number spinner defaulting to 1.
+  const nowYear = new Date().getFullYear();
+  const maxYear = nowYear + 8;
   openModal(`
     <h3>${isEdit ? "Edit education" : "Add education"}</h3>
     <label>Institution</label><input id="e-inst" value="${isEdit ? esc(existing.institution || "") : ""}">
     <label>Degree</label><input id="e-deg" value="${isEdit ? esc(existing.degree || "") : ""}" placeholder="e.g. BS, MBA">
     <label>Field</label><div class="job-ta-wrap"><input id="e-field" value="${isEdit ? esc(existing.field || "") : ""}" placeholder="e.g. Computer Science" autocomplete="off"></div>
-    <div class="row"><div><label>Start year</label><input id="e-start" type="number" value="${isEdit && existing.start_year ? esc(String(existing.start_year)) : ""}"></div><div><label>End year</label><input id="e-end" type="number" value="${isEdit && existing.end_year ? esc(String(existing.end_year)) : ""}"></div></div>
+    <div class="row"><div><label>Start year</label><input id="e-start" type="number" min="1950" max="${maxYear}" step="1" placeholder="${nowYear - 4}" value="${isEdit && existing.start_year ? esc(String(existing.start_year)) : ""}"></div><div><label>End year</label><input id="e-end" type="number" min="1950" max="${maxYear}" step="1" placeholder="${nowYear}" value="${isEdit && existing.end_year ? esc(String(existing.end_year)) : ""}"></div></div>
     <div class="in-modal-actions"><button class="in-btn ghost" onclick="closeModal()">Cancel</button><button class="in-btn primary" id="save-edu">${isEdit ? "Save" : "Add"}</button></div>`);
   // Field-of-study typeahead: recommends catalog fields (which the score
   // engine can map to job categories) but allows any free text.
@@ -1526,9 +1531,18 @@ function addEdu(existing) {
   }
   $("save-edu").onclick = async () => {
     const payload = { institution:$("e-inst").value.trim(), degree:$("e-deg").value.trim(), field:$("e-field").value.trim(), start_year:$("e-start").value, end_year:$("e-end").value };
-    if (isEdit) await api("/profile/education/update.php","POST",{ id:existing.id, ...payload });
-    else        await api("/profile/education/add.php","POST", payload);
-    closeModal(); refreshAfterProfileChange();
+    if (isEdit) {
+      await api("/profile/education/update.php","POST",{ id:existing.id, ...payload });
+      closeModal(); refreshAfterProfileChange();
+    } else {
+      const r = await api("/profile/education/add.php","POST", payload);
+      // Capture what we need for the share card BEFORE closeModal() wipes
+      // the modal DOM (and with it these inputs).
+      const inst = payload.institution, deg = payload.degree, fld = payload.field, endY = payload.end_year;
+      closeModal();
+      if (r.ok && r.data?.success) offerShareEdu(inst, deg, fld, endY);
+      refreshAfterProfileChange();
+    }
   };
 }
 
@@ -1661,7 +1675,7 @@ function showEntryCapModal() {
 // ---- removals --------------------------------------------------------
 const RECORD_ENDPOINTS = { jobs:"/profile/jobs/delete.php", education:"/profile/education/delete.php", certs:"/profile/certs/delete.php" };
 async function removeRecord(kind, id) {
-  if (!confirm("Remove this entry?")) return;
+  if (!(await confirmDialog("Remove this entry?", { confirmText: "Remove", danger: true }))) return;
   await api(RECORD_ENDPOINTS[kind], "POST", { id });
   refreshAfterProfileChange();
 }
@@ -1692,19 +1706,55 @@ function monthYear(iso) {
 }
 
 function milestoneCardHtml(kind, m) {
-  const isJob = kind === "job";
-  const bits = isJob
-    ? [m.company, m.start_label].filter(Boolean)
-    : [m.issuer].filter(Boolean);
+  const conf = milestoneConfig(kind, m);
   return `
-    <div class="post-milestone ${isJob ? "job" : "cert"}">
-      <div class="ms-icon">${isJob ? "💼" : "🎓"}</div>
+    <div class="post-milestone ${conf.cls}">
+      <div class="ms-icon">${conf.icon}</div>
       <div class="ms-text">
-        <div class="ms-label">${isJob ? (m.is_promotion ? "New role" : "Started a new position") : "Earned a certification"}</div>
-        <div class="ms-name">${esc(isJob ? m.title : m.name)}</div>
-        ${bits.length ? `<div class="ms-sub">${bits.map(esc).join(" · ")}</div>` : ""}
+        <div class="ms-label">${conf.label}</div>
+        <div class="ms-name">${esc(conf.name)}</div>
+        ${conf.sub ? `<div class="ms-sub">${conf.sub}</div>` : ""}
       </div>
     </div>`;
+}
+
+// Single source of truth for how each milestone kind presents (icon,
+// label, headline, sub-line). Shared by the share-preview modal here and
+// the feed renderer (feed.js reimplements the same three cases — keep them
+// in sync). `esc`-es its own sub-line so callers can join pre-escaped bits.
+function milestoneConfig(kind, m) {
+  if (kind === "job") {
+    const bits = [m.company, m.start_label].filter(Boolean).map(esc);
+    return {
+      cls: "job", icon: "💼",
+      label: m.is_promotion ? "New role" : "Started a new position",
+      name: m.title || "",
+      sub: bits.join(" · "),
+    };
+  }
+  if (kind === "edu") {
+    // Name line: "Degree, Field" when both exist, else whichever we have.
+    const nameParts = [m.degree, m.field].filter(Boolean);
+    // Sub-line: institution + year, but drop the institution when it's
+    // already standing in as the name (no degree/field) so it isn't shown
+    // twice. Mirrors the feed renderer.
+    const bits = [];
+    if (nameParts.length && m.institution) bits.push(esc(m.institution));
+    if (m.year_label) bits.push(esc(m.year_label));
+    return {
+      cls: "edu", icon: "📚",
+      label: "Completed education",
+      name: nameParts.join(", ") || m.institution || "",
+      sub: bits.join(" · "),
+    };
+  }
+  // cert
+  return {
+    cls: "cert", icon: "🎓",
+    label: "Earned a certification",
+    name: m.name || "",
+    sub: m.issuer ? esc(m.issuer) : "",
+  };
 }
 
 function offerShareMilestone(kind, meta, noteHint) {
@@ -1751,6 +1801,15 @@ function offerShareCert(name, issuer) {
     name,
     issuer: issuer || null,
   }, "Say something about it…");
+}
+
+function offerShareEdu(institution, degree, field, endYear) {
+  offerShareMilestone("edu", {
+    institution: institution || null,
+    degree: degree || null,
+    field: field || null,
+    year_label: endYear ? String(endYear) : null,
+  }, "Share a word about your studies…");
 }
 
 // Kept for any caller that still wants a plain-text share prompt.

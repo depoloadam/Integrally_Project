@@ -21,7 +21,17 @@ let ME = null;   // current logged-in user (shared across views)
 async function api(path, method = "GET", body = null) {
   const opts = { method, headers: { "Content-Type": "application/json" }, credentials: "include" };
   if (body) opts.body = JSON.stringify(body);
-  const res = await fetch(API_BASE + path, opts);
+  let res;
+  try {
+    res = await fetch(API_BASE + path, opts);
+  } catch (e) {
+    // Network failure (offline, DNS, server down, CORS). Every caller
+    // assumes api() resolves to { ok, status, data }; without this a
+    // dropped connection becomes an unhandled rejection that silently
+    // aborts whatever view was mid-render. status 0 == "never reached
+    // the server", distinct from any real HTTP code.
+    return { ok: false, status: 0, data: null, networkError: true };
+  }
   let data = null;
   try { data = await res.json(); } catch (e) {}
   if (res.status === 429) handleRateLimited(data);
@@ -54,6 +64,61 @@ function openModal(html, opts) {
   $("overlay").classList.add("show");
 }
 function closeModal() { $("overlay").classList.remove("show"); const m = $("modal"); m.innerHTML = ""; m.classList.remove("wide"); }
+
+// ---- confirm dialog --------------------------------------------------
+// Styled, promise-based replacement for the native confirm(). Returns a
+// Promise<boolean>. Uses its OWN overlay (not the shared #modal) so it can
+// safely layer on top of an already-open modal — e.g. "Remove this entry?"
+// fires from inside an edit dialog. Enter confirms, Escape/backdrop cancels.
+//
+//   if (!(await confirmDialog("Delete this?"))) return;
+//   await confirmDialog("Deactivate user?", { confirmText: "Deactivate", danger: true })
+function confirmDialog(message, opts = {}) {
+  const confirmText = opts.confirmText || "Confirm";
+  const cancelText  = opts.cancelText  || "Cancel";
+  const danger      = !!opts.danger;
+  const title       = opts.title || null;
+
+  return new Promise(resolve => {
+    const ov = document.createElement("div");
+    ov.className = "in-overlay in-confirm-overlay show";
+    ov.innerHTML = `
+      <div class="in-modal in-confirm" role="alertdialog" aria-modal="true">
+        ${title ? `<h3>${esc(title)}</h3>` : ""}
+        <div class="in-modal-text">${esc(message)}</div>
+        <div class="in-modal-actions">
+          <button class="in-btn ghost" data-c="cancel">${esc(cancelText)}</button>
+          <button class="in-btn ${danger ? "danger" : "primary"}" data-c="ok">${esc(confirmText)}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+
+    let done = false;
+    const finish = (val) => {
+      if (done) return;
+      done = true;
+      document.removeEventListener("keydown", onKey, true);
+      ov.remove();
+      resolve(val);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") { e.stopPropagation(); finish(false); }
+      else if (e.key === "Enter") { e.stopPropagation(); finish(true); }
+    };
+    // Capture phase so our Escape wins over the main modal's Escape handler
+    // when this dialog is layered on top of an open modal.
+    document.addEventListener("keydown", onKey, true);
+
+    ov.querySelector('[data-c="ok"]').onclick = () => finish(true);
+    ov.querySelector('[data-c="cancel"]').onclick = () => finish(false);
+    let pressedBackdrop = false;
+    ov.addEventListener("mousedown", e => { pressedBackdrop = (e.target === ov); });
+    ov.addEventListener("click", e => { if (e.target === ov && pressedBackdrop) finish(false); pressedBackdrop = false; });
+
+    ov.querySelector('[data-c="ok"]').focus();
+  });
+}
+window.confirmDialog = confirmDialog;
 
 // ---- toast notifications ----------------------------------------------
 // Small auto-dismissing confirmation in the bottom-right corner. Use for
@@ -90,6 +155,13 @@ $("overlay").addEventListener("click", e => {
   overlayPressOnBackdrop = false;
 });
 window.closeModal = closeModal;   // for inline onclick handlers
+
+// Escape closes the modal — the standard expectation for any dialog. Only
+// acts when the modal is actually open, so it never swallows Escape from
+// other components (the lightbox and composer manage their own Escape).
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && $("overlay").classList.contains("show")) closeModal();
+});
 
 // ---- image upload helper (multipart, not JSON) -----------------------
 async function uploadImage(file) {
@@ -665,8 +737,29 @@ function setupFooter() {
   });
 }
 
+// Reflect the current route in the browser tab / history entry. Keeps the
+// static-label pages simple; dynamic pages (a user's profile, a job, a
+// company) set their own richer title from their render fn and just pass
+// through the generic fallback here. `document.title` was previously never
+// touched, so every tab read identically.
+const PAGE_TITLES = {
+  "": "Home", feed: "Home", profile: "My profile", "edit-profile": "Edit profile",
+  "job-search": "Job Search", "profile-strength": "Profile strength",
+  settings: "Settings", connect: "Connect", jobs: "Jobs", messages: "Messages",
+  notifications: "Notifications", search: "Search", admin: "Admin",
+  "ai-skillset": "AI Skillset", "company-dashboard": "Dashboard",
+  "company-settings": "Company settings", "company-employees": "Employees",
+  "company-feed": "Following",
+};
+function setPageTitle(raw) {
+  const base = raw.split("/")[0];
+  const label = PAGE_TITLES[base];
+  document.title = label ? `${label} · Integrally` : "Integrally";
+}
+
 function routeFromHash() {
   const raw = location.hash.replace(/^#/, "");
+  setPageTitle(raw);
   // Leaving the search page unpins (and closes) the search bar.
   if (!(raw === "search" || raw.startsWith("search/"))) {
     if (typeof setSearchbarPinned === "function") {
