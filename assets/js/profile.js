@@ -193,6 +193,7 @@ async function renderPersonalFeed(col, uuid) {
   col.appendChild(card);
   const body = card.querySelector(".body");
   const headEl = card.querySelector(".activity-head");
+  let sortControl = null;
 
   const fetchPage = (offset) => api(
     "/posts/personal.php?type=user&uuid=" + encodeURIComponent(uuid) +
@@ -200,61 +201,78 @@ async function renderPersonalFeed(col, uuid) {
     "&limit=" + PERSONAL_FEED_PAGE + "&offset=" + offset
   );
 
-  const res = await fetchPage(0);
-  const posts = res.data?.data?.posts || [];
-  const author = res.data?.data?.author || {};
-  body.innerHTML = "";
-  // Sort control appears once there's more than one post to order.
-  if (typeof buildSortControl === "function" && (posts.length > 1 || PERSONAL_SORT !== "newest")) {
-    // Avoid stacking duplicates across re-renders of the same card.
-    headEl.querySelector(".sort-control")?.remove();
-    headEl.appendChild(buildSortControl(PERSONAL_SORT, (key) => {
-      PERSONAL_SORT = key;
-      // Re-render just this activity card in place.
-      const parent = card.parentNode;
-      card.remove();
-      renderPersonalFeed(parent, uuid);
-    }));
-  }
-  if (!posts.length) { body.appendChild(el(`<div class="in-empty">No posts yet. Updates you share will appear here.</div>`)); return; }
+  // (Re)loads the first page into the card body. On sort change only this
+  // runs — the card and its "Activity" header stay put, so nothing above
+  // flickers. Body height is held across the swap to avoid a jump.
+  const loadFirstPage = async () => {
+    const prevH = body.offsetHeight;
+    if (prevH) body.style.minHeight = prevH + "px";
+    body.classList.add("is-loading");
 
-  const list = el(`<div class="in-post-list" style="border:none;padding:0"></div>`);
-  const addPosts = (rows) => rows.forEach(po => list.appendChild(renderPost({
-    post_id:po.id, post_type:po.post_type, body:po.body, media_url:po.media_url, meta:po.meta,
-    created_at:po.created_at, reason:"self",
-    author:{ type:"user", uuid:author.uuid, name:author.name, avatar:author.avatar },
-  })));
-  addPosts(posts);
-  body.appendChild(list);
+    const res = await fetchPage(0);
+    const posts = res.data?.data?.posts || [];
+    const author = res.data?.data?.author || {};
 
-  let offset = posts.length;
-  if (!res.data?.data?.has_more) return;
+    // Sort control appears once there's more than one post to order. Built
+    // once and kept; afterwards only its label updates.
+    if (typeof buildSortControl === "function" && (posts.length > 1 || PERSONAL_SORT !== "newest")) {
+      if (!sortControl) {
+        sortControl = buildSortControl(PERSONAL_SORT, (key) => {
+          PERSONAL_SORT = key;
+          loadFirstPage();
+        });
+        headEl.appendChild(sortControl);
+      }
+    } else if (sortControl) {
+      sortControl.remove(); sortControl = null;
+    }
 
-  const moreWrap = el(`<div class="feed-more-wrap"></div>`);
-  const btn = el(`<button class="in-btn ghost feed-more">See more…</button>`);
-  moreWrap.appendChild(btn);
-  body.appendChild(moreWrap);
-
-  btn.onclick = async () => {
-    btn.disabled = true;
-    btn.textContent = "Loading…";
-    const r = await fetchPage(offset);
-    if (!r.ok || !r.data?.success) {
-      btn.disabled = false;
-      btn.textContent = "See more…";
-      toast("Could not load more posts.", "err");
+    const frag = document.createDocumentFragment();
+    if (!posts.length) {
+      frag.appendChild(el(`<div class="in-empty">No posts yet. Updates you share will appear here.</div>`));
+      body.replaceChildren(frag);
+      body.classList.remove("is-loading"); body.style.minHeight = "";
       return;
     }
-    const more = r.data.data.posts || [];
-    offset += more.length;
-    addPosts(more);
-    if (r.data.data.has_more && more.length) {
-      btn.disabled = false;
-      btn.textContent = "See more…";
-    } else {
-      moreWrap.remove();   // nothing left — don't leave a dead button
+
+    const list = el(`<div class="in-post-list" style="border:none;padding:0"></div>`);
+    const addPosts = (rows) => rows.forEach(po => list.appendChild(renderPost({
+      post_id:po.id, post_type:po.post_type, body:po.body, media_url:po.media_url, meta:po.meta,
+      created_at:po.created_at, reason:"self",
+      author:{ type:"user", uuid:author.uuid, name:author.name, avatar:author.avatar },
+    })));
+    addPosts(posts);
+    frag.appendChild(list);
+
+    let offset = posts.length;
+    if (res.data?.data?.has_more) {
+      const moreWrap = el(`<div class="feed-more-wrap"></div>`);
+      const btn = el(`<button class="in-btn ghost feed-more">See more…</button>`);
+      moreWrap.appendChild(btn);
+      frag.appendChild(moreWrap);
+      btn.onclick = async () => {
+        btn.disabled = true;
+        btn.textContent = "Loading…";
+        const r = await fetchPage(offset);
+        if (!r.ok || !r.data?.success) {
+          btn.disabled = false; btn.textContent = "See more…";
+          toast("Could not load more posts.", "err");
+          return;
+        }
+        const more = r.data.data.posts || [];
+        offset += more.length;
+        addPosts(more);
+        if (r.data.data.has_more && more.length) { btn.disabled = false; btn.textContent = "See more…"; }
+        else { moreWrap.remove(); }
+      };
     }
+
+    body.replaceChildren(frag);
+    body.classList.remove("is-loading");
+    body.style.minHeight = "";
   };
+
+  await loadFirstPage();
 }
 
 // ---- score row (badge, gradient bar, mini-breakdown, full link) ------

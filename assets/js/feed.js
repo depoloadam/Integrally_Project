@@ -19,16 +19,21 @@ const SORT_OPTIONS = [
 ];
 const SORT_LABEL = Object.fromEntries(SORT_OPTIONS);
 
+
 // Builds a small right-aligned "Sort: X ▾" dropdown. `current` is the
-// active key, `onPick(key)` fires when a new one is chosen. The menu is
-// spawned on document.body (position:fixed) so no overflow can clip it —
-// same pattern as the post overflow menu. Returns the trigger element.
+// active key at build time, `onPick(key)` fires when a new one is chosen.
+// The control persists across re-sorts (only the list body reloads), so it
+// tracks the active key internally: each pick updates it and refreshes the
+// button label, and the menu reads the live value on every open so the
+// checkmark never goes stale. The menu is spawned on document.body
+// (position:fixed) so no overflow can clip it.
 function buildSortControl(current, onPick, opts = {}) {
   const options = opts.options || SORT_OPTIONS;
   const labels = opts.labels || SORT_LABEL;
+  let active = current;   // live selected key
   const wrap = el(`<div class="sort-control"></div>`);
   const btn = el(`<button class="sort-btn" aria-haspopup="true" aria-expanded="false">
-      <span class="sort-btn-label">Sort: <strong>${esc(labels[current] || "Newest")}</strong></span>
+      <span class="sort-btn-label">Sort: <strong>${esc(labels[active] || "Newest")}</strong></span>
       <span class="sort-caret">▾</span>
     </button>`);
   wrap.appendChild(btn);
@@ -50,10 +55,18 @@ function buildSortControl(current, onPick, opts = {}) {
     if (menu) { close(); return; }
     menu = el(`<div class="sort-menu" role="menu"></div>`);
     options.forEach(([key, label]) => {
-      const item = el(`<button class="sort-menu-item${key === current ? " active" : ""}" role="menuitemradio" aria-checked="${key === current}">
-          <span class="sort-check">${key === current ? "✓" : ""}</span><span>${esc(label)}</span>
+      const isActive = key === active;
+      const item = el(`<button class="sort-menu-item${isActive ? " active" : ""}" role="menuitemradio" aria-checked="${isActive}">
+          <span class="sort-check">${isActive ? "✓" : ""}</span><span>${esc(label)}</span>
         </button>`);
-      item.onclick = (ev) => { ev.stopPropagation(); close(); if (key !== current) onPick(key); };
+      item.onclick = (ev) => {
+        ev.stopPropagation(); close();
+        if (key === active) return;
+        active = key;
+        const strong = btn.querySelector(".sort-btn-label strong");
+        if (strong) strong.textContent = labels[key] || key;
+        onPick(key);
+      };
       menu.appendChild(item);
     });
     document.body.appendChild(menu);
@@ -885,6 +898,9 @@ function buildComposer(opts) {
 
 async function renderFeedList(view) {
   // ---- header row: sub-tabs (left) + sort control (right) ----
+  // The header (tabs + sort control) is built ONCE and left in place.
+  // Switching tab or sort only refreshes the list body below it, so the
+  // composer and rails never repaint — no full-page flicker.
   const head = el(`<div class="feed-listhead"></div>`);
   const tabs = el(`
     <div class="in-feedtabs">
@@ -892,28 +908,53 @@ async function renderFeedList(view) {
       <button data-ftab="explore" class="${FEED_TAB==="explore"?"active":""}">Explore</button>
     </div>`);
   head.appendChild(tabs);
-  tabs.querySelectorAll("[data-ftab]").forEach(b => b.onclick = () => { FEED_TAB = b.dataset.ftab; renderFeed(); });
-  head.appendChild(buildSortControl(FEED_SORT, (key) => { FEED_SORT = key; renderFeed(); }));
-  view.appendChild(head);
 
-  // ---- posts ----
   const list = el(`<div id="feed-list"></div>`);
+
+  // Loads the current tab+sort into the list body, replacing whatever was
+  // there. Only this runs on tab/sort change.
+  const loadList = async () => {
+    // Preserve height during the swap so the page doesn't jump, then
+    // release it once the new content is in.
+    const prevH = list.offsetHeight;
+    if (prevH) list.style.minHeight = prevH + "px";
+    list.classList.add("is-loading");
+
+    const base = FEED_TAB === "main" ? "/feed/main.php" : "/feed/explore.php";
+    const res = await api(base + "?sort=" + encodeURIComponent(FEED_SORT));
+    const items = res.data?.data?.items || [];
+
+    const next = document.createDocumentFragment();
+    if (!items.length) {
+      next.appendChild(el(`<div class="in-card2"><div class="in-empty" style="text-align:center">${
+        FEED_TAB === "main"
+          ? "Your feed is quiet. Follow people and companies, or share your first post above."
+          : "Nothing to explore yet. Public posts from across Integrally will show here."
+      }</div></div>`));
+    } else {
+      const container = el(`<div class="in-card2 in-post-list"></div>`);
+      items.forEach(it => container.appendChild(renderPost(it)));
+      next.appendChild(container);
+    }
+    list.replaceChildren(next);
+    list.classList.remove("is-loading");
+    list.style.minHeight = "";
+  };
+
+  tabs.querySelectorAll("[data-ftab]").forEach(b => b.onclick = () => {
+    if (FEED_TAB === b.dataset.ftab) return;
+    FEED_TAB = b.dataset.ftab;
+    tabs.querySelectorAll("[data-ftab]").forEach(x => x.classList.toggle("active", x.dataset.ftab === FEED_TAB));
+    loadList();
+  });
+  head.appendChild(buildSortControl(FEED_SORT, (key) => {
+    FEED_SORT = key;
+    loadList();
+  }));
+
+  view.appendChild(head);
   view.appendChild(list);
-  const base = FEED_TAB === "main" ? "/feed/main.php" : "/feed/explore.php";
-  const endpoint = base + "?sort=" + encodeURIComponent(FEED_SORT);
-  const res = await api(endpoint);
-  const items = res.data?.data?.items || [];
-  if (!items.length) {
-    list.appendChild(el(`<div class="in-card2"><div class="in-empty" style="text-align:center">${
-      FEED_TAB === "main"
-        ? "Your feed is quiet. Follow people and companies, or share your first post above."
-        : "Nothing to explore yet. Public posts from across Integrally will show here."
-    }</div></div>`));
-    return;
-  }
-  const container = el(`<div class="in-card2 in-post-list"></div>`);
-  items.forEach(it => container.appendChild(renderPost(it)));
-  list.appendChild(container);
+  await loadList();
 }
 
 // =====================================================================
@@ -1025,32 +1066,50 @@ async function renderSavedPage() {
   const view = $("view");
   if (!(ME || CO)) { view.innerHTML = `<div class="in-admin"><div class="in-card2"><div class="in-empty">Sign in to see your saved posts.</div></div></div>`; return; }
 
-  view.innerHTML = `<div class="in-loading" style="padding:40px 0;text-align:center">Loading saved posts…</div>`;
-  const r = await api("/posts/saved.php?sort=" + encodeURIComponent(SAVED_SORT));
+  // Build the page shell (back link, header, sort control) ONCE. Re-sorting
+  // swaps only the list body, so the header never repaints/flickers.
+  const savedLabels = Object.fromEntries(SAVED_SORT_OPTIONS);
   view.innerHTML = "";
-
   const wrap = el(`<div class="in-admin"></div>`);
   wrap.appendChild(el(`
     <div class="in-back"><button class="in-back-btn" onclick="history.length>1?history.back():location.hash='feed'">‹ Back</button></div>`));
-
   const head = el(`<div class="saved-head"><div class="saved-head-text"><h2>Saved posts</h2><p>Only you can see what you've saved.</p></div></div>`);
-  const items = r.data?.data?.items || [];
-  // Only show the sort control when there's more than one post to sort.
-  if (items.length > 1) {
-    const sortLabels = Object.fromEntries(SAVED_SORT_OPTIONS);
-    head.appendChild(buildSortControl(SAVED_SORT, (key) => { SAVED_SORT = key; renderSavedPage(); }, { options: SAVED_SORT_OPTIONS, labels: sortLabels }));
-  }
   wrap.appendChild(head);
-
-  if (!r.ok || !items.length) {
-    wrap.appendChild(el(`<div class="in-card2"><div class="in-empty" style="text-align:center">Nothing saved yet. Use the ••• menu on any post and choose <strong>Save post</strong> to keep it here.</div></div>`));
-    view.appendChild(wrap);
-    return;
-  }
-  const list = el(`<div class="in-card2 in-post-list"></div>`);
-  items.forEach(it => list.appendChild(renderPost(it)));
+  const list = el(`<div id="saved-list"></div>`);
   wrap.appendChild(list);
   view.appendChild(wrap);
+
+  let sortControl = null;
+  const loadList = async () => {
+    const prevH = list.offsetHeight;
+    if (prevH) list.style.minHeight = prevH + "px";
+    list.classList.add("is-loading");
+
+    const r = await api("/posts/saved.php?sort=" + encodeURIComponent(SAVED_SORT));
+    const items = r.data?.data?.items || [];
+
+    // Show the sort control only when there's more than one post to sort.
+    // Add it once; afterwards just keep its label in sync.
+    if (items.length > 1 && !sortControl) {
+      sortControl = buildSortControl(SAVED_SORT, (key) => { SAVED_SORT = key; loadList(); }, { options: SAVED_SORT_OPTIONS, labels: savedLabels });
+      head.appendChild(sortControl);
+    } else if (items.length <= 1 && sortControl) {
+      sortControl.remove(); sortControl = null;
+    }
+
+    const next = document.createDocumentFragment();
+    if (!r.ok || !items.length) {
+      next.appendChild(el(`<div class="in-card2"><div class="in-empty" style="text-align:center">Nothing saved yet. Use the ••• menu on any post and choose <strong>Save post</strong> to keep it here.</div></div>`));
+    } else {
+      const inner = el(`<div class="in-card2 in-post-list"></div>`);
+      items.forEach(it => inner.appendChild(renderPost(it)));
+      next.appendChild(inner);
+    }
+    list.replaceChildren(next);
+    list.classList.remove("is-loading");
+    list.style.minHeight = "";
+  };
+  await loadList();
 }
 
 // ---- feed truncation ---------------------------------------------------
