@@ -94,7 +94,53 @@ class PostActions
         ]);
     }
 
-    // ---- decoration + feed filtering ----------------------------------
+    // ---- sort orders -------------------------------------------------
+
+    /**
+     * The sort keys exposed to the client, in menu order. Kept here so
+     * every surface (feed, saved, profile) offers the same vocabulary and
+     * validates against one list.
+     */
+    public const SORTS = ['newest', 'oldest', 'engagement', 'relevance'];
+
+    /** True if $sort is a known sort key. */
+    public static function isValidSort(string $sort): bool
+    {
+        return in_array($sort, self::SORTS, true);
+    }
+
+    /**
+     * ORDER BY clause (without the "ORDER BY" keyword) for a sort key.
+     *
+     * `$postAlias` is the posts-table alias in the host query; `$engExpr`
+     * is a SQL expression that evaluates to a post's engagement count
+     * (likes + comments). Callers that already join/compute engagement can
+     * pass their own expression; the default recomputes it inline with
+     * correlated subqueries so any query can sort by engagement without
+     * restructuring.
+     *
+     * 'relevance' is surface-specific and NOT handled here — a feed that
+     * ranks followed-authors-first prepends its own expression before
+     * falling through to this. For saved/profile, 'relevance' has no
+     * distinct meaning, so those callers map it to 'engagement'.
+     */
+    public static function orderBy(string $sort, string $postAlias = 'p', ?string $engExpr = null): string
+    {
+        $eng = $engExpr ?? (
+            "((SELECT COUNT(*) FROM post_likes pl WHERE pl.post_id = {$postAlias}.id)"
+            . " + (SELECT COUNT(*) FROM post_comments pc WHERE pc.post_id = {$postAlias}.id))"
+        );
+        switch ($sort) {
+            case 'oldest':
+                return "{$postAlias}.created_at ASC, {$postAlias}.id ASC";
+            case 'engagement':
+                return "{$eng} DESC, {$postAlias}.created_at DESC, {$postAlias}.id DESC";
+            case 'newest':
+            case 'relevance':   // default fallback; feed overrides separately
+            default:
+                return "{$postAlias}.created_at DESC, {$postAlias}.id DESC";
+        }
+    }
 
     /**
      * For a batch of post ids, which has THIS actor saved?

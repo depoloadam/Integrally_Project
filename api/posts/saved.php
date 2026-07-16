@@ -21,6 +21,12 @@ $actor = Social::requireActor();
 $pdo   = Database::conn();
 $limit = 20;
 
+// Sort mode. On the saved list there's no follow ranking, so 'relevance'
+// collapses to 'engagement'. Default keeps most-recently-saved first.
+$sort = trim((string) ($_GET['sort'] ?? 'saved'));
+$validSaved = in_array($sort, ['saved', 'newest', 'oldest', 'engagement', 'relevance'], true);
+if (!$validSaved) $sort = 'saved';
+
 // Keyset on the save timestamp (stable enough; ties broken by post id).
 $before = isset($_GET['before']) ? trim((string) $_GET['before']) : '';
 $sql =
@@ -31,11 +37,29 @@ $sql =
        JOIN posts p ON p.id = ps.post_id
       WHERE ps.actor_type = ? AND ps.actor_id = ?';
 $params = [$actor['type'], $actor['id']];
-if ($before !== '') {
+// Keyset pagination only applies to the default "saved" order (the only
+// order that's monotonic on ps.created_at). Other sorts return the first
+// page unpaginated — the client doesn't page the saved list.
+if ($sort === 'saved' && $before !== '') {
     $sql .= ' AND ps.created_at < ?';
     $params[] = $before;
 }
-$sql .= ' ORDER BY ps.created_at DESC, p.id DESC LIMIT ' . (int) $limit;
+
+switch ($sort) {
+    case 'newest':
+        $order = 'p.created_at DESC, p.id DESC'; break;
+    case 'oldest':
+        $order = 'p.created_at ASC, p.id ASC'; break;
+    case 'engagement':
+    case 'relevance':
+        $order = '((SELECT COUNT(*) FROM post_likes pl WHERE pl.post_id = p.id)'
+               . ' + (SELECT COUNT(*) FROM post_comments pc WHERE pc.post_id = p.id)) DESC,'
+               . ' ps.created_at DESC'; break;
+    case 'saved':
+    default:
+        $order = 'ps.created_at DESC, p.id DESC'; break;
+}
+$sql .= ' ORDER BY ' . $order . ' LIMIT ' . (int) $limit;
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);

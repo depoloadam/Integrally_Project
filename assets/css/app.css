@@ -1926,3 +1926,54 @@ html.in-reduce-motion *::after {
 [data-theme="dark"] .post-menu { box-shadow:0 10px 32px rgba(0,0,0,.45); }
 [data-theme="dark"] .post-menu-item.danger:hover { background:rgba(220,90,72,.16); }
 [data-theme="dark"] .rep-reason:hover { background:var(--in-bg); }
+
+/* =====================================================================
+   Sort control (feed, saved page, profile activity). A small right-
+   aligned "Sort: X ▾" button; the menu is spawned on document.body
+   (position:fixed) like the post overflow menu.
+   ===================================================================== */
+.feed-listhead { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:2px 0 16px; }
+.feed-listhead .in-feedtabs { margin:0; }   /* header row owns the spacing now */
+
+.sort-control { flex:none; }
+.sort-btn {
+  display:inline-flex; align-items:center; gap:6px;
+  background:var(--in-card); border:1px solid var(--in-line); border-radius:999px;
+  padding:7px 14px; font-family:inherit; font-size:13px; color:var(--in-muted);
+  cursor:pointer; transition:border-color .12s ease, color .12s ease;
+}
+.sort-btn:hover { border-color:var(--in-accent); color:var(--in-ink); }
+.sort-btn[aria-expanded="true"] { border-color:var(--in-accent); color:var(--in-ink); }
+.sort-btn-label strong { color:var(--in-ink); font-weight:600; }
+.sort-caret { font-size:10px; }
+
+.sort-menu {
+  position:fixed; z-index:1200; min-width:172px;
+  background:var(--in-card); border:1px solid var(--in-line); border-radius:12px;
+  box-shadow:0 10px 32px rgba(11,31,42,.16); padding:6px;
+  animation:pm-in .12s ease;
+}
+.sort-menu-item {
+  display:flex; align-items:center; gap:8px; width:100%;
+  background:none; border:none; border-radius:8px; padding:9px 11px;
+  font-family:inherit; font-size:13.5px; font-weight:500; color:var(--in-ink);
+  text-align:left; cursor:pointer;
+}
+.sort-menu-item:hover { background:var(--in-bg); }
+.sort-menu-item.active { color:var(--in-accent); font-weight:600; }
+.sort-check { flex:none; width:14px; color:var(--in-accent); font-size:12px; }
+
+/* Activity card header holds the H2 and the sort control on one row. */
+.activity-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.activity-head h2 { margin:0; }
+
+/* Saved page header holds title block + sort control on one row. */
+.saved-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.saved-head .sort-control { margin-top:4px; }
+
+/* Feed header wraps gracefully on narrow screens. */
+@media (max-width:520px) {
+  .feed-listhead { flex-wrap:wrap; }
+}
+
+[data-theme="dark"] .sort-menu { box-shadow:0 10px 32px rgba(0,0,0,.45); }

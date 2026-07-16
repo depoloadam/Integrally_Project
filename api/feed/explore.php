@@ -27,6 +27,12 @@ $actor  = Social::currentActor();   // user OR company OR null
 $before = (int) ($_GET['before'] ?? 0);
 $limit  = 20;
 
+// Sort mode. On Explore there's no follow relationship to rank by, so
+// 'relevance' collapses to 'engagement' (handled by orderBy's caller).
+$sort = trim((string) ($_GET['sort'] ?? 'newest'));
+if (!PostActions::isValidSort($sort)) $sort = 'newest';
+$sortForOrder = ($sort === 'relevance') ? 'engagement' : $sort;
+
 // Only public posts. Optionally page with ?before=<post_id>.
 $sql = "
     SELECT p.id AS post_id, p.author_type, p.author_id,
@@ -48,7 +54,7 @@ if ($before > 0) {
 $excl   = PostActions::feedExclusion($actor, 'p');
 $sql   .= $excl['sql'];
 $params = array_merge($params, $excl['params']);
-$sql   .= ' ORDER BY p.created_at DESC, p.id DESC LIMIT ' . (int) $limit;
+$sql   .= ' ORDER BY ' . PostActions::orderBy($sortForOrder, 'p') . ' LIMIT ' . (int) $limit;
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);

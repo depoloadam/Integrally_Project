@@ -186,14 +186,17 @@ async function renderProfile() {
 // of the profile (and anything past the old hard LIMIT 50 was simply
 // unreachable). Each click appends the next page in place.
 const PERSONAL_FEED_PAGE = 10;
+let PERSONAL_SORT = "newest";
 
 async function renderPersonalFeed(col, uuid) {
-  const card = el(`<div class="in-card2"><h2>Activity</h2><div class="body"><div class="in-empty">Loading…</div></div></div>`);
+  const card = el(`<div class="in-card2"><div class="activity-head"><h2>Activity</h2></div><div class="body"><div class="in-empty">Loading…</div></div></div>`);
   col.appendChild(card);
   const body = card.querySelector(".body");
+  const headEl = card.querySelector(".activity-head");
 
   const fetchPage = (offset) => api(
     "/posts/personal.php?type=user&uuid=" + encodeURIComponent(uuid) +
+    "&sort=" + encodeURIComponent(PERSONAL_SORT) +
     "&limit=" + PERSONAL_FEED_PAGE + "&offset=" + offset
   );
 
@@ -201,6 +204,18 @@ async function renderPersonalFeed(col, uuid) {
   const posts = res.data?.data?.posts || [];
   const author = res.data?.data?.author || {};
   body.innerHTML = "";
+  // Sort control appears once there's more than one post to order.
+  if (typeof buildSortControl === "function" && (posts.length > 1 || PERSONAL_SORT !== "newest")) {
+    // Avoid stacking duplicates across re-renders of the same card.
+    headEl.querySelector(".sort-control")?.remove();
+    headEl.appendChild(buildSortControl(PERSONAL_SORT, (key) => {
+      PERSONAL_SORT = key;
+      // Re-render just this activity card in place.
+      const parent = card.parentNode;
+      card.remove();
+      renderPersonalFeed(parent, uuid);
+    }));
+  }
   if (!posts.length) { body.appendChild(el(`<div class="in-empty">No posts yet. Updates you share will appear here.</div>`)); return; }
 
   const list = el(`<div class="in-post-list" style="border:none;padding:0"></div>`);

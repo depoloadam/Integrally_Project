@@ -26,11 +26,15 @@ $actor  = ['type' => 'user', 'id' => $userId];
 $before = (int) ($_GET['before'] ?? 0);
 $limit  = 20;
 
+// Sort mode (default newest). 'relevance' on the main feed means
+// followed-authors first, then newest — self posts sink below the
+// people you actually follow. Other keys defer to PostActions::orderBy.
+$sort = trim((string) ($_GET['sort'] ?? 'newest'));
+if (!PostActions::isValidSort($sort)) $sort = 'newest';
+
 // Exclude posts this user has hidden or whose author they've muted.
 $excl = PostActions::feedExclusion($actor, 'p');
 
-// v1 ordering: newest posts first. (Swap this ORDER BY to
-// "score DESC, ..." when a ranking algorithm fills feed_items.score.)
 $sql = '
     SELECT fi.id AS feed_id, fi.reason, fi.score,
            p.id AS post_id, p.author_type, p.author_id,
@@ -45,7 +49,14 @@ if ($before > 0) {
 }
 $sql   .= $excl['sql'];
 $params = array_merge($params, $excl['params']);
-$sql   .= ' ORDER BY p.created_at DESC, fi.id DESC LIMIT ' . (int) $limit;
+
+if ($sort === 'relevance') {
+    // followed (0) before self (1), then newest within each bucket.
+    $sql .= " ORDER BY (fi.reason = 'self') ASC, p.created_at DESC, fi.id DESC";
+} else {
+    $sql .= ' ORDER BY ' . PostActions::orderBy($sort, 'p');
+}
+$sql .= ' LIMIT ' . (int) $limit;
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);

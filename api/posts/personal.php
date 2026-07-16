@@ -83,10 +83,18 @@ $total = (int) $cnt->fetch()['n'];
 
 // LIMIT/OFFSET are interpolated as ints (already validated above) —
 // MySQL won't accept them as bound params in a prepared statement.
+// Sort mode. 'relevance' has no follow ranking on a single author's own
+// posts, so it collapses to 'engagement'. Default newest.
+$sort = trim((string) ($_GET['sort'] ?? 'newest'));
+require_once __DIR__ . '/../../src/PostActions.php';
+if (!PostActions::isValidSort($sort)) $sort = 'newest';
+$sortForOrder = ($sort === 'relevance') ? 'engagement' : $sort;
+$order = PostActions::orderBy($sortForOrder, 'posts');
+
 $sql = "SELECT id, post_type, body, media_url, meta, visibility, created_at
         FROM posts
         $where
-        ORDER BY created_at DESC, id DESC
+        ORDER BY $order
         LIMIT $limit OFFSET $offset";
 
 $stmt = $pdo->prepare($sql);

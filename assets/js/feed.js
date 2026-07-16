@@ -6,6 +6,74 @@
 // =====================================================================
 
 let FEED_TAB = "main";   // 'main' | 'explore'
+let FEED_SORT = "newest"; // 'newest' | 'oldest' | 'engagement' | 'relevance'
+
+// Sort options offered on every post list (feed, saved, profile activity).
+// Order here is the menu order. Labels are shared so the control reads the
+// same everywhere.
+const SORT_OPTIONS = [
+  ["newest", "Newest"],
+  ["oldest", "Oldest"],
+  ["engagement", "Most engaged"],
+  ["relevance", "Relevance"],
+];
+const SORT_LABEL = Object.fromEntries(SORT_OPTIONS);
+
+// Builds a small right-aligned "Sort: X ▾" dropdown. `current` is the
+// active key, `onPick(key)` fires when a new one is chosen. The menu is
+// spawned on document.body (position:fixed) so no overflow can clip it —
+// same pattern as the post overflow menu. Returns the trigger element.
+function buildSortControl(current, onPick, opts = {}) {
+  const options = opts.options || SORT_OPTIONS;
+  const labels = opts.labels || SORT_LABEL;
+  const wrap = el(`<div class="sort-control"></div>`);
+  const btn = el(`<button class="sort-btn" aria-haspopup="true" aria-expanded="false">
+      <span class="sort-btn-label">Sort: <strong>${esc(labels[current] || "Newest")}</strong></span>
+      <span class="sort-caret">▾</span>
+    </button>`);
+  wrap.appendChild(btn);
+
+  let menu = null;
+  const close = () => {
+    if (menu) { menu.remove(); menu = null; }
+    btn.setAttribute("aria-expanded", "false");
+    document.removeEventListener("click", onDoc, true);
+    document.removeEventListener("keydown", onKey, true);
+    window.removeEventListener("resize", close);
+    window.removeEventListener("scroll", close, true);
+  };
+  const onDoc = (e) => { if (menu && !menu.contains(e.target) && e.target !== btn && !btn.contains(e.target)) close(); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    if (menu) { close(); return; }
+    menu = el(`<div class="sort-menu" role="menu"></div>`);
+    options.forEach(([key, label]) => {
+      const item = el(`<button class="sort-menu-item${key === current ? " active" : ""}" role="menuitemradio" aria-checked="${key === current}">
+          <span class="sort-check">${key === current ? "✓" : ""}</span><span>${esc(label)}</span>
+        </button>`);
+      item.onclick = (ev) => { ev.stopPropagation(); close(); if (key !== current) onPick(key); };
+      menu.appendChild(item);
+    });
+    document.body.appendChild(menu);
+    btn.setAttribute("aria-expanded", "true");
+    // position: right-aligned under the trigger, flip up / clamp if needed
+    const r = btn.getBoundingClientRect();
+    const mw = menu.offsetWidth, mh = menu.offsetHeight, pad = 8;
+    let left = r.right - mw, top = r.bottom + 6;
+    if (left < pad) left = pad;
+    if (left + mw > window.innerWidth - pad) left = window.innerWidth - mw - pad;
+    if (top + mh > window.innerHeight - pad) top = r.top - mh - 6;
+    menu.style.left = Math.round(left) + "px";
+    menu.style.top  = Math.round(top) + "px";
+    document.addEventListener("click", onDoc, true);
+    document.addEventListener("keydown", onKey, true);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+  };
+  return wrap;
+}
 
 // ---- action icons ------------------------------------------------------
 // Inline SVGs (outline style, stroke:currentColor via CSS). The liked
@@ -147,10 +215,10 @@ async function buildIdentityRail(mount) {
           <div class="idcard-stat"><b class="idc-following">–</b><span>Following</span></div>
         </div>
         <div class="idcard-score"></div>
+        <button class="idcard-saved" title="View your saved posts">
+          <span class="pm-ico">${PM_ICONS.saved}</span> Saved posts
+        </button>
       </div>
-      <button class="idcard-saved" title="View your saved posts">
-        <span class="pm-ico">${PM_ICONS.saved}</span> Saved posts
-      </button>
     </div>`);
   const goProfile = () => { location.hash = "profile"; };
   card.querySelector(".idcard-ava").onclick = goProfile;
@@ -816,19 +884,23 @@ function buildComposer(opts) {
 }
 
 async function renderFeedList(view) {
-  // ---- sub-tabs ----
+  // ---- header row: sub-tabs (left) + sort control (right) ----
+  const head = el(`<div class="feed-listhead"></div>`);
   const tabs = el(`
     <div class="in-feedtabs">
       <button data-ftab="main" class="${FEED_TAB==="main"?"active":""}">Following</button>
       <button data-ftab="explore" class="${FEED_TAB==="explore"?"active":""}">Explore</button>
     </div>`);
-  view.appendChild(tabs);
+  head.appendChild(tabs);
   tabs.querySelectorAll("[data-ftab]").forEach(b => b.onclick = () => { FEED_TAB = b.dataset.ftab; renderFeed(); });
+  head.appendChild(buildSortControl(FEED_SORT, (key) => { FEED_SORT = key; renderFeed(); }));
+  view.appendChild(head);
 
   // ---- posts ----
   const list = el(`<div id="feed-list"></div>`);
   view.appendChild(list);
-  const endpoint = FEED_TAB === "main" ? "/feed/main.php" : "/feed/explore.php";
+  const base = FEED_TAB === "main" ? "/feed/main.php" : "/feed/explore.php";
+  const endpoint = base + "?sort=" + encodeURIComponent(FEED_SORT);
   const res = await api(endpoint);
   const items = res.data?.data?.items || [];
   if (!items.length) {
@@ -937,24 +1009,39 @@ async function renderSinglePost(id) {
 
 // =====================================================================
 // Saved posts page (#saved). Lists the current actor's bookmarked
-// posts, most-recently-saved first, reusing renderPost. Reached from
-// the profile dropdown and a small link on the feed page.
+// posts, reusing renderPost. Reached from the profile dropdown and a
+// small link on the feed page. Sortable; default is most-recently-saved.
 // =====================================================================
+let SAVED_SORT = "saved";
+const SAVED_SORT_OPTIONS = [
+  ["saved", "Recently saved"],
+  ["newest", "Newest"],
+  ["oldest", "Oldest"],
+  ["engagement", "Most engaged"],
+];
+
 async function renderSavedPage() {
   document.querySelectorAll("[data-nav]").forEach(x => x.classList.remove("active"));
   const view = $("view");
   if (!(ME || CO)) { view.innerHTML = `<div class="in-admin"><div class="in-card2"><div class="in-empty">Sign in to see your saved posts.</div></div></div>`; return; }
 
   view.innerHTML = `<div class="in-loading" style="padding:40px 0;text-align:center">Loading saved posts…</div>`;
-  const r = await api("/posts/saved.php");
+  const r = await api("/posts/saved.php?sort=" + encodeURIComponent(SAVED_SORT));
   view.innerHTML = "";
 
   const wrap = el(`<div class="in-admin"></div>`);
   wrap.appendChild(el(`
     <div class="in-back"><button class="in-back-btn" onclick="history.length>1?history.back():location.hash='feed'">‹ Back</button></div>`));
-  wrap.appendChild(el(`<div class="saved-head"><h2>Saved posts</h2><p>Only you can see what you've saved.</p></div>`));
 
+  const head = el(`<div class="saved-head"><div class="saved-head-text"><h2>Saved posts</h2><p>Only you can see what you've saved.</p></div></div>`);
   const items = r.data?.data?.items || [];
+  // Only show the sort control when there's more than one post to sort.
+  if (items.length > 1) {
+    const sortLabels = Object.fromEntries(SAVED_SORT_OPTIONS);
+    head.appendChild(buildSortControl(SAVED_SORT, (key) => { SAVED_SORT = key; renderSavedPage(); }, { options: SAVED_SORT_OPTIONS, labels: sortLabels }));
+  }
+  wrap.appendChild(head);
+
   if (!r.ok || !items.length) {
     wrap.appendChild(el(`<div class="in-card2"><div class="in-empty" style="text-align:center">Nothing saved yet. Use the ••• menu on any post and choose <strong>Save post</strong> to keep it here.</div></div>`));
     view.appendChild(wrap);
