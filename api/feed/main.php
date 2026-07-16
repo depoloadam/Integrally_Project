@@ -11,6 +11,8 @@
 require_once __DIR__ . '/../../src/Database.php';
 require_once __DIR__ . '/../../src/Response.php';
 require_once __DIR__ . '/../../src/Auth.php';
+require_once __DIR__ . '/../../src/Social.php';
+require_once __DIR__ . '/../../src/PostActions.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     Response::error('Method not allowed.', 405);
@@ -18,10 +20,14 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 
 $userId = Auth::requireLogin();
 $pdo    = Database::conn();
+$actor  = ['type' => 'user', 'id' => $userId];
 
 // Simple keyset pagination: pass ?before=<feed_item_id> to get older.
 $before = (int) ($_GET['before'] ?? 0);
 $limit  = 20;
+
+// Exclude posts this user has hidden or whose author they've muted.
+$excl = PostActions::feedExclusion($actor, 'p');
 
 // v1 ordering: newest posts first. (Swap this ORDER BY to
 // "score DESC, ..." when a ranking algorithm fills feed_items.score.)
@@ -37,7 +43,9 @@ if ($before > 0) {
     $sql .= ' AND fi.id < ?';
     $params[] = $before;
 }
-$sql .= ' ORDER BY p.created_at DESC, fi.id DESC LIMIT ' . (int) $limit;
+$sql   .= $excl['sql'];
+$params = array_merge($params, $excl['params']);
+$sql   .= ' ORDER BY p.created_at DESC, fi.id DESC LIMIT ' . (int) $limit;
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
@@ -82,10 +90,13 @@ foreach ($rows as $r) {
 
 // Decorate with like/comment counts + viewer's like state.
 require_once __DIR__ . '/../../src/Social.php';
-$eng = Social::engagement(array_map(fn($i) => $i['post_id'], $feed), Social::currentActor());
+$ids = array_map(fn($i) => $i['post_id'], $feed);
+$eng = Social::engagement($ids, $actor);
+$sav = PostActions::savedMap($actor, $ids);
 foreach ($feed as &$it) {
     $e = $eng[$it['post_id']] ?? ['likes' => 0, 'comments' => 0, 'liked' => false];
     $it['likes'] = $e['likes']; $it['comments'] = $e['comments']; $it['liked'] = $e['liked'];
+    $it['saved'] = isset($sav[$it['post_id']]);
 }
 unset($it);
 

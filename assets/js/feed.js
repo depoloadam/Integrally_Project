@@ -13,6 +13,29 @@ let FEED_TAB = "main";   // 'main' | 'explore'
 // like handler only toggles the class, it never swaps icon markup.
 const ICON_HEART = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.29 1.51 4.04 3 5.5l7 7Z"/></svg>`;
 const ICON_COMMENT = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>`;
+const ICON_KEBAB = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>`;
+
+// Small inline glyphs for the post overflow menu. Stroke-based to match
+// the action icons; sized by CSS (.pm-ico svg).
+const PM_ICONS = {
+  save:   `<svg viewBox="0 0 24 24"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1Z"/></svg>`,
+  saved:  `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1Z"/></svg>`,
+  hide:   `<svg viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><line x1="3" y1="3" x2="21" y2="21"/></svg>`,
+  mute:   `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="8" y1="12" x2="16" y2="12"/></svg>`,
+  link:   `<svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>`,
+  report: `<svg viewBox="0 0 24 24"><path d="M4 22V4h13l-2 4 2 4H4"/></svg>`,
+};
+
+// Report reasons — mirror of PostActions::REASONS (server validates).
+const REPORT_REASONS = [
+  ["spam", "Spam or misleading"],
+  ["harassment", "Harassment or hate"],
+  ["nudity", "Nudity or sexual content"],
+  ["violence", "Violence or dangerous content"],
+  ["misinfo", "False information"],
+  ["ip", "Intellectual-property violation"],
+  ["other", "Something else"],
+];
 
 // ---- post length rules -------------------------------------------------
 // POST_MAX_CHARS mirrors the server cap in api/posts/create.php — the
@@ -125,10 +148,14 @@ async function buildIdentityRail(mount) {
         </div>
         <div class="idcard-score"></div>
       </div>
+      <button class="idcard-saved" title="View your saved posts">
+        <span class="pm-ico">${PM_ICONS.saved}</span> Saved posts
+      </button>
     </div>`);
   const goProfile = () => { location.hash = "profile"; };
   card.querySelector(".idcard-ava").onclick = goProfile;
   card.querySelector(".idcard-name").onclick = goProfile;
+  card.querySelector(".idcard-saved").onclick = () => { location.hash = "saved"; };
   mount.appendChild(card);
 
   // Follower counts.
@@ -908,6 +935,37 @@ async function renderSinglePost(id) {
   if (commentBtn) commentBtn.click();
 }
 
+// =====================================================================
+// Saved posts page (#saved). Lists the current actor's bookmarked
+// posts, most-recently-saved first, reusing renderPost. Reached from
+// the profile dropdown and a small link on the feed page.
+// =====================================================================
+async function renderSavedPage() {
+  document.querySelectorAll("[data-nav]").forEach(x => x.classList.remove("active"));
+  const view = $("view");
+  if (!(ME || CO)) { view.innerHTML = `<div class="in-admin"><div class="in-card2"><div class="in-empty">Sign in to see your saved posts.</div></div></div>`; return; }
+
+  view.innerHTML = `<div class="in-loading" style="padding:40px 0;text-align:center">Loading saved posts…</div>`;
+  const r = await api("/posts/saved.php");
+  view.innerHTML = "";
+
+  const wrap = el(`<div class="in-admin"></div>`);
+  wrap.appendChild(el(`
+    <div class="in-back"><button class="in-back-btn" onclick="history.length>1?history.back():location.hash='feed'">‹ Back</button></div>`));
+  wrap.appendChild(el(`<div class="saved-head"><h2>Saved posts</h2><p>Only you can see what you've saved.</p></div>`));
+
+  const items = r.data?.data?.items || [];
+  if (!r.ok || !items.length) {
+    wrap.appendChild(el(`<div class="in-card2"><div class="in-empty" style="text-align:center">Nothing saved yet. Use the ••• menu on any post and choose <strong>Save post</strong> to keep it here.</div></div>`));
+    view.appendChild(wrap);
+    return;
+  }
+  const list = el(`<div class="in-card2 in-post-list"></div>`);
+  items.forEach(it => list.appendChild(renderPost(it)));
+  wrap.appendChild(list);
+  view.appendChild(wrap);
+}
+
 // ---- feed truncation ---------------------------------------------------
 // Cuts a rendered post body down to `limit` TEXT characters, keeping the
 // rich formatting of what remains. Works on the live DOM node rather than
@@ -976,6 +1034,85 @@ function truncateInPlace(bodyEl, limit) {
 // opts.full — render the complete body with no truncation (used by the
 // dedicated #post/<id> page). Feed/profile/company surfaces omit it and
 // get the POST_PREVIEW_CHARS cutoff with a "keep reading" link.
+// ---- post overflow menu helpers --------------------------------------
+
+// Positions a body-level menu just under (and right-aligned to) the
+// trigger, flipping above / clamping to the viewport when it would
+// overflow. Fixed positioning means it ignores any clipping ancestor.
+function positionMenu(menu, trigger) {
+  const r = trigger.getBoundingClientRect();
+  const mw = menu.offsetWidth, mh = menu.offsetHeight;
+  const pad = 8;
+  let left = r.right - mw;                        // right-align to trigger
+  let top  = r.bottom + 6;                        // below by default
+  if (left < pad) left = pad;
+  if (left + mw > window.innerWidth - pad) left = window.innerWidth - mw - pad;
+  if (top + mh > window.innerHeight - pad) top = r.top - mh - 6;   // flip up
+  if (top < pad) top = pad;
+  menu.style.left = Math.round(left) + "px";
+  menu.style.top  = Math.round(top) + "px";
+}
+
+// Copies a direct link to a post to the clipboard, with a manual-copy
+// fallback for insecure contexts / older browsers.
+async function copyPostLink(postId) {
+  const url = location.origin + location.pathname + "#post/" + postId;
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(url);
+      toast("Link copied.");
+      return;
+    }
+    throw new Error("no clipboard");
+  } catch (_) {
+    // Fallback: transient textarea + execCommand.
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = url; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      document.execCommand("copy");
+      ta.remove();
+      toast("Link copied.");
+    } catch (e) {
+      toast("Could not copy link.", "err");
+    }
+  }
+}
+
+// Report dialog: pick a reason, optional detail, submit. Uses the shared
+// modal. Captures post id in a local so closeModal() (which wipes the
+// modal DOM) can't strand it.
+function openReportDialog(postId) {
+  const pid = postId;
+  const rows = REPORT_REASONS.map(([key, label], i) => `
+    <label class="rep-reason">
+      <input type="radio" name="rep-reason" value="${esc(key)}" ${i === 0 ? "checked" : ""}>
+      <span>${esc(label)}</span>
+    </label>`).join("");
+  openModal(`
+    <div class="in-modal-head"><h3>Report post</h3></div>
+    <div class="rep-body">
+      <p class="rep-intro">Tell us what's wrong with this post. Reports are reviewed by our team.</p>
+      <div class="rep-reasons">${rows}</div>
+      <textarea id="rep-detail" class="rep-detail" maxlength="500" placeholder="Add any details (optional)"></textarea>
+    </div>
+    <div class="in-modal-actions">
+      <button class="in-btn ghost" id="rep-cancel">Cancel</button>
+      <button class="in-btn danger" id="rep-submit">Submit report</button>
+    </div>`);
+  $("rep-cancel").onclick = () => closeModal();
+  $("rep-submit").onclick = async () => {
+    const reason = document.querySelector('input[name="rep-reason"]:checked')?.value;
+    const detail = $("rep-detail")?.value || "";
+    if (!reason) { toast("Pick a reason.", "err"); return; }
+    const btn = $("rep-submit"); btn.disabled = true;
+    const r = await api("/posts/report.php", "POST", { post_id: pid, reason, detail });
+    closeModal();
+    if (r.ok && r.data?.success) toast("Thanks — your report was submitted.");
+    else toast(r.data?.error || "Could not submit the report.", "err");
+  };
+}
+
 function renderPost(it, opts = {}) {
   const a = it.author || {};
   const initial = (a.name || "?").charAt(0).toUpperCase();
@@ -1082,7 +1219,7 @@ function renderPost(it, opts = {}) {
           <div class="${nameClass}" ${goProfile}>${esc(a.name || "Unknown")}${isCompany ? ' <span class="post-tag">Company</span>' : ""}</div>
           <div class="post-when"><span class="post-when-link" onclick="location.hash='post/${esc(String(it.post_id))}'" style="cursor:pointer" title="${esc(whenFull)}">${esc(when)}</span>${it.reason === "self" ? " · You" : ""}</div>
         </div>
-        ${canDelete ? `<button class="post-del" title="${isMine ? "Delete post" : "Delete (admin)"}">🗑</button>` : ""}
+        ${canEngage ? `<button class="post-menu-btn" aria-label="Post options" aria-haspopup="true" aria-expanded="false">${ICON_KEBAB}</button>` : ""}
       </div>
       ${contentHtml}
       ${linkHtml}
@@ -1112,14 +1249,127 @@ function renderPost(it, opts = {}) {
   const media = card.querySelector(".post-media");
   if (media) media.onclick = () => openLightbox(media.src);
 
-  if (canDelete) {
-    card.querySelector(".post-del").onclick = async () => {
-      const msg = isMine ? "Delete this post? This cannot be undone."
-                         : "Delete this post as admin? This cannot be undone.";
-      if (!(await confirmDialog(msg, { confirmText: "Delete", danger: true }))) return;
-      const r = await api("/posts/delete.php", "POST", { id: it.post_id });
-      if (r.ok && r.data?.success) card.remove();
-      else toast(r.data?.error || "Could not delete the post.", "err");
+  // ---- overflow menu (save / hide / mute / copy link / report / delete) ----
+  // Available to any signed-in actor (user or company). Menu contents
+  // depend on who's viewing: everyone gets save/copy-link/report; hide +
+  // "show fewer" only appear for posts that aren't yours; delete only for
+  // your own posts (or admins). The menu is spawned on document.body with
+  // position:fixed so .in-post-item / .in-modal overflow can't clip it —
+  // same escape pattern as the typeahead and resume popover.
+  const menuBtn = card.querySelector(".post-menu-btn");
+  if (menuBtn) {
+    let savedState = !!it.saved;
+    let openMenu = null;
+
+    const closeMenu = () => {
+      if (openMenu) { openMenu.remove(); openMenu = null; }
+      menuBtn.setAttribute("aria-expanded", "false");
+      document.removeEventListener("click", onDocClick, true);
+      document.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("resize", closeMenu);
+      window.removeEventListener("scroll", closeMenu, true);
+    };
+    const onDocClick = (e) => { if (openMenu && !openMenu.contains(e.target) && e.target !== menuBtn) closeMenu(); };
+    const onKey = (e) => { if (e.key === "Escape") closeMenu(); };
+
+    const buildItems = () => {
+      const items = [];
+      // Save (toggles)
+      items.push({
+        key: "save",
+        icon: savedState ? PM_ICONS.saved : PM_ICONS.save,
+        label: savedState ? "Saved" : "Save post",
+        run: async () => {
+          const next = !savedState;
+          const r = await api("/posts/save.php", "POST", { post_id: it.post_id, save: next });
+          if (r.ok && r.data?.success) { savedState = next; toast(next ? "Saved to your list." : "Removed from saved."); }
+          else toast(r.data?.error || "Could not update saved state.", "err");
+        },
+      });
+      // Hide + show-fewer only for posts that aren't the viewer's own.
+      if (!isMine) {
+        items.push({
+          key: "hide",
+          icon: PM_ICONS.hide,
+          label: "Hide this post",
+          run: async () => {
+            const r = await api("/posts/hide.php", "POST", { post_id: it.post_id, hide: true });
+            if (r.ok && r.data?.success) { removeWithUndo("Post hidden.", () => api("/posts/hide.php", "POST", { post_id: it.post_id, hide: false })); }
+            else toast(r.data?.error || "Could not hide the post.", "err");
+          },
+        });
+        items.push({
+          key: "mute",
+          icon: PM_ICONS.mute,
+          label: `Show fewer from ${a.name || "this author"}`,
+          run: async () => {
+            const r = await api("/posts/mute-author.php", "POST", { post_id: it.post_id, mute: true });
+            if (r.ok && r.data?.success) { removeWithUndo("You'll see fewer posts like this.", () => api("/posts/mute-author.php", "POST", { post_id: it.post_id, mute: false })); }
+            else toast(r.data?.error || "Could not update your preferences.", "err");
+          },
+        });
+      }
+      // Copy link (client-only)
+      items.push({
+        key: "link",
+        icon: PM_ICONS.link,
+        label: "Copy link to post",
+        run: async () => { await copyPostLink(it.post_id); },
+      });
+      // Report only for posts that aren't yours.
+      if (!isMine) {
+        items.push({ key: "report", icon: PM_ICONS.report, label: "Report post", danger: true, run: () => openReportDialog(it.post_id) });
+      }
+      // Delete for own posts / admins.
+      if (canDelete) {
+        items.push({
+          key: "delete",
+          icon: PM_ICONS.report, // reuse flag glyph; distinct danger styling
+          label: isMine ? "Delete post" : "Delete (admin)",
+          danger: true,
+          run: async () => {
+            const msg = isMine ? "Delete this post? This cannot be undone."
+                               : "Delete this post as admin? This cannot be undone.";
+            if (!(await confirmDialog(msg, { confirmText: "Delete", danger: true }))) return;
+            const r = await api("/posts/delete.php", "POST", { id: it.post_id });
+            if (r.ok && r.data?.success) card.remove();
+            else toast(r.data?.error || "Could not delete the post.", "err");
+          },
+        });
+      }
+      return items;
+    };
+
+    // Removes the card from view with a toast that offers Undo. Undo runs
+    // the provided reverse call and re-inserts the card in place.
+    const removeWithUndo = (msg, reverseFn) => {
+      const anchor = document.createComment("post-slot");
+      card.replaceWith(anchor);
+      const undo = async () => {
+        const r = await reverseFn();
+        if (r && r.ok && r.data?.success) { anchor.replaceWith(card); }
+        else { toast("Could not undo.", "err"); }
+      };
+      toast(msg, "ok", { actionLabel: "Undo", onAction: undo });
+    };
+
+    menuBtn.onclick = (e) => {
+      e.stopPropagation();
+      if (openMenu) { closeMenu(); return; }
+      const menu = el(`<div class="post-menu" role="menu"></div>`);
+      buildItems().forEach(item => {
+        const b = el(`<button class="post-menu-item${item.danger ? " danger" : ""}" role="menuitem"><span class="pm-ico">${item.icon}</span><span class="pm-label">${esc(item.label)}</span></button>`);
+        b.onclick = async (ev) => { ev.stopPropagation(); closeMenu(); await item.run(); };
+        menu.appendChild(b);
+      });
+      document.body.appendChild(menu);
+      openMenu = menu;
+      menuBtn.setAttribute("aria-expanded", "true");
+      positionMenu(menu, menuBtn);
+      document.addEventListener("click", onDocClick, true);
+      document.addEventListener("keydown", onKey, true);
+      window.addEventListener("resize", closeMenu);
+      window.addEventListener("scroll", closeMenu, true);
     };
   }
 

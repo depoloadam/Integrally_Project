@@ -14,6 +14,8 @@
 require_once __DIR__ . '/../../src/Database.php';
 require_once __DIR__ . '/../../src/Response.php';
 require_once __DIR__ . '/../../src/Auth.php';
+require_once __DIR__ . '/../../src/Social.php';
+require_once __DIR__ . '/../../src/PostActions.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     Response::error('Method not allowed.', 405);
@@ -21,6 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 
 $pdo    = Database::conn();
 $userId = Auth::userId();   // may be null; explore is viewable logged-out too
+$actor  = Social::currentActor();   // user OR company OR null
 $before = (int) ($_GET['before'] ?? 0);
 $limit  = 20;
 
@@ -41,7 +44,11 @@ if ($before > 0) {
     $sql .= ' AND p.id < ?';
     $params[] = $before;
 }
-$sql .= ' ORDER BY p.created_at DESC, p.id DESC LIMIT ' . (int) $limit;
+// Exclude hidden posts / muted authors for the current actor.
+$excl   = PostActions::feedExclusion($actor, 'p');
+$sql   .= $excl['sql'];
+$params = array_merge($params, $excl['params']);
+$sql   .= ' ORDER BY p.created_at DESC, p.id DESC LIMIT ' . (int) $limit;
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
@@ -78,11 +85,13 @@ foreach ($rows as $r) {
 }
 
 // Decorate with like/comment counts + viewer's like state.
-require_once __DIR__ . '/../../src/Social.php';
-$eng = Social::engagement(array_map(fn($i) => $i['post_id'], $out), Social::currentActor());
+$ids = array_map(fn($i) => $i['post_id'], $out);
+$eng = Social::engagement($ids, $actor);
+$sav = PostActions::savedMap($actor, $ids);
 foreach ($out as &$it) {
     $e = $eng[$it['post_id']] ?? ['likes' => 0, 'comments' => 0, 'liked' => false];
     $it['likes'] = $e['likes']; $it['comments'] = $e['comments']; $it['liked'] = $e['liked'];
+    $it['saved'] = isset($sav[$it['post_id']]);
 }
 unset($it);
 

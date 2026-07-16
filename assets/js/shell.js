@@ -151,7 +151,9 @@ window.confirmDialog = confirmDialog;
 // visible regardless of scroll position, unlike inline status text.
 //   toast("Saved.")            -> success styling
 //   toast("Failed.", "err")    -> error styling
-function toast(message, kind = "ok") {
+//   toast("Hidden.", "ok", { actionLabel: "Undo", onAction: fn })
+//        -> adds an inline action button and holds a little longer
+function toast(message, kind = "ok", opts = {}) {
   let holder = document.getElementById("toast-holder");
   if (!holder) {
     holder = document.createElement("div");
@@ -160,14 +162,29 @@ function toast(message, kind = "ok") {
   }
   const t = document.createElement("div");
   t.className = "in-toast " + (kind === "err" ? "err" : "ok");
-  t.textContent = message;
-  holder.appendChild(t);
-  // enter -> hold -> exit -> remove
-  requestAnimationFrame(() => t.classList.add("show"));
-  setTimeout(() => {
+  const msg = document.createElement("span");
+  msg.className = "in-toast-msg";
+  msg.textContent = message;
+  t.appendChild(msg);
+
+  const hasAction = opts && typeof opts.onAction === "function";
+  let killTimer = null;
+  const dismiss = () => {
     t.classList.remove("show");
     setTimeout(() => t.remove(), 300);
-  }, 2600);
+  };
+  if (hasAction) {
+    const btn = document.createElement("button");
+    btn.className = "in-toast-action";
+    btn.textContent = opts.actionLabel || "Undo";
+    btn.onclick = () => { if (killTimer) clearTimeout(killTimer); dismiss(); opts.onAction(); };
+    t.appendChild(btn);
+  }
+
+  holder.appendChild(t);
+  requestAnimationFrame(() => t.classList.add("show"));
+  // Action toasts linger longer so there's time to click Undo.
+  killTimer = setTimeout(dismiss, hasAction ? 6000 : 2600);
 }
 
 // ---- Theme + motion --------------------------------------------------
@@ -546,6 +563,7 @@ function setupCompanyIdentityNav() {
   const dd = $("profile-dropdown");
   dd.innerHTML = `
     <button data-co-menu="dashboard">Company dashboard</button>
+    <button data-co-menu="saved">Saved posts</button>
     <button data-co-menu="settings">Settings</button>
     <div class="in-dropdown-sep"></div>
     <button data-co-menu="signout" class="danger">Sign out</button>`;
@@ -554,6 +572,7 @@ function setupCompanyIdentityNav() {
       e.stopPropagation();
       dd.classList.remove("show");
       if (b.dataset.coMenu === "dashboard") location.hash = "company-dashboard";
+      else if (b.dataset.coMenu === "saved") location.hash = "saved";
       else if (b.dataset.coMenu === "settings") location.hash = "company-settings";
       else { await api("/company/logout.php", "POST"); CO = null; location.hash = ""; location.reload(); }
     };
@@ -694,6 +713,8 @@ dropdown.querySelectorAll("[data-menu]").forEach(b => {
       location.reload();
     } else if (action === "edit") {
       location.hash = "edit-profile";
+    } else if (action === "saved") {
+      location.hash = "saved";
     } else if (action === "jobsearch") {
       location.hash = "job-search";
     } else if (action === "settings") {
@@ -917,6 +938,11 @@ function routeFromHash() {
   if (raw === "messages" || raw.startsWith("messages/")) {
     document.querySelectorAll("[data-nav]").forEach(x => x.classList.remove("active"));
     renderMessagesPage(raw.startsWith("messages/") ? raw.slice("messages/".length) : null);
+    return;
+  }
+  if (raw === "saved") {
+    document.querySelectorAll("[data-nav]").forEach(x => x.classList.remove("active"));
+    renderSavedPage();
     return;
   }
   if (raw.startsWith("post/")) {

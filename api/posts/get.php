@@ -62,8 +62,11 @@ $authorForCard = [
     'avatar' => $author['avatar'],
 ];
 
-$eng = Social::engagement([$postId], Social::currentActor());
+require_once __DIR__ . '/../../src/PostActions.php';
+$actor = Social::currentActor();
+$eng = Social::engagement([$postId], $actor);
 $e = $eng[$postId] ?? ['likes' => 0, 'comments' => 0, 'liked' => false];
+$saved = isset(PostActions::savedMap($actor, [$postId])[$postId]);
 
 Response::success([
     'post_id'    => (int) $p['id'],
@@ -76,4 +79,5 @@ Response::success([
     'likes'      => $e['likes'],
     'comments'   => $e['comments'],
     'liked'      => $e['liked'],
+    'saved'      => $saved,
 ]);
