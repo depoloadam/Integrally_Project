@@ -15,6 +15,31 @@ const $ = (id) => document.getElementById(id);
 const el = (html) => { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstChild; };
 const esc = (s) => (s ?? "").toString().replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;" }[c]));
 
+// ---- relative timestamps ----------------------------------------------
+// CANONICAL timeAgo — used by feed, messages, notifications, and company
+// applicant views. Lives here because shell.js loads first; do not
+// redefine this in other files (a later declaration silently wins and
+// splits the formats).
+// "just now" / "5m ago" / "3h ago" / "2d ago" / "3w ago", then a short
+// absolute date once relative time stops being useful. MySQL datetimes
+// arrive as "YYYY-MM-DD HH:MM:SS" — the " "->"T" swap keeps them
+// parseable in every browser (Safari rejects the bare-space form).
+function timeAgo(ts) {
+  if (!ts) return "";
+  const d = new Date(String(ts).replace(" ", "T"));
+  if (isNaN(d)) return String(ts);
+  const s = Math.max(0, (Date.now() - d.getTime()) / 1000);
+  if (s < 60)      return "just now";
+  if (s < 3600)    return Math.floor(s / 60) + "m ago";
+  if (s < 86400)   return Math.floor(s / 3600) + "h ago";
+  if (s < 604800)  return Math.floor(s / 86400) + "d ago";
+  if (s < 2629800) return Math.floor(s / 604800) + "w ago";
+  // Older than ~a month: short date, year only when it differs.
+  const opts = { month: "short", day: "numeric" };
+  if (d.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
+  return d.toLocaleDateString(undefined, opts);
+}
+
 let ME = null;   // current logged-in user (shared across views)
 
 // ---- API helper ------------------------------------------------------
@@ -680,6 +705,9 @@ dropdown.querySelectorAll("[data-menu]").forEach(b => {
 // ---- nav tabs --------------------------------------------------------
 function showTab(name) {
   document.querySelectorAll("[data-nav]").forEach(x => x.classList.toggle("active", x.dataset.nav === name));
+  // The feed is the only view that widens .in-main for its three-column
+  // layout (rails + posts). Every other tab gets the standard 980px.
+  document.querySelector(".in-main")?.classList.toggle("feed-wide", name === "feed");
   if (name === "feed") renderFeed();
   else if (name === "admin") renderAdmin();
   else if (name === "jobs") renderJobs();
@@ -804,6 +832,10 @@ function setPageTitle(raw) {
 function routeFromHash() {
   const raw = location.hash.replace(/^#/, "");
   setPageTitle(raw);
+  // Non-feed routes drop back to the standard column width. Feed routes
+  // re-add the class inside showTab("feed"), so this is safe to clear
+  // unconditionally here.
+  document.querySelector(".in-main")?.classList.remove("feed-wide");
   // Leaving the search page unpins (and closes) the search bar.
   if (!(raw === "search" || raw.startsWith("search/"))) {
     if (typeof setSearchbarPinned === "function") {

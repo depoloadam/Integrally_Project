@@ -7,6 +7,13 @@
 
 let FEED_TAB = "main";   // 'main' | 'explore'
 
+// ---- action icons ------------------------------------------------------
+// Inline SVGs (outline style, stroke:currentColor via CSS). The liked
+// state fills the heart with CSS (.post-like.liked .pa-icon svg) — the JS
+// like handler only toggles the class, it never swaps icon markup.
+const ICON_HEART = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.29 1.51 4.04 3 5.5l7 7Z"/></svg>`;
+const ICON_COMMENT = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>`;
+
 // ---- post length rules -------------------------------------------------
 // POST_MAX_CHARS mirrors the server cap in api/posts/create.php — the
 // server is the enforcer, this is just the early warning. If you change
@@ -58,16 +65,174 @@ async function renderFeed() {
   const view = $("view");
   view.innerHTML = "";
 
+  // ---- two-column scaffold ----
+  // Left: identity card, then "Add to your network" and "Recent
+  // openings" stacked beneath it. Right: composer + tabs + posts. The
+  // whole grid lives inside the standard 980px column, same width as
+  // the top nav. The rail hides itself at narrow widths (CSS), and the
+  // discover cards self-omit if their data calls fail, so the feed
+  // itself never blocks on them.
+  const grid = el(`
+    <div class="feed-grid">
+      <aside class="feed-rail-left"></aside>
+      <div class="feed-center"></div>
+    </div>`);
+  view.appendChild(grid);
+  const center = grid.querySelector(".feed-center");
+  const rail   = grid.querySelector(".feed-rail-left");
+
   // ---- composer (user identity) ----
   buildComposer({
-    parent: view,
+    parent: center,
     avatarHTML: ME.profile_pic ? `<img src="${esc(ME.profile_pic)}" alt="">` : esc((ME.username || "?").charAt(0).toUpperCase()),
     placeholder: `Share an update, @${ME.username}…`,
     onPosted: renderFeed,
   });
 
+  // Rail cards load in the background — they must never delay the posts.
+  // The identity card appends synchronously inside buildIdentityRail, so
+  // the discover cards always land below it even though both are async.
+  buildIdentityRail(rail);
+  buildDiscoverRail(rail);
+
   // ---- tabs + post list ----
-  await renderFeedList(view);
+  await renderFeedList(center);
+}
+
+// ---- left rail: identity card ----------------------------------------
+// Avatar + name + location, follower counts, and the latest career score
+// (or a "set up scoring" CTA — the score is the product, so the rail
+// should always point at it). Everything degrades quietly: any failed
+// call just leaves that piece out.
+async function buildIdentityRail(mount) {
+  if (!mount || !ME) return;   // shared mount — never remove it
+
+  const avaHTML = ME.profile_pic
+    ? `<img src="${esc(ME.profile_pic)}" alt="">`
+    : esc((ME.username || "?").charAt(0).toUpperCase());
+  const loc = [ME.city, ME.state].filter(Boolean).join(", ");
+
+  const card = el(`
+    <div class="idcard">
+      <div class="idcard-cover"></div>
+      <div class="idcard-body">
+        <div class="idcard-ava" title="View profile">${avaHTML}</div>
+        <div class="idcard-name">@${esc(ME.username || "")}</div>
+        ${loc ? `<div class="idcard-loc">${esc(loc)}</div>` : ""}
+        <div class="idcard-stats" style="display:none">
+          <div class="idcard-stat"><b class="idc-followers">–</b><span>Followers</span></div>
+          <div class="idcard-stat"><b class="idc-following">–</b><span>Following</span></div>
+        </div>
+        <div class="idcard-score"></div>
+      </div>
+    </div>`);
+  const goProfile = () => { location.hash = "profile"; };
+  card.querySelector(".idcard-ava").onclick = goProfile;
+  card.querySelector(".idcard-name").onclick = goProfile;
+  mount.appendChild(card);
+
+  // Follower counts.
+  try {
+    const r = await api(`/follow/counts.php?type=user&uuid=${encodeURIComponent(ME.uuid)}`);
+    const d = r.data?.data;
+    if (r.ok && d) {
+      card.querySelector(".idc-followers").textContent = d.followers ?? 0;
+      card.querySelector(".idc-following").textContent = d.following ?? 0;
+      card.querySelector(".idcard-stats").style.display = "";
+    }
+  } catch (_) { /* counts stay hidden */ }
+
+  // Latest score — show the newest one as a chip, else the setup CTA.
+  try {
+    const r = await api("/score/latest.php");
+    const scores = r.data?.data?.scores || [];
+    const box = card.querySelector(".idcard-score");
+    if (r.ok && scores.length) {
+      const s = scores[0];
+      box.appendChild(el(`
+        <button class="idcard-score-chip" title="View score history">
+          <span class="idcard-score-val">${esc(String(Math.round(s.score_value)))}</span>
+          <span>${esc(s.target_value || "Career score")}</span>
+        </button>`));
+      box.querySelector(".idcard-score-chip").onclick = () => { location.hash = "profile"; };
+    } else {
+      box.appendChild(el(`<button class="idcard-score-cta">See your career score →</button>`));
+      box.querySelector(".idcard-score-cta").onclick = goProfile;
+    }
+  } catch (_) { /* score box stays empty */ }
+}
+
+// ---- discover cards (left rail, under the identity card) --------------
+// "Add to your network" (connect suggestions with inline follow) and
+// "Recent openings" (top open jobs). Both cards simply omit themselves
+// if their endpoint returns nothing. The mount is SHARED with the
+// identity card, so never remove it from here.
+async function buildDiscoverRail(mount) {
+  if (!mount || !(ME || CO)) return;
+
+  // People & companies to follow.
+  try {
+    const r = await api("/connect/suggestions.php?type=all&limit=4");
+    const results = (r.data?.data?.results || []).filter(x => !x.following).slice(0, 4);
+    if (r.ok && results.length) {
+      const cardEl = el(`<div class="railcard"><h3>Add to your network</h3><div class="rail-list"></div><button class="rail-more">Show more on Connect</button></div>`);
+      const listEl = cardEl.querySelector(".rail-list");
+      results.forEach(s => {
+        const isCo = s.kind === "company";
+        const row = el(`
+          <div class="rail-row">
+            <div class="rail-ava${isCo ? " company" : ""}">${s.image ? `<img src="${esc(s.image)}" alt="">` : esc((s.title || "?").charAt(0).toUpperCase())}</div>
+            <div class="rail-info">
+              <div class="rail-name">${esc(s.title || "")}</div>
+              <div class="rail-sub">${esc(s.subtitle || s.reason || "")}</div>
+            </div>
+            <button class="rail-follow">Follow</button>
+          </div>`);
+        const goTo = () => { location.hash = (isCo ? "company/" : "user/") + s.uuid; };
+        row.querySelector(".rail-ava").onclick = goTo;
+        row.querySelector(".rail-name").onclick = goTo;
+        const btn = row.querySelector(".rail-follow");
+        btn.onclick = async () => {
+          btn.disabled = true;
+          const res = await api("/follow/follow.php", "POST", { target_type: s.kind, target_uuid: s.uuid });
+          if (res.ok) { btn.textContent = "Following"; btn.classList.add("done"); }
+          else { btn.disabled = false; toast(res.data?.error || "Could not follow.", "err"); }
+        };
+        listEl.appendChild(row);
+      });
+      cardEl.querySelector(".rail-more").onclick = () => { location.hash = "connect"; };
+      mount.appendChild(cardEl);
+    }
+  } catch (_) { /* card omitted */ }
+
+  // Recent open roles.
+  try {
+    const r = await api("/jobs/list.php?limit=3");
+    const jobs = (r.data?.data?.jobs || []).slice(0, 3);
+    if (r.ok && jobs.length) {
+      const cardEl = el(`<div class="railcard"><h3>Recent openings</h3><div class="rail-jobs"></div><button class="rail-more">Browse all jobs</button></div>`);
+      const listEl = cardEl.querySelector(".rail-jobs");
+      jobs.forEach(j => {
+        const sub = [j.company_name, j.location].filter(Boolean).join(" · ");
+        let pay = "";
+        if (j.salary_min || j.salary_max) {
+          const per = j.pay_period === "hourly" ? "/hr" : "/yr";
+          const fmt = (n) => j.pay_period === "hourly" ? `$${n}` : `$${Math.round(n / 1000)}k`;
+          pay = [j.salary_min, j.salary_max].filter(Boolean).map(fmt).join("–") + per;
+        }
+        const row = el(`
+          <div class="rail-job">
+            <div class="rail-job-title">${esc(j.title || "")}</div>
+            ${sub ? `<div class="rail-job-sub">${esc(sub)}</div>` : ""}
+            ${pay ? `<div class="rail-job-pay">${esc(pay)}</div>` : ""}
+          </div>`);
+        row.onclick = () => { location.hash = "job/" + j.uuid; };
+        listEl.appendChild(row);
+      });
+      cardEl.querySelector(".rail-more").onclick = () => { location.hash = "jobs"; };
+      mount.appendChild(cardEl);
+    }
+  } catch (_) { /* card omitted */ }
 }
 
 // Builds a post composer (rich editor + image + link preview + visibility).
@@ -814,7 +979,10 @@ function truncateInPlace(bodyEl, limit) {
 function renderPost(it, opts = {}) {
   const a = it.author || {};
   const initial = (a.name || "?").charAt(0).toUpperCase();
-  const when = new Date(it.created_at).toLocaleString();
+  // Relative time in the card ("3h", "2d"); the exact timestamp moves to
+  // a hover title so nothing is lost.
+  const whenFull = new Date(it.created_at).toLocaleString();
+  const when = (typeof timeAgo === "function") ? timeAgo(it.created_at) : whenFull;
   const isCompany = a.type === "company";
   const isMine = (a.type === "user" && a.uuid && ME && a.uuid === ME.uuid)
               || (a.type === "company" && a.uuid && CO && a.uuid === CO.uuid);
@@ -912,7 +1080,7 @@ function renderPost(it, opts = {}) {
         <div class="${avaClass}" ${goProfile}>${a.avatar ? `<img src="${esc(a.avatar)}" alt="">` : esc(initial)}</div>
         <div>
           <div class="${nameClass}" ${goProfile}>${esc(a.name || "Unknown")}${isCompany ? ' <span class="post-tag">Company</span>' : ""}</div>
-          <div class="post-when"><span class="post-when-link" onclick="location.hash='post/${esc(String(it.post_id))}'" style="cursor:pointer">${esc(when)}</span>${it.reason === "self" ? " · You" : ""}</div>
+          <div class="post-when"><span class="post-when-link" onclick="location.hash='post/${esc(String(it.post_id))}'" style="cursor:pointer" title="${esc(whenFull)}">${esc(when)}</span>${it.reason === "self" ? " · You" : ""}</div>
         </div>
         ${canDelete ? `<button class="post-del" title="${isMine ? "Delete post" : "Delete (admin)"}">🗑</button>` : ""}
       </div>
@@ -921,10 +1089,10 @@ function renderPost(it, opts = {}) {
       ${it.media_url ? `<img class="post-media" src="${esc(it.media_url)}" alt="">` : ""}
       <div class="post-actions">
         <button class="post-act post-like ${liked ? "liked" : ""}" ${canEngage ? "" : "disabled"}>
-          <span class="pa-icon">${liked ? "♥" : "♡"}</span> <span class="pa-likes">${likes}</span>
+          <span class="pa-icon">${ICON_HEART}</span> <span class="pa-likes">${likes}</span>
         </button>
         <button class="post-act post-commentbtn">
-          <span class="pa-icon">💬</span> <span class="pa-comments">${comments}</span>
+          <span class="pa-icon">${ICON_COMMENT}</span> <span class="pa-comments">${comments}</span>
           <span class="pa-caret">▾</span>
         </button>
       </div>
@@ -966,8 +1134,10 @@ function renderPost(it, opts = {}) {
       if (r.ok && r.data?.success) {
         likedState = r.data.data.liked;
         likeCount = r.data.data.likes;
+        // The heart is an inline SVG; .liked fills it via CSS, so the
+        // class toggle is the whole state change. Never set textContent
+        // on .pa-icon — that would wipe the SVG markup.
         likeBtn.classList.toggle("liked", likedState);
-        likeBtn.querySelector(".pa-icon").textContent = likedState ? "♥" : "♡";
         likeBtn.querySelector(".pa-likes").textContent = likeCount;
       }
       likeBtn.disabled = false;

@@ -51,15 +51,9 @@ function notifRowHTML(n) {
     </div>`;
 }
 
-function timeAgo(ts) {
-  const d = new Date(ts.replace(" ", "T"));
-  const s = Math.floor((Date.now() - d.getTime()) / 1000);
-  if (s < 60) return "just now";
-  if (s < 3600) return Math.floor(s / 60) + "m ago";
-  if (s < 86400) return Math.floor(s / 3600) + "h ago";
-  if (s < 604800) return Math.floor(s / 86400) + "d ago";
-  return d.toLocaleDateString();
-}
+// timeAgo() moved to shell.js (loads first, shared by feed/messages/
+// company views). A duplicate declaration here would silently override
+// it for every file — don't re-add one.
 
 async function refreshNotifBadge() {
   const r = await api("/notifications/list.php?unread_count_only=1");

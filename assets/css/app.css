@@ -1703,3 +1703,141 @@ html.in-reduce-motion *::after {
 .ja-contact-val:hover { text-decoration:underline; }
 .ja-contact-note { font-size:11.5px; color:var(--in-muted); margin-top:8px; }
 .ja-verified { color:var(--in-success); font-size:11.5px; font-weight:600; }
+
+/* =====================================================================
+   Feed v2 — two-column layout, split post cards, rail cards, action
+   pills, segmented tabs. Added with the feed visual refresh.
+   Everything fits the standard 980px column (same width as the top
+   nav): identity card + network + openings stack in a left rail, posts
+   take the rest. The .feed-wide class on .in-main is intentionally
+   inert now — shell.js still toggles it, so re-adding a max-width rule
+   here is all it takes if the feed ever needs to go wider again.
+   ===================================================================== */
+
+.feed-grid {
+  display:grid; grid-template-columns:288px minmax(0,1fr);
+  gap:22px; align-items:start;
+}
+.feed-center { min-width:0; }
+.feed-rail-left { position:sticky; top:78px; }
+/* The rail drops off before it would crush the post column. */
+@media (max-width:920px) {
+  .feed-rail-left { display:none; }
+  .feed-grid { grid-template-columns:minmax(0,1fr); }
+}
+
+/* ---------- identity card (left rail) ---------- */
+.idcard { background:var(--in-card); border:1px solid var(--in-line); border-radius:14px; overflow:hidden; margin-bottom:16px; }
+.idcard-cover { height:70px; background:linear-gradient(120deg, var(--in-accent), var(--in-teal-bright) 60%, #6ee7df); }
+.idcard-body { padding:0 16px 16px; text-align:center; }
+.idcard-ava {
+  width:92px; height:92px; border-radius:50%; margin:-46px auto 10px;
+  border:3px solid var(--in-card); overflow:hidden;
+  background:linear-gradient(135deg, var(--in-accent), var(--in-teal-bright));
+  display:grid; place-items:center; color:#fff; font-weight:700; font-size:36px;
+  cursor:pointer;
+}
+.idcard-ava img { width:100%; height:100%; object-fit:cover; display:block; }
+.idcard-name { font-weight:700; font-size:16px; letter-spacing:-0.2px; cursor:pointer; }
+.idcard-name:hover { color:var(--in-accent); }
+.idcard-loc { font-size:12.5px; color:var(--in-muted); margin-top:3px; }
+.idcard-stats { display:flex; border-top:1px solid var(--in-line); margin-top:14px; padding-top:12px; }
+.idcard-stat { flex:1; }
+.idcard-stat b { display:block; font-size:15px; color:var(--in-ink); }
+.idcard-stat span { font-size:11px; color:var(--in-muted); text-transform:uppercase; letter-spacing:.5px; }
+.idcard-score { margin-top:14px; }
+.idcard-score-chip {
+  display:inline-flex; align-items:center; gap:8px;
+  background:var(--in-bg); border:1px solid var(--in-line); border-radius:999px;
+  padding:6px 14px 6px 8px; font-size:13px; font-weight:600; color:var(--in-ink); cursor:pointer;
+}
+.idcard-score-chip:hover { border-color:var(--in-accent); }
+.idcard-score-val {
+  width:28px; height:28px; border-radius:50%; flex:none;
+  background:linear-gradient(135deg, var(--in-accent), var(--in-teal-bright));
+  color:#fff; font-size:12px; font-weight:700; display:grid; place-items:center;
+}
+.idcard-score-cta {
+  display:block; width:100%; background:none; border:1px dashed var(--in-line);
+  border-radius:10px; padding:9px 10px; font-family:inherit; font-size:12.5px;
+  font-weight:600; color:var(--in-accent); cursor:pointer;
+}
+.idcard-score-cta:hover { border-color:var(--in-accent); background:var(--in-bg); }
+
+/* ---------- rail cards (right rail) ---------- */
+.railcard { background:var(--in-card); border:1px solid var(--in-line); border-radius:14px; padding:16px 16px 12px; margin-bottom:16px; }
+.railcard h3 { margin:0 0 10px; font-size:12.5px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--in-ink-soft); }
+.rail-row { display:flex; gap:10px; align-items:center; padding:7px 0; }
+.rail-ava {
+  width:40px; height:40px; border-radius:50%; flex:none; overflow:hidden;
+  background:linear-gradient(135deg, var(--in-accent), var(--in-teal-bright));
+  display:grid; place-items:center; color:#fff; font-weight:700; font-size:15px; cursor:pointer;
+}
+.rail-ava.company { border-radius:10px; background:linear-gradient(135deg,#0e3b4a,#0a8a8a); }
+.rail-ava img { width:100%; height:100%; object-fit:cover; display:block; }
+.rail-info { min-width:0; flex:1; }
+.rail-name { font-size:13.5px; font-weight:600; color:var(--in-ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; }
+.rail-name:hover { color:var(--in-accent); }
+.rail-sub { font-size:12px; color:var(--in-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:1px; }
+.rail-follow {
+  flex:none; background:none; border:1px solid var(--in-accent); color:var(--in-accent);
+  border-radius:999px; padding:4px 12px; font-family:inherit; font-size:12px; font-weight:600; cursor:pointer;
+}
+.rail-follow:hover { background:var(--in-accent); color:#fff; }
+.rail-follow.done { border-color:var(--in-line); color:var(--in-muted); cursor:default; background:none; }
+.rail-job { display:block; padding:8px 0; border-top:1px solid var(--in-line); cursor:pointer; }
+.rail-job:first-of-type { border-top:none; }
+.rail-job-title { font-size:13.5px; font-weight:600; color:var(--in-ink); }
+.rail-job:hover .rail-job-title { color:var(--in-accent); }
+.rail-job-sub { font-size:12px; color:var(--in-muted); margin-top:2px; }
+.rail-job-pay { font-size:12px; font-weight:600; color:var(--in-success); margin-top:2px; }
+.rail-more {
+  display:block; width:100%; background:none; border:none; border-top:1px solid var(--in-line);
+  margin-top:6px; padding:10px 0 4px; font-family:inherit; font-size:12.5px; font-weight:600;
+  color:var(--in-accent); cursor:pointer; text-align:center;
+}
+.rail-more:hover { text-decoration:underline; }
+
+/* ---------- split post cards (feed route only) ---------- */
+/* Inside the feed grid each post becomes its own card; the old shared
+   .in-card2 wrapper turns invisible. Other surfaces (profile activity,
+   single-post page, company dashboard) keep the classic grouped look. */
+.feed-grid .in-post-list { background:none; border:none; border-radius:0; padding:0; margin-bottom:0; }
+.feed-grid .in-post-item {
+  background:var(--in-card); border:1px solid var(--in-line); border-radius:14px;
+  padding:18px 20px 12px; margin-bottom:14px;
+  box-shadow:0 1px 2px rgba(11,31,42,.05);
+  transition:box-shadow .15s ease;
+}
+.feed-grid .in-post-item:hover { box-shadow:0 5px 18px rgba(11,31,42,.08); }
+.feed-grid .in-post-item { border-top:1px solid var(--in-line); } /* re-assert: grouped list removed top borders */
+
+/* ---------- segmented feed tabs (feed route only) ---------- */
+.feed-grid .in-feedtabs {
+  background:var(--in-card); border:1px solid var(--in-line); border-radius:999px;
+  padding:4px; gap:2px; width:max-content; margin:2px 0 16px;
+}
+.feed-grid .in-feedtabs button { border-radius:999px; padding:7px 18px; }
+.feed-grid .in-feedtabs button:hover { background:var(--in-bg); }
+.feed-grid .in-feedtabs button.active { background:var(--in-accent); color:#fff; border:none; }
+
+/* ---------- action pills + SVG icons (all post surfaces) ---------- */
+.post-act { gap:7px; padding:7px 14px; border-radius:999px; transition:background .12s ease, color .12s ease; }
+.post-act:hover:not(:disabled) { background:var(--in-bg); color:var(--in-ink); }
+.post-act .pa-icon { display:grid; place-items:center; }
+.post-act .pa-icon svg { width:18px; height:18px; display:block; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.post-like:hover:not(:disabled) { color:var(--in-error); }
+.post-like.liked, .post-like.liked:hover { color:var(--in-error); }
+.post-like.liked .pa-icon svg { fill:currentColor; }
+.post-commentbtn:hover { color:var(--in-accent); }
+.post-commentbtn.open { color:var(--in-accent); }
+
+/* Post header meta: dot-separated relative time. */
+.post-when { font-size:12px; }
+.post-when .post-when-link:hover { color:var(--in-accent); text-decoration:underline; }
+
+/* ---------- dark theme adjustments for the new pieces ---------- */
+[data-theme="dark"] .feed-grid .in-post-item { box-shadow:none; }
+[data-theme="dark"] .feed-grid .in-post-item:hover { box-shadow:none; border-color:#33505c; }
+[data-theme="dark"] .idcard-cover { background:linear-gradient(120deg,#0f766e,#134e4a); }
+[data-theme="dark"] .feed-grid .in-feedtabs button.active { color:#04211d; }
