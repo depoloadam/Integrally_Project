@@ -94,6 +94,71 @@ class PostActions
         ]);
     }
 
+    // ---- report moderation -------------------------------------------
+
+    /**
+     * Statuses a report can hold. 'open' is the queue; the other two are
+     * terminal and differ only in what the admin concluded:
+     *   reviewed  -> the report was valid and acted on
+     *   dismissed -> the report was not actionable
+     * Deleting the post is a separate action against posts; it resolves
+     * the attached reports as 'reviewed' rather than adding a status.
+     */
+    public const REPORT_STATUSES = ['open', 'reviewed', 'dismissed'];
+
+    public static function isValidReportStatus(string $status): bool
+    {
+        return in_array($status, self::REPORT_STATUSES, true);
+    }
+
+    /**
+     * Move every report against $postId to $status.
+     *
+     * Resolution is per-post rather than per-report on purpose: the queue
+     * groups by post, so an admin judges the post once and all complaints
+     * about it settle together. Returns the number of rows changed, which
+     * the caller records in the audit detail.
+     *
+     * $onlyFrom optionally narrows the update to reports currently in a
+     * given status, so re-resolving an already-closed post is a no-op
+     * instead of silently reopening or double-counting.
+     */
+    public static function resolveReports(int $postId, string $status, ?string $onlyFrom = 'open'): int
+    {
+        $sql    = 'UPDATE post_reports SET status = ? WHERE post_id = ?';
+        $params = [$status, $postId];
+        if ($onlyFrom !== null) {
+            $sql       .= ' AND status = ?';
+            $params[]   = $onlyFrom;
+        }
+        $stmt = Database::conn()->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->rowCount();
+    }
+
+    /** Count of reports against a post, optionally scoped to one status. */
+    public static function reportCount(int $postId, ?string $status = null): int
+    {
+        $sql    = 'SELECT COUNT(*) AS c FROM post_reports WHERE post_id = ?';
+        $params = [$postId];
+        if ($status !== null) { $sql .= ' AND status = ?'; $params[] = $status; }
+        $stmt = Database::conn()->prepare($sql);
+        $stmt->execute($params);
+        return (int) $stmt->fetch()['c'];
+    }
+
+    /**
+     * Drop every report against a post. Used only to clear orphaned rows
+     * once the post itself is gone — there is nothing left to moderate,
+     * so the queue entry should not linger.
+     */
+    public static function purgeReports(int $postId): int
+    {
+        $stmt = Database::conn()->prepare('DELETE FROM post_reports WHERE post_id = ?');
+        $stmt->execute([$postId]);
+        return $stmt->rowCount();
+    }
+
     // ---- sort orders -------------------------------------------------
 
     /**

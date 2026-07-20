@@ -912,6 +912,77 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 .in-admin-snippet { color:var(--in-ink); font-size:13px; max-width:340px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .in-admin-snippet:hover { color:var(--in-accent); }
 
+/* ---------- admin: reports moderation queue ---------- */
+/* Count badge on the Reports tab button. .in-feedtabs button is a flex
+   row already, so the badge sits inline after the label. */
+.in-tab-badge {
+  display:inline-block; margin-left:7px; min-width:18px; padding:1px 6px;
+  border-radius:20px; background:var(--in-error); color:#fff;
+  font-size:11px; font-weight:700; line-height:1.5; text-align:center;
+  vertical-align:middle;
+}
+.in-tab-badge[hidden] { display:none; }
+
+/* Reasons can stack, so rows are top-aligned rather than centred. */
+.in-report-table td { vertical-align:top; }
+
+/* Expand/collapse caret. Kept inline-block with a fixed width so the
+   snippet beneath it doesn't shift when ▸ swaps to ▾. */
+.in-report-toggle {
+  background:none; border:none; cursor:pointer; color:var(--in-muted);
+  font-size:12px; line-height:1; padding:2px 6px 2px 0; width:20px;
+  text-align:left; font-family:inherit;
+}
+.in-report-toggle:hover { color:var(--in-accent); }
+
+.in-report-chips { max-width:190px; }
+.in-report-chip {
+  display:inline-block; margin:0 4px 4px 0; padding:2px 8px;
+  border-radius:20px; background:var(--in-bg); border:1px solid var(--in-line);
+  font-size:11px; font-weight:600; color:var(--in-ink-soft); white-space:nowrap;
+}
+
+/* Deleted-post rows: the snippet is a non-link placeholder. */
+.in-report-gone { color:var(--in-muted); font-style:italic; }
+
+.in-report-actions { white-space:nowrap; text-align:right; }
+.in-btn-mini {
+  background:var(--in-card); border:1px solid var(--in-line); color:var(--in-ink-soft);
+  font-family:inherit; font-size:12px; font-weight:600; cursor:pointer;
+  padding:5px 10px; border-radius:6px; margin-left:6px; line-height:1.4;
+}
+.in-btn-mini:hover { border-color:var(--in-muted); color:var(--in-ink); }
+.in-btn-mini.danger { color:var(--in-error); }
+.in-btn-mini.danger:hover { background:var(--in-error); border-color:var(--in-error); color:#fff; }
+
+/* Expanded reporter detail. The row spans all columns, so it gets its
+   own inset surface rather than inheriting cell padding. */
+.in-report-detail > td { background:var(--in-bg); padding:0 10px 10px 26px; }
+.in-report-list { list-style:none; margin:0; padding:0; }
+.in-report-item { padding:8px 0; border-bottom:1px solid var(--in-line); }
+.in-report-item:last-child { border-bottom:none; }
+.in-report-item-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.in-report-item-detail {
+  margin-top:4px; font-size:12.5px; color:var(--in-ink-soft);
+  /* Reporter free text is user-supplied and can be a single long token. */
+  overflow-wrap:anywhere;
+}
+.in-report-status {
+  font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.4px;
+  padding:2px 7px; border-radius:20px;
+}
+.in-report-status.is-open      { background:#fdecea; color:var(--in-error); }
+.in-report-status.is-reviewed  { background:#e6f7ef; color:var(--in-success); }
+.in-report-status.is-dismissed { background:var(--in-bg); color:var(--in-muted); border:1px solid var(--in-line); }
+
+@media (max-width:820px) {
+  /* Author and last-reported are the least load-bearing columns. */
+  .in-report-table th:nth-child(2), .in-report-table td:nth-child(2),
+  .in-report-table th:nth-child(5), .in-report-table td:nth-child(5) { display:none; }
+  .in-report-actions { white-space:normal; }
+  .in-btn-mini { margin:2px 0 0 6px; }
+}
+
 /* ---------- link preview card (feed post) ---------- */
 .post-link { display:flex; align-items:stretch; margin-top:12px; border:1px solid var(--in-line); border-radius:12px; overflow:hidden; text-decoration:none; color:inherit; transition:border-color .15s; }
 .post-link:hover { border-color:var(--in-accent); }
@@ -1662,6 +1733,10 @@ html.in-reduce-motion *::after {
 }
 [data-theme="dark"] input::placeholder,
 [data-theme="dark"] textarea::placeholder { color:var(--in-muted); }
+/* Report status pills hardcode light-mode washes; restate them on dark. */
+[data-theme="dark"] .in-report-status.is-open     { background:rgba(240,119,107,.16); }
+[data-theme="dark"] .in-report-status.is-reviewed { background:rgba(62,207,142,.16); }
+[data-theme="dark"] .in-report-detail > td        { background:rgba(255,255,255,.03); }
 /* Cards and common surfaces that hardcode white/near-white. */
 [data-theme="dark"] .in-card,
 [data-theme="dark"] .in-card2,

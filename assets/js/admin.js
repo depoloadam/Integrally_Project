@@ -2,19 +2,25 @@
 // admin.js — admin dashboard (#admin route)
 //   Overview stats + five management sections behind sub-tabs:
 //   Users (role + activate/deactivate), Companies (activate/deactivate),
-//   Posts (moderation: view + delete), Jobs (view + delete), and an
-//   Audit tab (read-only log of admin actions).
+//   Posts (moderation: view + delete), Jobs (view + delete), Reports
+//   (moderation queue for user-filed post reports), and an Audit tab
+//   (read-only log of admin actions).
 //   Admin-only; shell.js gates nav visibility and routing, but this
 //   file double-checks ME.role before rendering.
 // =====================================================================
 
-let ADMIN_TAB = "users";   // 'users' | 'companies' | 'posts' | 'jobs'
+let ADMIN_TAB = "users";   // 'users'|'companies'|'posts'|'jobs'|'reports'|'audit'
 
 let ADMIN_STATE     = { q: "", role: "", page: 1, limit: 25 };
 let ADMIN_COMPANIES = { q: "", status: "", page: 1, limit: 25 };
 let ADMIN_POSTS     = { q: "", author_type: "", page: 1, limit: 25 };
 let ADMIN_JOBS      = { q: "", status: "", page: 1, limit: 25 };
 let ADMIN_AUDIT     = { q: "", action: "", page: 1, limit: 25 };
+let ADMIN_REPORTS   = { q: "", status: "open", reason: "", page: 1, limit: 25 };
+
+// Open-report count for the tab badge. Refreshed by every reports load
+// so the badge tracks the queue without its own polling.
+let ADMIN_OPEN_REPORTS = null;
 
 function debounce(fn, wait) {
   let t;
@@ -56,6 +62,7 @@ async function renderAdmin() {
       <button data-atab="companies">Companies</button>
       <button data-atab="posts">Posts</button>
       <button data-atab="jobs">Jobs</button>
+      <button data-atab="reports">Reports<span class="in-tab-badge" id="admin-reports-badge" hidden></span></button>
       <button data-atab="audit">Audit</button>
     </div>`);
   wrap.appendChild(tabs);
@@ -77,6 +84,7 @@ function renderAdminSection(section) {
   if (ADMIN_TAB === "users")          renderAdminUsersSection(section);
   else if (ADMIN_TAB === "companies") renderAdminCompaniesSection(section);
   else if (ADMIN_TAB === "posts")     renderAdminPostsSection(section);
+  else if (ADMIN_TAB === "reports")   renderAdminReportsSection(section);
   else if (ADMIN_TAB === "audit")     renderAdminAuditSection(section);
   else                                renderAdminJobsSection(section);
 }
@@ -626,6 +634,10 @@ const AUDIT_ACTIONS = {
   set_company_active: { label: "Company account toggled" },
   delete_post:        { label: "Post deleted" },
   delete_job:         { label: "Job deleted" },
+  review_reports:     { label: "Reports reviewed" },
+  dismiss_reports:    { label: "Reports dismissed" },
+  reopen_reports:     { label: "Reports reopened" },
+  purge_reports:      { label: "Reports cleared" },
 };
 
 function renderAdminAuditSection(section) {
@@ -667,6 +679,9 @@ function auditDetailText(e) {
   if (d.from !== undefined && d.to !== undefined) return `${d.from} → ${d.to}`;
   if (d.to !== undefined) return `→ ${d.to}`;
   if (e.action === "delete_post" && d.author_type) return `by ${d.author_type} #${d.author_id}`;
+  if (d.reports_resolved !== undefined) return `${d.reports_resolved} report${d.reports_resolved === 1 ? "" : "s"}${d.post_deleted ? " (post already deleted)" : ""}`;
+  if (d.reports_reopened !== undefined) return `${d.reports_reopened} report${d.reports_reopened === 1 ? "" : "s"}`;
+  if (d.reports_removed  !== undefined) return `${d.reports_removed} report${d.reports_removed === 1 ? "" : "s"} cleared`;
   return "";
 }
 
@@ -724,4 +739,294 @@ async function loadAdminAudit() {
 
   tableBox.appendChild(table);
   adminPager(pager, ADMIN_AUDIT, total, page, limit, "entries", loadAdminAudit);
+}
+
+// =====================================================================
+// REPORTS — moderation queue for user-filed post reports
+//
+// Rows are grouped by post (a post reported twelve times is one row),
+// so the queue reflects work to be done rather than complaint volume.
+// Each row expands to show individual reporters, their chosen reason,
+// and any free-text detail they added.
+//
+// Actions settle every report against the post at once:
+//   Delete post -> deletes via the existing /posts/delete.php admin
+//                  override, then marks the reports reviewed
+//   Reviewed    -> valid, acted on, post kept
+//   Dismissed   -> not actionable
+//   Reopen      -> pull a settled post back into the queue
+//   Clear       -> drop orphan reports whose post is already gone
+// =====================================================================
+
+// Short labels for the reason chips — the full sentences from
+// PostActions::REASONS are too long for a table cell.
+const REPORT_REASON_SHORT = {
+  spam: "Spam", harassment: "Harassment", nudity: "Nudity",
+  violence: "Violence", misinfo: "False info", ip: "IP", other: "Other",
+};
+
+// Post IDs whose reporter detail is expanded. Kept outside the render
+// so a resolve/refresh doesn't collapse everything the admin opened.
+const REPORTS_EXPANDED = new Set();
+
+function updateReportsBadge(n) {
+  ADMIN_OPEN_REPORTS = n;
+  const badge = $("admin-reports-badge");
+  if (!badge) return;
+  if (n > 0) { badge.textContent = n > 99 ? "99+" : String(n); badge.hidden = false; }
+  else       { badge.textContent = ""; badge.hidden = true; }
+}
+
+function renderAdminReportsSection(section) {
+  const reasonOpts = Object.entries(REPORT_REASON_SHORT).map(([v, label]) =>
+    `<option value="${v}" ${ADMIN_REPORTS.reason === v ? "selected" : ""}>${esc(label)}</option>`).join("");
+
+  const card = el(`
+    <div class="in-card2">
+      <h2>Reported Posts</h2>
+      <div class="in-admin-toolbar">
+        <input type="text" id="admin-report-search" placeholder="Search post text or author…" value="${esc(ADMIN_REPORTS.q)}">
+        <select id="admin-report-status">
+          <option value="open"      ${ADMIN_REPORTS.status === "open"      ? "selected" : ""}>Open</option>
+          <option value="reviewed"  ${ADMIN_REPORTS.status === "reviewed"  ? "selected" : ""}>Reviewed</option>
+          <option value="dismissed" ${ADMIN_REPORTS.status === "dismissed" ? "selected" : ""}>Dismissed</option>
+          <option value=""          ${ADMIN_REPORTS.status === ""          ? "selected" : ""}>All statuses</option>
+        </select>
+        <select id="admin-report-reason">
+          <option value="">All reasons</option>
+          ${reasonOpts}
+        </select>
+      </div>
+      <div class="in-set-msg" id="admin-report-msg"></div>
+      <div id="admin-report-table"></div>
+      <div class="in-admin-pager" id="admin-report-pager"></div>
+    </div>`);
+  section.appendChild(card);
+
+  $("admin-report-search").addEventListener("input", debounce(() => {
+    ADMIN_REPORTS.q = $("admin-report-search").value.trim();
+    ADMIN_REPORTS.page = 1;
+    loadAdminReports();
+  }, 350));
+  $("admin-report-status").onchange = () => {
+    ADMIN_REPORTS.status = $("admin-report-status").value;
+    ADMIN_REPORTS.page = 1;
+    loadAdminReports();
+  };
+  $("admin-report-reason").onchange = () => {
+    ADMIN_REPORTS.reason = $("admin-report-reason").value;
+    ADMIN_REPORTS.page = 1;
+    loadAdminReports();
+  };
+
+  loadAdminReports();
+}
+
+async function loadAdminReports() {
+  const tableBox = $("admin-report-table");
+  const pager    = $("admin-report-pager");
+  const msg      = $("admin-report-msg");
+  if (!tableBox) return;
+
+  tableBox.innerHTML = `<div class="in-loading">Loading reports…</div>`;
+
+  const params = new URLSearchParams({ page: ADMIN_REPORTS.page, limit: ADMIN_REPORTS.limit });
+  if (ADMIN_REPORTS.q)      params.set("q", ADMIN_REPORTS.q);
+  if (ADMIN_REPORTS.reason) params.set("reason", ADMIN_REPORTS.reason);
+  // status is sent even when empty so the endpoint's 'open' default
+  // can't override an explicit "All statuses" choice.
+  params.set("status", ADMIN_REPORTS.status);
+
+  const r = await api("/admin/reports.php?" + params.toString());
+  if (!r.ok || !r.data?.success) {
+    tableBox.innerHTML = `<div class="in-empty">Could not load reports. If this is a fresh setup, make sure the post-actions migration has been run.</div>`;
+    pager.innerHTML = "";
+    return;
+  }
+
+  const { reports, total, page, limit, open_posts } = r.data.data;
+  updateReportsBadge(open_posts || 0);
+
+  if (!reports.length) {
+    const filtered = ADMIN_REPORTS.q || ADMIN_REPORTS.reason || ADMIN_REPORTS.status !== "open";
+    tableBox.innerHTML = `<div class="in-empty">${filtered ? "No reports match." : "Nothing in the queue — reported posts will appear here."}</div>`;
+    pager.innerHTML = "";
+    return;
+  }
+
+  tableBox.innerHTML = "";
+  const table = el(`
+    <table class="in-admin-table in-report-table">
+      <thead><tr>
+        <th>Reported post</th><th>Author</th><th>Reasons</th><th>Reports</th><th>Last</th><th></th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>`);
+  const tbody = table.querySelector("tbody");
+
+  reports.forEach(rep => {
+    tbody.appendChild(buildReportRow(rep, msg));
+    tbody.appendChild(buildReportDetailRow(rep));
+  });
+
+  tableBox.appendChild(table);
+  adminPager(pager, ADMIN_REPORTS, total, page, limit, "reports", loadAdminReports);
+}
+
+// ---- one queue row ----------------------------------------------------
+function buildReportRow(rep, msg) {
+  const deleted = rep.post_deleted;
+  const isCo    = rep.author_type === "company";
+  const label   = deleted
+    ? "(post deleted)"
+    : (rep.snippet || (rep.has_media ? "(image post)" : `(${rep.post_type} post)`));
+
+  const chips = rep.reasons.map(x =>
+    `<span class="in-report-chip">${esc(REPORT_REASON_SHORT[x.key] || x.label)}</span>`).join("");
+
+  const authorCell = deleted || !rep.author_uuid
+    ? `<span class="in-admin-name">—</span>`
+    : `<a href="#${isCo ? "company" : "user"}/${esc(rep.author_uuid)}" style="color:var(--in-accent);text-decoration:none">${
+        isCo ? esc(rep.author_name || "Unknown") : "@" + esc(rep.author_name || "unknown")}</a>`;
+
+  const postCell = deleted
+    ? `<span class="in-admin-snippet in-report-gone">${esc(label)}</span>`
+    : `<a href="#post/${rep.post_id}" class="in-admin-snippet" title="Open post" style="text-decoration:none;display:block">${esc(label)}</a>`;
+
+  // open_count separates live work from history when viewing "All".
+  const countCell = rep.open_count > 0 && rep.open_count !== rep.report_count
+    ? `${rep.report_count} <span class="in-admin-name">(${rep.open_count} open)</span>`
+    : String(rep.report_count);
+
+  const row = el(`
+    <tr class="in-report-row">
+      <td>
+        <button class="in-report-toggle" data-toggle aria-expanded="false" title="Show reporters">▸</button>
+        ${postCell}
+      </td>
+      <td>${authorCell}</td>
+      <td class="in-report-chips">${chips}</td>
+      <td>${countCell}</td>
+      <td style="white-space:nowrap">${esc((rep.last_reported || "").slice(0, 10))}</td>
+      <td class="in-report-actions"></td>
+    </tr>`);
+
+  // ---- expand / collapse ---------------------------------------------
+  const toggle = row.querySelector("[data-toggle]");
+  const syncToggle = () => {
+    const open = REPORTS_EXPANDED.has(rep.post_id);
+    toggle.textContent = open ? "▾" : "▸";
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    const detail = row.nextElementSibling;
+    if (detail && detail.classList.contains("in-report-detail")) detail.hidden = !open;
+  };
+  toggle.onclick = () => {
+    if (REPORTS_EXPANDED.has(rep.post_id)) REPORTS_EXPANDED.delete(rep.post_id);
+    else REPORTS_EXPANDED.add(rep.post_id);
+    syncToggle();
+  };
+  // Defer: the detail row is appended after this one, so it doesn't
+  // exist yet at build time.
+  setTimeout(syncToggle, 0);
+
+  // ---- actions --------------------------------------------------------
+  const actions = row.querySelector(".in-report-actions");
+  const hasOpen = rep.open_count > 0;
+
+  const act = async (action, confirmOpts) => {
+    if (confirmOpts && !(await confirmDialog(confirmOpts.message, confirmOpts))) return;
+    const res = await api("/admin/resolve-report.php", "POST", { post_id: rep.post_id, action });
+    if (res.ok && res.data?.success) {
+      adminNotify(msg, "ok", confirmOpts?.okText || "Reports updated.");
+      loadAdminReports();
+    } else {
+      adminNotify(msg, "err", res.data?.error || "Could not update these reports.");
+    }
+  };
+
+  if (rep.post_deleted) {
+    // Nothing left to moderate — the only useful action is clearing
+    // the orphaned rows out of the queue.
+    const clear = el(`<button class="in-btn-mini" title="Remove these reports from the queue">Clear</button>`);
+    clear.onclick = () => act("purge", {
+      message: `The post is already deleted. Remove its ${rep.report_count} report${rep.report_count === 1 ? "" : "s"} from the queue?`,
+      confirmText: "Clear", okText: "Reports cleared.",
+    });
+    actions.appendChild(clear);
+  } else if (hasOpen) {
+    const del = el(`<button class="in-btn-mini danger" title="Delete the post and close its reports">Delete post</button>`);
+    del.onclick = async () => {
+      const ok = await confirmDialog(
+        `Delete this post by ${rep.author_name || "unknown"}? This can't be undone. Its ${rep.open_count} open report${rep.open_count === 1 ? "" : "s"} will be marked reviewed.`,
+        { confirmText: "Delete post", danger: true }
+      );
+      if (!ok) return;
+      const res = await api("/posts/delete.php", "POST", { id: rep.post_id });
+      if (!res.ok || !res.data?.success) {
+        adminNotify(msg, "err", res.data?.error || "Could not delete the post.");
+        return;
+      }
+      // Post is gone; settle the reports so the row leaves the queue.
+      // If this second call fails the post is still deleted, so say so
+      // rather than implying nothing happened.
+      const res2 = await api("/admin/resolve-report.php", "POST", { post_id: rep.post_id, action: "reviewed" });
+      if (res2.ok && res2.data?.success) adminNotify(msg, "ok", "Post deleted and reports closed.");
+      else adminNotify(msg, "err", "Post deleted, but its reports could not be closed. Use Clear to remove them.");
+      loadAdminReports();
+    };
+
+    const keep = el(`<button class="in-btn-mini" title="Report was valid and handled">Reviewed</button>`);
+    keep.onclick = () => act("reviewed", {
+      message: `Mark ${rep.open_count} report${rep.open_count === 1 ? "" : "s"} against this post as reviewed? The post stays up.`,
+      confirmText: "Mark reviewed", okText: "Marked reviewed.",
+    });
+
+    const dismiss = el(`<button class="in-btn-mini" title="Report was not actionable">Dismiss</button>`);
+    dismiss.onclick = () => act("dismissed", {
+      message: `Dismiss ${rep.open_count} report${rep.open_count === 1 ? "" : "s"} against this post?`,
+      confirmText: "Dismiss", okText: "Reports dismissed.",
+    });
+
+    actions.append(del, keep, dismiss);
+  } else {
+    const reopen = el(`<button class="in-btn-mini" title="Put this back in the queue">Reopen</button>`);
+    reopen.onclick = () => act("reopen", {
+      message: `Reopen ${rep.report_count} report${rep.report_count === 1 ? "" : "s"} against this post?`,
+      confirmText: "Reopen", okText: "Reports reopened.",
+    });
+    actions.appendChild(reopen);
+  }
+
+  return row;
+}
+
+// ---- expandable reporter detail --------------------------------------
+function buildReportDetailRow(rep) {
+  const items = rep.reporters.map(rp => {
+    const who  = rp.reporter_name
+      ? (rp.reporter_type === "company" ? esc(rp.reporter_name) : "@" + esc(rp.reporter_name))
+      : "(deleted account)";
+    const when = (rp.created_at || "").slice(0, 10);
+    return `
+      <li class="in-report-item">
+        <div class="in-report-item-head">
+          <span class="in-report-chip">${esc(REPORT_REASON_SHORT[rp.reason] || rp.reason_label)}</span>
+          <span class="in-admin-name">${who} · ${esc(when)}</span>
+          <span class="in-report-status is-${esc(rp.status)}">${esc(rp.status)}</span>
+        </div>
+        ${rp.detail ? `<div class="in-report-item-detail">${esc(rp.detail)}</div>` : ""}
+      </li>`;
+  }).join("");
+
+  const capped = rep.report_count > rep.reporters.length
+    ? `<li class="in-report-item"><span class="in-admin-name">…and ${rep.report_count - rep.reporters.length} more.</span></li>`
+    : "";
+
+  const row = el(`
+    <tr class="in-report-detail" hidden>
+      <td colspan="6">
+        <ul class="in-report-list">${items}${capped}</ul>
+      </td>
+    </tr>`);
+  return row;
 }
