@@ -354,15 +354,17 @@ console.log('\n== owner Skills card: See-endorsements button injection ==');
   // Wrapper so we can spy the same way openFollowList is spied.
   const openEndorsementDetail = (u) => (env.holder.openEndorsementDetail || env.openEndorsementDetail)(u);
 
-  const skillsCard = card.querySelector('[data-section="skill"] h2') || card.querySelector('h2');
-  const seeBtn = env.el(`<button class="in-endo-see" id="endo-see-own" title="See who endorsed your skills">See endorsements</button>`);
-  const addBtn = skillsCard.querySelector(".add");
-  if (addBtn) skillsCard.insertBefore(seeBtn, addBtn); else skillsCard.appendChild(seeBtn);
-  seeBtn.onclick = () => openEndorsementDetail(ownUuid);
+  const skillsCard = card.querySelector('[data-section="skill"]') || card;
+  const h2 = skillsCard.querySelector('h2');
+  const seeRow = env.el(`<button class="in-endo-see" id="endo-see-own"><span class="in-endo-see-ico">✓</span> See who endorsed your skills</button>`);
+  h2.insertAdjacentElement("afterend", seeRow);
+  seeRow.onclick = () => openEndorsementDetail(ownUuid);
 
-  check('button injected into skills header', !!card.querySelector("#endo-see-own"));
-  check('button placed before the + add button',
-    card.querySelector("#endo-see-own").nextElementSibling === card.querySelector(".add"));
+  check('button injected into card', !!card.querySelector("#endo-see-own"));
+  check('button placed as its own row after the h2',
+    h2.nextElementSibling === card.querySelector("#endo-see-own"));
+  check('+ add button stays in the header', !!h2.querySelector(".add"));
+  check('button is not inside the h2', !h2.querySelector("#endo-see-own"));
   card.querySelector("#endo-see-own").click();
   check('clicking opens detail with owner uuid', openedWith === ownUuid, String(openedWith));
 }

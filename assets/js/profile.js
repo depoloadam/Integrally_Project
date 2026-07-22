@@ -246,15 +246,15 @@ async function renderProfile() {
     addSkill, s => ({ id:s.id, kind:"skill" }), "skill");
   // Owner can view who endorsed their skills, same modal as the public
   // profile. The endpoint allows the owner regardless of follow state.
+  // Rendered as its own full-width row under the header (not crammed into
+  // the h2, which already carries the absolute "+" add button).
   if (p.uuid) {
-    const skillsCard = leftCol.querySelector('[data-section="skill"] h2');
-    if (skillsCard && !skillsCard.querySelector("#endo-see-own")) {
-      const seeBtn = el(`<button class="in-endo-see" id="endo-see-own" title="See who endorsed your skills">See endorsements</button>`);
-      // Sit the "See endorsements" pill before the "+" add button.
-      const addBtn = skillsCard.querySelector(".add");
-      if (addBtn) skillsCard.insertBefore(seeBtn, addBtn);
-      else skillsCard.appendChild(seeBtn);
-      seeBtn.onclick = () => openEndorsementDetail(p.uuid);
+    const skillsCard = leftCol.querySelector('[data-section="skill"]');
+    const h2 = skillsCard && skillsCard.querySelector("h2");
+    if (h2 && !skillsCard.querySelector("#endo-see-own")) {
+      const seeRow = el(`<button class="in-endo-see" id="endo-see-own" title="See who endorsed your skills"><span class="in-endo-see-ico">✓</span> See who endorsed your skills</button>`);
+      h2.insertAdjacentElement("afterend", seeRow);
+      seeRow.onclick = () => openEndorsementDetail(p.uuid);
     }
   }
 
@@ -2318,11 +2318,14 @@ function roChips(col, title, items, label) {
 // affordance. Own-profile and non-mutual viewers get read-only chips
 // that still display counts.
 function renderEndorsableSkills(col, items, targetUuid, canEndorse) {
-  const card = el(`<div class="in-card2"><h2>Skills${canEndorse ? `<button class="in-endo-see" id="endo-see-btn" title="See who endorsed these skills">See endorsements</button>` : ""}</h2><div class="in-chips body"></div></div>`);
+  const card = el(`<div class="in-card2"><h2>Skills</h2><div class="in-chips body"></div></div>`);
   col.appendChild(card);
   const body = card.querySelector(".body");
-  const seeBtn = card.querySelector("#endo-see-btn");
-  if (seeBtn) seeBtn.onclick = () => openEndorsementDetail(targetUuid);
+  if (canEndorse) {
+    const seeRow = el(`<button class="in-endo-see" id="endo-see-btn" title="See who endorsed these skills"><span class="in-endo-see-ico">✓</span> See who endorsed these skills</button>`);
+    card.querySelector("h2").insertAdjacentElement("afterend", seeRow);
+    seeRow.onclick = () => openEndorsementDetail(targetUuid);
+  }
   if (!items || !items.length) {
     body.appendChild(el(`<div class="in-empty">Nothing listed.</div>`));
     return;

@@ -393,14 +393,16 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 .in-skill-chip.endorsed .in-endo-badge {
   color:#fff; background:var(--in-accent); }
 /* "See endorsements" link in the skills card header (mutual follows) */
-.in-endo-see { margin-left:auto; background:var(--in-bg); border:1px solid var(--in-line); color:var(--in-accent);
-  font-family:inherit; font-size:11px; font-weight:700; text-transform:none; letter-spacing:0; border-radius:999px;
-  padding:4px 12px; cursor:pointer; }
+/* "See endorsements" — a full-width row under the Skills header. Own
+   card and public (mutual-follow) card share this. Sits below the h2 so
+   it never collides with the absolute "+" add button. */
+.in-endo-see { display:flex; align-items:center; justify-content:center; gap:6px; width:100%;
+  margin:-4px 0 12px; background:var(--in-bg); border:1px solid var(--in-line); color:var(--in-accent);
+  font-family:inherit; font-size:12.5px; font-weight:600; text-transform:none; letter-spacing:0;
+  border-radius:9px; padding:8px 12px; cursor:pointer; transition:border-color .12s, background .12s; }
 .in-endo-see:hover { border-color:var(--in-accent); background:#fff; }
-/* On the OWNER's Skills card the header also carries an absolutely-
-   positioned "+" add button pinned at right:12px. Leave room so the
-   pill doesn't sit under it. */
-.in-card2 h2 #endo-see-own { margin-right:40px; }
+.in-endo-see-ico { display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px;
+  border-radius:50%; background:var(--in-accent); color:#fff; font-size:10px; font-weight:700; }
 /* Endorsement detail modal */
 .in-endo-detail { max-height:62vh; overflow-y:auto; }
 .in-endo-total { font-size:12.5px; color:var(--in-muted); margin-bottom:14px; }
