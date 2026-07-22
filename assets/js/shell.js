@@ -217,25 +217,20 @@ function applyReducedMotion(on) {
 }
 window.applyTheme = applyTheme;
 
-// ---- Design preview ("pro" skin) -------------------------------------
-// Mirrors the theme mechanism: a data-design attribute on <html> that
-// pro.css scopes every one of its rules under, so removing the
-// attribute restores the original design exactly. Client-side only
-// (localStorage, per device) because this is an evaluation preview —
-// no server setting, no migration, instantly reversible.
+// ---- Design system -----------------------------------------------------
+// The Professional ("Ledger") skin is the DEFAULT: pro.css scopes every
+// rule under html[data-design="pro"], and the inline script in app.html's
+// <head> applies the attribute before first paint. Choosing "Alternate"
+// (the previous design) removes the attribute — original CSS exactly.
+// Stored per device in localStorage("in_design"); legacy value
+// "original" (from the preview phase) is honored as "alternate".
 function applyDesign(mode) {
   const root = document.documentElement;
-  if (mode === "pro") root.setAttribute("data-design", "pro");
-  else root.removeAttribute("data-design");
-  try { localStorage.setItem("in_design", mode === "pro" ? "pro" : "original"); } catch (_) {}
+  const alt = (mode === "alternate" || mode === "original");
+  if (alt) root.removeAttribute("data-design");
+  else root.setAttribute("data-design", "pro");
+  try { localStorage.setItem("in_design", alt ? "alternate" : "pro"); } catch (_) {}
 }
-// Apply the saved choice immediately at script parse, before any view
-// renders, so the feed never flashes the other design.
-try {
-  if (localStorage.getItem("in_design") === "pro") {
-    document.documentElement.setAttribute("data-design", "pro");
-  }
-} catch (_) { /* storage blocked — original design */ }
 window.applyDesign = applyDesign;
 
 // Close on overlay click, but ONLY when the press started on the overlay

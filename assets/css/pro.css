@@ -1,201 +1,406 @@
 /* =====================================================================
-   Integrally — pro.css  ("Professional" design preview: the Ledger skin)
+   Integrally — pro.css  (the "Professional" / Ledger skin — DEFAULT)
 
    EVERY rule in this file is scoped under html[data-design="pro"].
-   With the attribute absent the file is inert and the site renders the
-   original design untouched — that is the whole rollback story.
+   The attribute is applied before first paint by the inline script in
+   app.html's <head>; choosing "Alternate" in Settings → Appearance
+   removes it, restoring the previous design byte-for-byte.
 
-   Scope: the FEED PAGE content only (.feed-grid and its children).
-   The nav/shell and all other pages stay original in both modes.
+   Direction ("Ledger"): Integrally quantifies careers, so the interface
+   reads like an instrument — flat panels, hairline rules, squared
+   geometry (6px surfaces / 4px controls), squared avatars, one deep
+   desaturated teal for all accent work, underline tabs, uppercase
+   micro-labels, tabular numerals on every number.
 
-   Direction ("Ledger"): Integrally quantifies careers, so the
-   professional skin reads like an instrument, not a social toy —
-   flat white panels, hairline rules, 6px squared geometry, squared
-   avatars, one deep desaturated teal doing all accent work, underline
-   tabs, uppercase micro-labels, and tabular numerals on every number.
-   Signature element: the career score in the identity rail, set like
-   an index quote.
-
-   Toggled from Settings → Appearance ("Design"), persisted in
-   localStorage("in_design"), applied by applyDesign() in shell.js.
+   File layout: palette → generated geometry layer (from
+   tools/gen_pro_geometry.js) → opinionated layer. Later sections win
+   ties on purpose.
    ===================================================================== */
 
-/* ---- palette: cool slate + one deep teal (light theme only — the
-   :not() guard keeps these from clobbering the dark-theme variable
-   block in app.css, which shares the same specificity and loads
-   earlier). Overriding --in-teal-bright to the same deep teal is
-   deliberate: it collapses every accent→bright gradient in scope to a
-   flat field with zero markup changes. ---- */
+/* ---- palette (light — the :not() guard keeps the dark-theme variable
+   block in app.css authoritative for dark neutrals). --in-teal-bright
+   is pinned to the accent on purpose: it collapses every accent→bright
+   gradient in app.css to a flat field with zero markup changes. ---- */
 :root[data-design="pro"]:not([data-theme="dark"]) {
   --in-ink:#101828; --in-ink-soft:#364152; --in-muted:#697586;
   --in-line:#e3e8ef; --in-bg:#f8fafc; --in-card:#ffffff;
   --in-accent:#0f766e; --in-accent-d:#134e4a; --in-teal-bright:#0f766e;
 }
-/* Dark theme keeps its own neutrals from app.css; only calm the accent
-   trio down from the bright mint and flatten gradients the same way. */
 :root[data-design="pro"][data-theme="dark"] {
   --in-accent:#2aa79b; --in-accent-d:#1f8479; --in-teal-bright:#2aa79b;
 }
 
-/* ---- feed-wide type discipline ---- */
-html[data-design="pro"] .feed-grid {
-  font-variant-numeric: tabular-nums;   /* every count/score aligns */
-  gap: 28px;
-}
+/* Tabular numerals everywhere — counts, scores, dates, pay. */
+html[data-design="pro"] body { font-variant-numeric: tabular-nums; }
+
+/* ---- GENERATED GEOMETRY LAYER — from tools/gen_pro_geometry.js.
+   Radius scale: pills/inputs/buttons → 4px; cards/panels/menus → 6px;
+   circles (avatars, badges) → 6px squares. Regenerate after adding
+   new radii to app.css. ---- */
+
+html[data-design="pro"] .in-dropdown,
+html[data-design="pro"] .in-announce,
+html[data-design="pro"] .in-strength,
+html[data-design="pro"] .in-str-next,
+html[data-design="pro"] .in-phead,
+html[data-design="pro"] .in-bio-box,
+html[data-design="pro"] .in-phead-dropdown,
+html[data-design="pro"] .in-card2,
+html[data-design="pro"] .in-endo-badge,
+html[data-design="pro"] .in-score-badge,
+html[data-design="pro"] .score-compare,
+html[data-design="pro"] .job-ta-menu,
+html[data-design="pro"] .score-rm-next,
+html[data-design="pro"] .sh-stat,
+html[data-design="pro"] .sh-row,
+html[data-design="pro"] .score-locked,
+html[data-design="pro"] .bd-placeholder-note,
+html[data-design="pro"] .bd-factor,
+html[data-design="pro"] .in-set-section,
+html[data-design="pro"] .in-modal,
+html[data-design="pro"] .in-resume-file,
+html[data-design="pro"] .in-resume-empty,
+html[data-design="pro"] .bulk-row,
+html[data-design="pro"] .in-composer .rt-editor,
+html[data-design="pro"] .comp-preview img,
+html[data-design="pro"] .post-avatar.company,
+html[data-design="pro"] .post-media,
+html[data-design="pro"] .post-milestone,
+html[data-design="pro"] .post-milestone .ms-icon,
+html[data-design="pro"] .post-cert,
+html[data-design="pro"] .cert-icon,
+html[data-design="pro"] .in-admin-stat,
+html[data-design="pro"] .post-link,
+html[data-design="pro"] .comp-link,
+html[data-design="pro"] .job-logo,
+html[data-design="pro"] .job-logo.lg,
+html[data-design="pro"] .co-info,
+html[data-design="pro"] .job-actions-menu,
+html[data-design="pro"] .connect-ava.company,
+html[data-design="pro"] .avatar-pick-preview.square,
+html[data-design="pro"] .rt-editor,
+html[data-design="pro"] .rt-color-menu,
+html[data-design="pro"] .emp-results,
+html[data-design="pro"] .in-notif-badge,
+html[data-design="pro"] .in-notif-dropdown,
+html[data-design="pro"] .in-notif-ava.company,
+html[data-design="pro"] .in-navsearch,
+html[data-design="pro"] .pc-body,
+html[data-design="pro"] .landing-hero,
+html[data-design="pro"] .landing-feature,
+html[data-design="pro"] .landing-feature-icon,
+html[data-design="pro"] .landing-step,
+html[data-design="pro"] .landing-coband,
+html[data-design="pro"] .in-msgs,
+html[data-design="pro"] .in-msgs-unread,
+html[data-design="pro"] .in-msgs-menu,
+html[data-design="pro"] .ap-channel,
+html[data-design="pro"] .ja-score,
+html[data-design="pro"] .ja-detail-score,
+html[data-design="pro"] .ja-detail-score-num,
+html[data-design="pro"] .in-toast,
+html[data-design="pro"] .cap-badge,
+html[data-design="pro"] .cap-upsell,
+html[data-design="pro"] .in-theme-opt,
+html[data-design="pro"] .ap-contact,
+html[data-design="pro"] .ja-contact,
+html[data-design="pro"] .idcard,
+html[data-design="pro"] .idcard-score-cta,
+html[data-design="pro"] .railcard,
+html[data-design="pro"] .rail-ava.company,
+html[data-design="pro"] .feed-grid .in-post-item,
+html[data-design="pro"] .post-menu,
+html[data-design="pro"] .rep-detail,
+html[data-design="pro"] .idcard-saved,
+html[data-design="pro"] .sort-menu { border-radius:6px; }
+
+html[data-design="pro"] .in-mark,
+html[data-design="pro"] .in-nav-links button,
+html[data-design="pro"] .in-profile-trigger,
+html[data-design="pro"] .in-dropdown button,
+html[data-design="pro"] .in-authbtn,
+html[data-design="pro"] .in-auth-form input,
+html[data-design="pro"] .in-str-tier,
+html[data-design="pro"] .in-str-go,
+html[data-design="pro"] .in-str-scoretag,
+html[data-design="pro"] .in-str-row-go,
+html[data-design="pro"] .in-avatar-pct,
+html[data-design="pro"] .in-social-btn,
+html[data-design="pro"] .in-bio-edit,
+html[data-design="pro"] .in-phead-menu,
+html[data-design="pro"] .in-phead-dropdown button,
+html[data-design="pro"] .in-card2 h2 .add,
+html[data-design="pro"] .in-chip,
+html[data-design="pro"] .in-endo-see,
+html[data-design="pro"] .in-endo-group-count,
+html[data-design="pro"] .in-ai-on,
+html[data-design="pro"] .in-ai-off,
+html[data-design="pro"] .in-ai-pill,
+html[data-design="pro"] #ai-custom,
+html[data-design="pro"] .score-hide-toggle,
+html[data-design="pro"] .score-expand,
+html[data-design="pro"] .mini-row,
+html[data-design="pro"] .score-compare-badge,
+html[data-design="pro"] .sh-row-badge,
+html[data-design="pro"] .in-back-btn,
+html[data-design="pro"] .in-followrow,
+html[data-design="pro"] .in-followrow-tag,
+html[data-design="pro"] .in-follow-btn,
+html[data-design="pro"] .in-admin-btn,
+html[data-design="pro"] .in-set-nav button,
+html[data-design="pro"] .in-set-section input,
+html[data-design="pro"] .in-set-section select,
+html[data-design="pro"] .in-soon-pill,
+html[data-design="pro"] .in-modal input,
+html[data-design="pro"] .in-modal textarea,
+html[data-design="pro"] .in-modal select,
+html[data-design="pro"] .in-resume-note,
+html[data-design="pro"] .in-btn,
+html[data-design="pro"] .bulk-row input,
+html[data-design="pro"] .bulk-addrow,
+html[data-design="pro"] .bulk-skill-input input,
+html[data-design="pro"] .comp-draftbar,
+html[data-design="pro"] .comp-linkinput input,
+html[data-design="pro"] .comp-emoji,
+html[data-design="pro"] .comp-actions select,
+html[data-design="pro"] .comp-imgbtn,
+html[data-design="pro"] .comp-preview button,
+html[data-design="pro"] .in-feedtabs button,
+html[data-design="pro"] .post-del,
+html[data-design="pro"] .img-lightbox img,
+html[data-design="pro"] .in-admin-toolbar input,
+html[data-design="pro"] .in-admin-toolbar select,
+html[data-design="pro"] .in-admin-badge,
+html[data-design="pro"] .in-tab-badge,
+html[data-design="pro"] .in-report-chip,
+html[data-design="pro"] .in-report-status,
+html[data-design="pro"] .job-row:hover,
+html[data-design="pro"] .job-tag,
+html[data-design="pro"] .co-applicant-pill,
+html[data-design="pro"] .co-edit-corner,
+html[data-design="pro"] .jf-input,
+html[data-design="pro"] .job-actions-btn,
+html[data-design="pro"] .job-actions-menu button,
+html[data-design="pro"] .connect-row:hover,
+html[data-design="pro"] .emp-result,
+html[data-design="pro"] .emp-result-logo,
+html[data-design="pro"] .emp-linked-tag,
+html[data-design="pro"] .emp-pill,
+html[data-design="pro"] .in-notif-trigger,
+html[data-design="pro"] .in-searchbar-input,
+html[data-design="pro"] .in-searchbar-go,
+html[data-design="pro"] .in-searchbar-close,
+html[data-design="pro"] .in-search-tab,
+html[data-design="pro"] .post-act,
+html[data-design="pro"] .pc-ava.company,
+html[data-design="pro"] .pc-input,
+html[data-design="pro"] .pc-hide,
+html[data-design="pro"] .in-msg-btn,
+html[data-design="pro"] .in-msg-compose,
+html[data-design="pro"] .in-msgs-composer textarea,
+html[data-design="pro"] .in-msgs-menu-btn,
+html[data-design="pro"] .in-msgs-menu-item,
+html[data-design="pro"] .ap-resume-pop-inner,
+html[data-design="pro"] .ja-rel-badge,
+html[data-design="pro"] .ja-rel-tag,
+html[data-design="pro"] .cap-plus-tag,
+html[data-design="pro"] .in-audit-action,
+html[data-design="pro"] .in-theme-swatch,
+html[data-design="pro"] .idcard-stat.tappable,
+html[data-design="pro"] .idcard-score-chip,
+html[data-design="pro"] .rail-follow,
+html[data-design="pro"] .feed-grid .in-feedtabs,
+html[data-design="pro"] .feed-grid .in-feedtabs button,
+html[data-design="pro"] .post-act,
+html[data-design="pro"] .post-menu-btn,
+html[data-design="pro"] .post-menu-item,
+html[data-design="pro"] .rep-reason,
+html[data-design="pro"] .sort-btn,
+html[data-design="pro"] .sort-menu-item { border-radius:4px; }
+
+html[data-design="pro"] .in-profile-ava,
+html[data-design="pro"] .in-avatar,
+html[data-design="pro"] .in-social-logo,
+html[data-design="pro"] .in-endo-see-ico,
+html[data-design="pro"] .score-rm-next-badge,
+html[data-design="pro"] .in-followrow-av,
+html[data-design="pro"] .comp-avatar,
+html[data-design="pro"] .post-avatar,
+html[data-design="pro"] .img-lightbox-x,
+html[data-design="pro"] .comp-link-x,
+html[data-design="pro"] .connect-ava,
+html[data-design="pro"] .in-notif-ava,
+html[data-design="pro"] .pc-ava,
+html[data-design="pro"] .landing-step-num,
+html[data-design="pro"] .ap-score,
+html[data-design="pro"] .in-blk-avatar,
+html[data-design="pro"] .idcard-ava,
+html[data-design="pro"] .idcard-score-val,
+html[data-design="pro"] .rail-ava { border-radius:6px; }
+
+html[data-design="pro"] .in-msg-bubble { border-radius:6px 6px 6px 2px; }
+html[data-design="pro"] .in-msg-bubble-row.mine .in-msg-bubble { border-radius:6px 6px 2px 6px; }
 
 /* =====================================================================
-   IDENTITY CARD — the signature. Gradient cover out; a 3px accent
-   rule on top; left-aligned; squared avatar; score set like an index
-   quote.
+   OPINIONATED LAYER — site-wide Ledger treatment on top of the
+   generated geometry. Ordered shell → primitives → surfaces.
    ===================================================================== */
-html[data-design="pro"] .feed-grid .idcard {
-  border-radius:6px;
-  border-top:3px solid var(--in-accent);
-}
-html[data-design="pro"] .feed-grid .idcard-cover { display:none; }
-html[data-design="pro"] .feed-grid .idcard-body {
-  text-align:left;
-  padding:16px 16px 14px;
-}
-html[data-design="pro"] .feed-grid .idcard-ava {
-  width:52px; height:52px;
-  border-radius:6px;
-  margin:0 0 12px;
-  border:none;
-  font-size:22px;
-}
-html[data-design="pro"] .feed-grid .idcard-name {
-  font-size:15px; letter-spacing:-0.01em;
-}
-html[data-design="pro"] .feed-grid .idcard-loc { margin-top:2px; }
-html[data-design="pro"] .feed-grid .idcard-stats {
-  margin-top:12px; padding-top:10px; gap:0;
-}
-html[data-design="pro"] .feed-grid .idcard-stat { text-align:left; padding-right:12px; }
-html[data-design="pro"] .feed-grid .idcard-stat + .idcard-stat {
-  border-left:1px solid var(--in-line); padding-left:12px;
-}
-html[data-design="pro"] .feed-grid .idcard-stat.tappable { border-radius:4px; padding-top:2px; padding-bottom:2px; }
-html[data-design="pro"] .feed-grid .idcard-stat b { font-size:16px; letter-spacing:-0.01em; }
-html[data-design="pro"] .feed-grid .idcard-stat span {
-  font-size:10px; letter-spacing:.7px; margin-top:1px; display:block;
-}
 
-/* Score chip → index quote: flat full-width block, big tabular numeral,
-   the target name as an uppercase micro-label beneath it. */
-html[data-design="pro"] .feed-grid .idcard-score-chip {
-  display:flex; width:100%; align-items:baseline; gap:10px;
-  background:var(--in-bg);
-  border:1px solid var(--in-line); border-left:3px solid var(--in-accent);
-  border-radius:4px;
-  padding:10px 12px;
-  text-align:left;
+/* ---- nav / shell ---- */
+html[data-design="pro"] .in-mark {
+  background:var(--in-accent); color:#fff; border-radius:6px;
 }
-html[data-design="pro"] .feed-grid .idcard-score-chip:hover { border-color:var(--in-accent); }
-html[data-design="pro"] .feed-grid .idcard-score-val {
-  width:auto; height:auto; border-radius:0;
-  background:none;
-  color:var(--in-ink);
-  font-size:26px; font-weight:700; letter-spacing:-0.02em; line-height:1;
-}
-html[data-design="pro"] .feed-grid .idcard-score-chip > span:last-child {
-  font-size:10.5px; font-weight:700; letter-spacing:.7px; text-transform:uppercase;
-  color:var(--in-muted);
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;
-}
-html[data-design="pro"] .feed-grid .idcard-score-cta {
-  border-radius:4px; border-style:solid;
-}
-html[data-design="pro"] .feed-grid .idcard-saved { border-radius:4px; }
+html[data-design="pro"] .in-profile-trigger { border-radius:6px; }
+html[data-design="pro"] .in-notif-trigger { border-radius:6px; }
+html[data-design="pro"] .in-dropdown { box-shadow:0 6px 20px rgba(16,24,40,.10); }
+html[data-design="pro"] .in-announce { background:var(--in-accent-d); }
 
-/* =====================================================================
-   RAIL CARDS — flat panels, ruled rows, squared avatars, text buttons.
-   ===================================================================== */
-html[data-design="pro"] .feed-grid .railcard {
-  border-radius:6px; padding:14px 16px 10px;
+/* ---- section headers: ledger micro-labels ---- */
+html[data-design="pro"] .in-card2 h2,
+html[data-design="pro"] .co-feed-h {
+  font-size:12px; letter-spacing:.8px; color:var(--in-muted);
 }
-html[data-design="pro"] .feed-grid .railcard h3 {
+html[data-design="pro"] .railcard h3 {
   font-size:10.5px; letter-spacing:.8px; color:var(--in-muted);
-  padding-bottom:9px; margin-bottom:4px;
-  border-bottom:1px solid var(--in-line);
+  padding-bottom:9px; margin-bottom:4px; border-bottom:1px solid var(--in-line);
 }
-html[data-design="pro"] .feed-grid .rail-ava { border-radius:6px; width:36px; height:36px; font-size:14px; }
-html[data-design="pro"] .feed-grid .rail-ava.company { border-radius:6px; }
-html[data-design="pro"] .feed-grid .rail-follow { border-radius:4px; }
-html[data-design="pro"] .feed-grid .rail-follow.done { border-style:dashed; }
 
-/* =====================================================================
-   COMPOSER — flat panel, square editor field.
-   ===================================================================== */
-html[data-design="pro"] .feed-grid .in-composer,
-html[data-design="pro"] .feed-grid .in-card2 {
-  border-radius:6px;
-}
-html[data-design="pro"] .feed-grid .in-composer .rt-editor { border-radius:4px; }
-
-/* =====================================================================
-   FEED TABS — pill segment → underline tabs on a baseline rule.
-   Inset shadow (not border) for the active bar avoids layout shift.
-   ===================================================================== */
-html[data-design="pro"] .feed-grid .in-feedtabs {
+/* ---- tabs: pill segments → underline tabs, everywhere ---- */
+html[data-design="pro"] .in-feedtabs {
   background:none; border:none; border-radius:0;
   border-bottom:1px solid var(--in-line);
-  padding:0; gap:22px; width:auto; margin:0 0 16px;
+  padding:0; gap:22px; width:auto; margin:2px 0 16px;
 }
-html[data-design="pro"] .feed-grid .in-feedtabs button {
-  border-radius:0; padding:9px 2px 11px;
-  font-size:13.5px; letter-spacing:.01em;
+html[data-design="pro"] .in-feedtabs button {
+  border-radius:0; padding:9px 2px 11px; font-size:13.5px; letter-spacing:.01em;
 }
-html[data-design="pro"] .feed-grid .in-feedtabs button:hover {
-  background:none; color:var(--in-ink);
-}
-html[data-design="pro"] .feed-grid .in-feedtabs button.active {
+html[data-design="pro"] .in-feedtabs button:hover { background:none; color:var(--in-ink); }
+html[data-design="pro"] .in-feedtabs button.active {
   background:none; border:none; color:var(--in-ink);
   box-shadow:inset 0 -2px 0 var(--in-accent);
 }
+html[data-design="pro"] .in-search-tab { border-radius:4px; }
 
-/* Sort/Time dropdown triggers + menus: squared, quieter. */
-html[data-design="pro"] .feed-grid .sort-btn { border-radius:4px; }
-html[data-design="pro"] .feed-grid .list-controls .sort-btn { font-size:12.5px; }
-
-/* =====================================================================
-   POSTS — floating shadow cards → flat ruled panels. Hover talks with
-   the border, not elevation.
-   ===================================================================== */
-html[data-design="pro"] .feed-grid .in-post-item {
-  border-radius:6px;
-  margin-bottom:10px;
-  box-shadow:none;
-  transition:border-color .12s ease;
+/* ---- avatars: squared identity, ledger-flat company marks ---- */
+html[data-design="pro"] .post-avatar.company,
+html[data-design="pro"] .rail-ava.company,
+html[data-design="pro"] .connect-ava.company,
+html[data-design="pro"] .in-notif-ava.company,
+html[data-design="pro"] .pc-ava.company,
+html[data-design="pro"] .job-logo,
+html[data-design="pro"] .emp-result-logo,
+html[data-design="pro"] .avatar-pick-preview.square {
+  background:var(--in-accent-d); border-radius:6px;
 }
-html[data-design="pro"] .feed-grid .in-post-item:hover {
-  box-shadow:none;
-  border-color:#98a2b3;
-}
-[data-theme="dark"][data-design="pro"] .feed-grid .in-post-item:hover { border-color:#4a5f6b; }
+html[data-design="pro"] .in-social-logo { border-radius:4px; }
+html[data-design="pro"] .in-social-btn.linkedin .in-social-logo { background:#0a66c2; }
+html[data-design="pro"] .in-social-btn.twitter .in-social-logo { background:#101828; }
 
-html[data-design="pro"] .feed-grid .post-avatar { border-radius:6px; }
-html[data-design="pro"] .feed-grid .post-avatar.company { border-radius:6px; }
-html[data-design="pro"] .feed-grid .post-name { letter-spacing:-0.01em; }
-html[data-design="pro"] .feed-grid .post-when { font-size:11.5px; }
-html[data-design="pro"] .feed-grid .post-tag {
+/* ---- score badges: the index language, site-wide ---- */
+html[data-design="pro"] .in-score-badge,
+html[data-design="pro"] .score-compare-badge,
+html[data-design="pro"] .score-rm-next-badge,
+html[data-design="pro"] .sh-row-badge,
+html[data-design="pro"] .ap-score,
+html[data-design="pro"] .ja-rel-badge {
+  background:var(--in-accent); letter-spacing:-0.02em;
+}
+html[data-design="pro"] .ja-score,
+html[data-design="pro"] .ja-detail-score-num { background:var(--in-accent-d); }
+html[data-design="pro"] .sh-stat:hover { box-shadow:none; border-color:var(--in-accent); }
+
+/* ---- milestone posts: gradients → flat tint washes, hue kept ---- */
+html[data-design="pro"] .post-milestone.cert, html[data-design="pro"] .post-cert { background:#f0fdf9; }
+html[data-design="pro"] .post-milestone.job { background:#eef2ff; }
+html[data-design="pro"] .post-milestone.edu { background:#f5f0fe; }
+html[data-design="pro"] .post-milestone.job .ms-icon { background:#3b53c4; }
+html[data-design="pro"] .post-milestone.edu .ms-icon { background:#7c3aed; }
+[data-theme="dark"][data-design="pro"] .post-milestone.cert,
+[data-theme="dark"][data-design="pro"] .post-cert { background:rgba(42,167,155,.10); }
+[data-theme="dark"][data-design="pro"] .post-milestone.job { background:rgba(109,134,232,.10); }
+[data-theme="dark"][data-design="pro"] .post-milestone.edu { background:rgba(162,116,240,.10); }
+
+/* ---- profile: flat accent strength bars, squared avatar frame ---- */
+html[data-design="pro"] .in-bio-box::before { background:var(--in-accent); }
+html[data-design="pro"] .in-str-fill,
+html[data-design="pro"] .in-avatar-strfill { background:var(--in-accent); }
+html[data-design="pro"] .in-ai-display,
+html[data-design="pro"] .in-ai-hero,
+html[data-design="pro"] .score-compare { background:var(--in-bg); }
+html[data-design="pro"] .co-dash-head { background:none; }
+
+/* ---- posts (all surfaces) ---- */
+html[data-design="pro"] .post-name { letter-spacing:-0.01em; }
+html[data-design="pro"] .post-when { font-size:11.5px; }
+html[data-design="pro"] .post-tag {
   border-radius:3px; text-transform:uppercase; letter-spacing:.5px; font-size:10px;
 }
-html[data-design="pro"] .feed-grid .post-media { border-radius:4px; }
-
-/* Action pills → quiet text-and-count actions with a hairline above. */
-html[data-design="pro"] .feed-grid .post-actions {
-  border-top:1px solid var(--in-line);
-  margin-top:12px; padding-top:6px;
+html[data-design="pro"] .post-actions {
+  border-top:1px solid var(--in-line); margin-top:12px; padding-top:6px;
 }
-html[data-design="pro"] .feed-grid .post-act {
-  border-radius:4px; padding:6px 10px; font-size:12.5px;
+html[data-design="pro"] .post-act { padding:6px 10px; font-size:12.5px; }
+
+/* ---- feed page (layout signatures from the preview, unchanged) ---- */
+html[data-design="pro"] .feed-grid { font-variant-numeric:tabular-nums; gap:28px; }
+html[data-design="pro"] .feed-grid .in-post-item {
+  margin-bottom:10px; box-shadow:none; transition:border-color .12s ease;
 }
-html[data-design="pro"] .feed-grid .post-menu-btn { border-radius:4px; }
+html[data-design="pro"] .feed-grid .in-post-item:hover { box-shadow:none; border-color:#98a2b3; }
+[data-theme="dark"][data-design="pro"] .feed-grid .in-post-item:hover { border-color:#4a5f6b; }
 
-/* Load-more + generic ghost buttons inside the feed: squared. */
-html[data-design="pro"] .feed-grid .feed-more,
-html[data-design="pro"] .feed-grid .in-btn { border-radius:4px; }
+html[data-design="pro"] .idcard { border-top:3px solid var(--in-accent); }
+html[data-design="pro"] .idcard-cover { display:none; }
+html[data-design="pro"] .idcard-body { text-align:left; padding:16px 16px 14px; }
+html[data-design="pro"] .idcard-ava {
+  width:52px; height:52px; margin:0 0 12px; border:none; font-size:22px;
+}
+html[data-design="pro"] .idcard-name { font-size:15px; letter-spacing:-0.01em; }
+html[data-design="pro"] .idcard-loc { margin-top:2px; }
+html[data-design="pro"] .idcard-stats { margin-top:12px; padding-top:10px; gap:0; }
+html[data-design="pro"] .idcard-stat { text-align:left; padding-right:12px; }
+html[data-design="pro"] .idcard-stat + .idcard-stat {
+  border-left:1px solid var(--in-line); padding-left:12px;
+}
+html[data-design="pro"] .idcard-stat.tappable { border-radius:4px; padding-top:2px; padding-bottom:2px; }
+html[data-design="pro"] .idcard-stat b { font-size:16px; letter-spacing:-0.01em; }
+html[data-design="pro"] .idcard-stat span { font-size:10px; letter-spacing:.7px; margin-top:1px; display:block; }
 
-/* Comments area inherits the ruled language. */
-html[data-design="pro"] .feed-grid .post-comments { border-radius:0; }
+html[data-design="pro"] .idcard-score-chip {
+  display:flex; width:100%; align-items:baseline; gap:10px;
+  background:var(--in-bg);
+  border:1px solid var(--in-line); border-left:3px solid var(--in-accent);
+  border-radius:4px; padding:10px 12px; text-align:left;
+}
+html[data-design="pro"] .idcard-score-chip:hover { border-color:var(--in-accent); }
+html[data-design="pro"] .idcard-score-val {
+  width:auto; height:auto; border-radius:0; background:none; color:var(--in-ink);
+  font-size:26px; font-weight:700; letter-spacing:-0.02em; line-height:1;
+}
+html[data-design="pro"] .idcard-score-chip > span:last-child {
+  font-size:10.5px; font-weight:700; letter-spacing:.7px; text-transform:uppercase;
+  color:var(--in-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;
+}
+html[data-design="pro"] .idcard-score-cta { border-style:solid; }
+html[data-design="pro"] .rail-ava { width:36px; height:36px; font-size:14px; }
+html[data-design="pro"] .rail-follow.done { border-style:dashed; }
+
+/* ---- admin: ledger tables ---- */
+html[data-design="pro"] .in-admin-table th {
+  font-size:10.5px; text-transform:uppercase; letter-spacing:.7px; color:var(--in-muted);
+}
+
+/* ---- messaging: squared panes; bubble radii handled in the generated
+   special-cases; own-bubble stays accent from the palette ---- */
+html[data-design="pro"] .in-msgs-menu { box-shadow:0 6px 20px rgba(16,24,40,.10); }
+
+/* ---- landing (signed-out): calm the hero to a flat ink panel; the
+   engineering-grid overlay stays — it IS the ledger ---- */
+html[data-design="pro"] .landing-hero { background:#0f1c26; }
+html[data-design="pro"] .landing-step-num { background:var(--in-accent); }
+html[data-design="pro"] .landing-coband { background:var(--in-bg); }
+
+/* ---- focus rings re-tinted to the pro accent ---- */
+html[data-design="pro"] .in-auth-form input:focus,
+html[data-design="pro"] .in-theme-opt.active {
+  box-shadow:0 0 0 3px rgba(15,118,110,.14);
+}
