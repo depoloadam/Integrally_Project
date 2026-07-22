@@ -255,6 +255,27 @@ html[data-design="pro"] .in-notif-trigger { border-radius:6px; }
 html[data-design="pro"] .in-dropdown { box-shadow:0 6px 20px rgba(16,24,40,.10); }
 html[data-design="pro"] .in-announce { background:var(--in-accent-d); }
 
+/* ---- "See endorsements": a section action, not another skill chip.
+   Left accent rule (the ledger motif), left-aligned label, hollow
+   squared check — visually distinct from the .in-chip skills below it. ---- */
+html[data-design="pro"] .in-endo-see {
+  justify-content:flex-start;
+  background:var(--in-card);
+  border:1px solid var(--in-line); border-left:3px solid var(--in-accent);
+  border-radius:4px; padding:7px 12px;
+  color:var(--in-ink-soft);
+  text-transform:uppercase; letter-spacing:.6px; font-size:11px;
+}
+html[data-design="pro"] .in-endo-see:hover {
+  background:var(--in-bg); border-color:var(--in-line); border-left-color:var(--in-accent);
+  color:var(--in-accent);
+}
+html[data-design="pro"] .in-endo-see-ico {
+  border-radius:3px; background:none;
+  border:1.5px solid var(--in-accent); color:var(--in-accent);
+  font-size:9px; width:15px; height:15px;
+}
+
 /* ---- section headers: ledger micro-labels ---- */
 html[data-design="pro"] .in-card2 h2,
 html[data-design="pro"] .co-feed-h {
