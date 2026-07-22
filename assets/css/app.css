@@ -366,6 +366,32 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 .in-chip { background:var(--in-bg); border:1px solid var(--in-line); border-radius:20px; padding:6px 12px; font-size:13px; display:flex; align-items:center; gap:8px; }
 .in-chip .x { background:none; border:none; color:var(--in-muted); cursor:pointer; font-size:14px; padding:0; }
 .in-chip .x:hover { color:var(--in-error); }
+
+/* ---- Skill endorsements ("vouching") ------------------------------ */
+/* One-line explainer above the skill chips, shown only to viewers who
+   can vouch (mutual follow). */
+.in-card-hint { margin:0 0 12px; font-size:12.5px; line-height:1.5; color:var(--in-muted); }
+/* Count badge that rides on a skill chip. Hidden (via [hidden]) until
+   the skill has at least one endorsement. */
+.in-endo-badge { display:inline-flex; align-items:center; gap:3px; font-size:11px; font-weight:700;
+  color:var(--in-accent); background:color-mix(in srgb, var(--in-accent) 12%, transparent);
+  border-radius:10px; padding:1px 7px; line-height:1.6; }
+.in-endo-badge[hidden] { display:none; }
+.in-endo-tick { font-size:10px; }
+/* Endorsable chips are interactive toggles. */
+.in-skill-chip.endorsable { cursor:pointer; transition:border-color .12s ease, background .12s ease; }
+.in-skill-chip.endorsable:hover { border-color:var(--in-accent); }
+.in-skill-chip.endorsable:focus-visible { outline:2px solid var(--in-accent); outline-offset:2px; }
+/* A "+" cue on endorsable chips the viewer hasn't vouched yet, so the
+   chip reads as actionable ("add your vouch") before the hint is read.
+   Drops away once endorsed (the filled badge then carries the meaning). */
+.in-skill-chip.endorsable:not(.endorsed) .in-skill-name::before {
+  content:"+"; color:var(--in-accent); font-weight:800; margin-right:5px; }
+/* A skill the current viewer has personally endorsed. */
+.in-skill-chip.endorsed { border-color:var(--in-accent);
+  background:color-mix(in srgb, var(--in-accent) 8%, var(--in-bg)); }
+.in-skill-chip.endorsed .in-endo-badge {
+  color:#fff; background:var(--in-accent); }
 /* --- AI Skillset --- */
 .in-ai-spark { color:var(--in-accent); }
 .in-ai-box .in-ai-blurb { font-size:13px; color:var(--in-muted); line-height:1.5; margin:6px 0 12px; }

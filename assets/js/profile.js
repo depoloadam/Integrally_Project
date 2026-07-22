@@ -2110,8 +2110,12 @@ async function renderPublicProfile(uuid) {
     head.querySelector("#admin-edit").onclick = () => adminEditProfile(p, headline, uuid);
   }
 
-  // Skills in the left column (mirrors the owner layout).
-  roChips(leftCol, "Skills", skills.data?.data, s => `${esc(s.name)}`);
+  // Skills in the left column (mirrors the owner layout), now with
+  // endorsement counts and — when viewer & target mutually follow — a
+  // tappable "vouch" control. canEndorse is a UI hint from
+  // follow/status.php's mutual flag; the server re-checks every write.
+  const canEndorse = !!(ME && fstat && fstat.data?.data?.mutual);
+  renderEndorsableSkills(leftCol, skills.data?.data, uuid, canEndorse);
 
   // bio — same distinct box as the owner view, read-only here.
   rightCol.appendChild(renderBioBox(attrs, false));
@@ -2146,6 +2150,83 @@ function roChips(col, title, items, label) {
   const body = card.querySelector(".body");
   if (!items || !items.length) { body.appendChild(el(`<div class="in-empty">Nothing listed.</div>`)); return; }
   items.forEach(it => body.appendChild(el(`<span class="in-chip">${label(it)}</span>`)));
+}
+
+// Skills card for a PUBLIC profile with endorsement ("vouch") support.
+// Each chip shows the skill name and, when endorsed by anyone, a count
+// badge. When canEndorse is true (viewer and target mutually follow, per
+// follow/status.php), the whole chip is a toggle button that vouches /
+// un-vouches; the server re-validates every write, so this is only an
+// affordance. Own-profile and non-mutual viewers get read-only chips
+// that still display counts.
+function renderEndorsableSkills(col, items, targetUuid, canEndorse) {
+  const card = el(`<div class="in-card2"><h2>Skills</h2><div class="in-chips body"></div></div>`);
+  col.appendChild(card);
+  const body = card.querySelector(".body");
+  if (!items || !items.length) {
+    body.appendChild(el(`<div class="in-empty">Nothing listed.</div>`));
+    return;
+  }
+
+  // When the viewer is able to vouch (mutual follow), it isn't obvious
+  // the chips are tappable — spell it out with a one-line hint above the
+  // chips. Non-mutual / own-profile viewers don't see this (nothing to act on).
+  if (canEndorse) {
+    card.querySelector(".body").insertAdjacentElement("beforebegin", el(
+      `<p class="in-card-hint">Tap a skill to vouch that they have it. Your endorsement is visible to others and shown as a count on the skill.</p>`
+    ));
+  }
+
+  items.forEach(s => {
+    const skillId = s.id;
+    const chip = el(
+      `<span class="in-chip in-skill-chip${canEndorse ? " endorsable" : ""}${s.you_endorsed ? " endorsed" : ""}"
+             ${canEndorse ? 'role="button" tabindex="0"' : ""}>
+         <span class="in-skill-name">${esc(s.name)}</span>
+         <span class="in-endo-badge" data-count="${skillId}" ${(+s.endorsements > 0) ? "" : "hidden"}>
+           <span class="in-endo-tick" aria-hidden="true">✓</span><span class="in-endo-n">${+s.endorsements}</span>
+         </span>
+       </span>`
+    );
+
+    if (canEndorse) {
+      const title = () => chip.classList.contains("endorsed")
+        ? "You vouched for this skill — tap to undo"
+        : "Vouch for this skill";
+      chip.title = title();
+
+      const toggle = async () => {
+        if (chip.dataset.busy === "1") return;      // guard double-taps
+        chip.dataset.busy = "1";
+        const wasEndorsed = chip.classList.contains("endorsed");
+        const r = await api("/profile/endorsements/set.php", "POST", {
+          target_uuid: targetUuid,
+          skill_id: skillId,
+          endorse: !wasEndorsed,
+        });
+        chip.dataset.busy = "0";
+        if (!(r.ok && r.data?.success)) {
+          toast(r.data?.error || "Could not update endorsement.", "err");
+          return;
+        }
+        const n = +r.data.data.endorsements;
+        const nowEndorsed = !!r.data.data.you_endorsed;
+        chip.classList.toggle("endorsed", nowEndorsed);
+        const badge = chip.querySelector(".in-endo-badge");
+        badge.querySelector(".in-endo-n").textContent = n;
+        badge.hidden = n <= 0;
+        chip.title = title();
+        toast(nowEndorsed ? "Skill endorsed" : "Endorsement removed", "ok");
+      };
+
+      chip.addEventListener("click", toggle);
+      chip.addEventListener("keydown", e => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
+      });
+    }
+
+    body.appendChild(chip);
+  });
 }
 
 // ===================================================================

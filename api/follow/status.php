@@ -45,5 +45,21 @@ $stmt = $pdo->prepare(
      WHERE follower_type = ? AND follower_id = ? AND target_type = ? AND target_id = ? LIMIT 1'
 );
 $stmt->execute([$actor['type'], $actor['id'], $targetType, $targetId]);
+$following = (bool) $stmt->fetch();
 
-Response::success(['following' => (bool) $stmt->fetch()]);
+// Mutual-follow flag: only meaningful for a USER actor viewing a USER
+// target (the endorsement gate). True only when BOTH follow each other.
+// Companies and cross-type views always report false. Additive field —
+// existing callers that read only `following` are unaffected.
+$mutual = false;
+if ($actor['type'] === 'user' && $targetType === 'user' && $following && $actor['id'] !== $targetId) {
+    $back = $pdo->prepare(
+        "SELECT 1 FROM follows
+         WHERE follower_type = 'user' AND follower_id = ?
+           AND target_type = 'user' AND target_id = ? LIMIT 1"
+    );
+    $back->execute([$targetId, $actor['id']]);
+    $mutual = (bool) $back->fetch();
+}
+
+Response::success(['following' => $following, 'mutual' => $mutual]);
