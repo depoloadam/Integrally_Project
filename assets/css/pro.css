@@ -259,25 +259,23 @@ html[data-design="pro"] .in-announce { background:var(--in-accent-d); }
    Left accent rule (the ledger motif), left-aligned label, hollow
    squared check — visually distinct from the .in-chip skills below it. ---- */
 html[data-design="pro"] .in-endo-see {
-  justify-content:flex-start;
-  background:#eef2f6;
-  border:1px solid #d7dfe8; border-left:3px solid var(--in-accent);
+  justify-content:center;
+  background:var(--in-accent);
+  border:1px solid var(--in-accent);
   border-radius:4px; padding:7px 12px;
-  color:var(--in-ink-soft);
+  color:#fff;
   text-transform:uppercase; letter-spacing:.6px; font-size:11px;
 }
 html[data-design="pro"] .in-endo-see:hover {
-  background:#e4eaf0; border-color:#d7dfe8; border-left-color:var(--in-accent);
-  color:var(--in-accent);
+  background:var(--in-accent-d); border-color:var(--in-accent-d);
+  color:#fff;
 }
 html[data-design="pro"] .in-endo-see-ico {
   display:inline-flex; align-items:center; justify-content:center;
   border-radius:3px; background:none;
-  border:1.5px solid var(--in-accent); color:var(--in-accent);
+  border:1.5px solid #fff; color:#fff;
   font-size:10px; font-weight:700; line-height:1; width:16px; height:16px;
 }
-[data-theme="dark"][data-design="pro"] .in-endo-see { background:rgba(255,255,255,.06); border-color:var(--in-line); }
-[data-theme="dark"][data-design="pro"] .in-endo-see:hover { background:rgba(255,255,255,.10); }
 
 /* ---- section headers: ledger micro-labels ---- */
 html[data-design="pro"] .in-card2 h2,
