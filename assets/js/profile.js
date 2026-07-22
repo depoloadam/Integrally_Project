@@ -244,6 +244,19 @@ async function renderProfile() {
   chipSection(leftCol, "Skills", skills.data?.data, s => `
     ${esc(s.name)}`,
     addSkill, s => ({ id:s.id, kind:"skill" }), "skill");
+  // Owner can view who endorsed their skills, same modal as the public
+  // profile. The endpoint allows the owner regardless of follow state.
+  if (p.uuid) {
+    const skillsCard = leftCol.querySelector('[data-section="skill"] h2');
+    if (skillsCard && !skillsCard.querySelector("#endo-see-own")) {
+      const seeBtn = el(`<button class="in-endo-see" id="endo-see-own" title="See who endorsed your skills">See endorsements</button>`);
+      // Sit the "See endorsements" pill before the "+" add button.
+      const addBtn = skillsCard.querySelector(".add");
+      if (addBtn) skillsCard.insertBefore(seeBtn, addBtn);
+      else skillsCard.appendChild(seeBtn);
+      seeBtn.onclick = () => openEndorsementDetail(p.uuid);
+    }
+  }
 
   // AI Skillset box (left column, below Skills). Owner sees it always so
   // they can enable it; visitors see it only once it's enabled + saved.
@@ -2305,9 +2318,11 @@ function roChips(col, title, items, label) {
 // affordance. Own-profile and non-mutual viewers get read-only chips
 // that still display counts.
 function renderEndorsableSkills(col, items, targetUuid, canEndorse) {
-  const card = el(`<div class="in-card2"><h2>Skills</h2><div class="in-chips body"></div></div>`);
+  const card = el(`<div class="in-card2"><h2>Skills${canEndorse ? `<button class="in-endo-see" id="endo-see-btn" title="See who endorsed these skills">See endorsements</button>` : ""}</h2><div class="in-chips body"></div></div>`);
   col.appendChild(card);
   const body = card.querySelector(".body");
+  const seeBtn = card.querySelector("#endo-see-btn");
+  if (seeBtn) seeBtn.onclick = () => openEndorsementDetail(targetUuid);
   if (!items || !items.length) {
     body.appendChild(el(`<div class="in-empty">Nothing listed.</div>`));
     return;
@@ -2371,6 +2386,70 @@ function renderEndorsableSkills(col, items, targetUuid, canEndorse) {
     }
 
     body.appendChild(chip);
+  });
+}
+
+// Modal showing WHO endorsed each of a profile's skills, plus counts.
+// Only reachable when the viewer is a mutual follow (the "See
+// endorsements" button is only rendered then); the server re-enforces
+// the same gate, so this is just the affordance. Endorser rows navigate
+// to that person's profile.
+async function openEndorsementDetail(targetUuid) {
+  openModal(`
+    <h3 class="in-modal-title">Endorsements</h3>
+    <div class="in-endo-detail" id="endo-detail-body">
+      <div class="in-loading" style="padding:20px">Loading…</div>
+    </div>
+    <div class="in-modal-actions"><button class="in-btn ghost" onclick="closeModal()">Close</button></div>
+  `);
+
+  const r = await api("/profile/endorsements/list.php?uuid=" + encodeURIComponent(targetUuid));
+  const body = $("endo-detail-body");
+  if (!body) return; // modal closed while loading
+
+  if (r.data?.code === "not_connected") {
+    body.innerHTML = `<div class="in-empty" style="padding:20px;text-align:center">Endorsement details are visible only to connections.</div>`;
+    return;
+  }
+  if (!r.ok || !r.data?.success) {
+    body.innerHTML = `<div class="in-empty" style="padding:20px;text-align:center">Couldn't load endorsements.</div>`;
+    return;
+  }
+
+  const skills = r.data.data?.skills || [];
+  const total  = r.data.data?.total ?? 0;
+  if (!skills.length) {
+    body.innerHTML = `<div class="in-empty" style="padding:20px;text-align:center">No endorsements yet.</div>`;
+    return;
+  }
+
+  body.innerHTML = "";
+  body.appendChild(el(
+    `<div class="in-endo-total">${total} endorsement${total === 1 ? "" : "s"} across ${skills.length} skill${skills.length === 1 ? "" : "s"}</div>`
+  ));
+
+  skills.forEach(sk => {
+    const group = el(`
+      <div class="in-endo-group">
+        <div class="in-endo-group-head">
+          <span class="in-endo-group-name">${esc(sk.name)}</span>
+          <span class="in-endo-group-count">${sk.count}</span>
+        </div>
+        <div class="in-endo-endorsers"></div>
+      </div>`);
+    const list = group.querySelector(".in-endo-endorsers");
+    (sk.endorsers || []).forEach(person => {
+      const name = person.username || "";
+      const initial = (name || "?").charAt(0).toUpperCase();
+      const row = el(`
+        <button class="in-followrow" type="button">
+          <span class="in-followrow-av">${person.profile_pic ? `<img src="${esc(person.profile_pic)}" alt="">` : esc(initial)}</span>
+          <span class="in-followrow-name">@${esc(name)}</span>
+        </button>`);
+      row.onclick = () => { closeModal(); location.hash = "#user/" + person.uuid; };
+      list.appendChild(row);
+    });
+    body.appendChild(group);
   });
 }
 

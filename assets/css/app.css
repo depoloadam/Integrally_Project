@@ -392,6 +392,24 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
   background:color-mix(in srgb, var(--in-accent) 8%, var(--in-bg)); }
 .in-skill-chip.endorsed .in-endo-badge {
   color:#fff; background:var(--in-accent); }
+/* "See endorsements" link in the skills card header (mutual follows) */
+.in-endo-see { margin-left:auto; background:var(--in-bg); border:1px solid var(--in-line); color:var(--in-accent);
+  font-family:inherit; font-size:11px; font-weight:700; text-transform:none; letter-spacing:0; border-radius:999px;
+  padding:4px 12px; cursor:pointer; }
+.in-endo-see:hover { border-color:var(--in-accent); background:#fff; }
+/* On the OWNER's Skills card the header also carries an absolutely-
+   positioned "+" add button pinned at right:12px. Leave room so the
+   pill doesn't sit under it. */
+.in-card2 h2 #endo-see-own { margin-right:40px; }
+/* Endorsement detail modal */
+.in-endo-detail { max-height:62vh; overflow-y:auto; }
+.in-endo-total { font-size:12.5px; color:var(--in-muted); margin-bottom:14px; }
+.in-endo-group { margin-bottom:16px; }
+.in-endo-group:last-child { margin-bottom:0; }
+.in-endo-group-head { display:flex; align-items:center; gap:8px; margin-bottom:6px; padding-bottom:6px; border-bottom:1px solid var(--in-line); }
+.in-endo-group-name { font-size:14px; font-weight:700; color:var(--in-ink); }
+.in-endo-group-count { margin-left:auto; font-size:11px; font-weight:700; color:#fff; background:var(--in-accent); border-radius:999px; padding:2px 9px; }
+.in-endo-endorsers { display:flex; flex-direction:column; gap:2px; }
 /* --- AI Skillset --- */
 .in-ai-spark { color:var(--in-accent); }
 .in-ai-box .in-ai-blurb { font-size:13px; color:var(--in-muted); line-height:1.5; margin:6px 0 12px; }

@@ -137,4 +137,44 @@ class Endorsements
 
         return $out;
     }
+
+    /**
+     * List the endorsers of each of a target user's skills. Returns
+     *   [skill_id => [ ['uuid'=>, 'username'=>, 'profile_pic'=>, 'created_at'=>], ... ]]
+     * ordered newest-first within each skill. Only active endorsers are
+     * included. Access control (mutual-follow / owner) is the CALLER's
+     * responsibility — this method reveals identities and must never be
+     * exposed without the gate.
+     */
+    public static function endorsersForTargetSkills(
+        PDO $pdo, int $targetUserId, array $skillIds
+    ): array {
+        $skillIds = array_values(array_unique(array_map('intval', $skillIds)));
+        $out = [];
+        foreach ($skillIds as $sid) $out[$sid] = [];
+        if (!$skillIds) return $out;
+
+        $place  = implode(',', array_fill(0, count($skillIds), '?'));
+        $params = array_merge([$targetUserId], $skillIds);
+
+        $stmt = $pdo->prepare(
+            "SELECT se.skill_id, se.created_at,
+                    u.uuid, u.username, u.profile_pic
+             FROM skill_endorsements se
+             JOIN users u ON u.id = se.endorser_user_id
+             WHERE se.target_user_id = ? AND se.skill_id IN ($place)
+               AND u.is_active = 1
+             ORDER BY se.created_at DESC, se.id DESC"
+        );
+        $stmt->execute($params);
+        foreach ($stmt->fetchAll() as $r) {
+            $out[(int) $r['skill_id']][] = [
+                'uuid'        => $r['uuid'],
+                'username'    => $r['username'],
+                'profile_pic' => $r['profile_pic'],
+                'created_at'  => $r['created_at'],
+            ];
+        }
+        return $out;
+    }
 }

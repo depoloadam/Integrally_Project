@@ -42,6 +42,7 @@ const fnSource = [
   extract('followCountsHtml'),
   extract('wireFollowCounts'),
   extract('openFollowList'),
+  extract('openEndorsementDetail'),
 ].join('\n\n');
 
 // --- Fresh jsdom + stubbed globals per scenario -------------------------
@@ -66,12 +67,15 @@ function makeEnv(apiHandler) {
   // Rename the extracted openFollowList to _realOpenFollowList so the
   // spy-able wrapper below can delegate to it without name collision
   // (function-declaration hoisting would otherwise make them the same).
-  const patchedSrc = fnSource.replace(/(?:async\s+)?function\s+openFollowList\s*\(/, 'async function _realOpenFollowList(');
+  const patchedSrc = fnSource
+    .replace(/(?:async\s+)?function\s+openFollowList\s*\(/, 'async function _realOpenFollowList(')
+    .replace(/(?:async\s+)?function\s+openEndorsementDetail\s*\(/, 'async function _realOpenEndorsementDetail(');
   const factory = new Function(
     'window', 'document', 'location', 'esc', 'el', '$', 'openModal', 'closeModal', 'api', 'holder',
     `${patchedSrc}\n` +
     `; function openFollowList(u, m) { return (holder.openFollowList || _realOpenFollowList)(u, m); }` +
-    `; return { followCountsHtml, wireFollowCounts, openFollowList };`
+    `; function openEndorsementDetail(u) { return (holder.openEndorsementDetail || _realOpenEndorsementDetail)(u); }` +
+    `; return { followCountsHtml, wireFollowCounts, openFollowList, openEndorsementDetail };`
   );
   const fns = factory(window, doc, window.location, esc, el, $, openModal, closeModal, api, holder);
   return { ...ctx, ...fns, holder, dom };
@@ -273,6 +277,94 @@ console.log('\n== tabbed modal: default mode is followers ==');
   await env2.openFollowList('me', 'garbage');
   await tick();
   check('unknown mode falls back to followers', env2.$('modal').querySelector('.in-followtab[data-tab="followers"]').classList.contains('active'));
+}
+
+console.log('\n== endorsement detail modal ==');
+{
+  const payload = {
+    ok: true, data: { success: true, data: {
+      total: 3,
+      skills: [
+        { id: 1, name: 'Widgetry', count: 2, endorsers: [
+          { uuid: 'u-a', username: 'ann', profile_pic: null },
+          { uuid: 'u-b', username: 'ben', profile_pic: 'http://x/b.png' },
+        ] },
+        { id: 2, name: 'Gizmos', count: 1, endorsers: [
+          { uuid: 'u-c', username: 'cara', profile_pic: null },
+        ] },
+      ],
+    } },
+  };
+  const env = makeEnv(async (url) => {
+    check('list endpoint hit', url.includes('/profile/endorsements/list.php') && url.includes('uuid='));
+    return payload;
+  });
+  await env.openEndorsementDetail('target-uuid');
+  await tick();
+  const body = env.$('endo-detail-body');
+  check('total line rendered', /3 endorsements across 2 skills/.test(body.textContent), body.textContent.slice(0,60));
+  const groups = body.querySelectorAll('.in-endo-group');
+  check('two skill groups', groups.length === 2);
+  check('first group name', groups[0].querySelector('.in-endo-group-name').textContent === 'Widgetry');
+  check('first group count', groups[0].querySelector('.in-endo-group-count').textContent === '2');
+  const firstEndorsers = groups[0].querySelectorAll('.in-followrow');
+  check('two endorsers in first group', firstEndorsers.length === 2);
+  check('endorser shows @username', firstEndorsers[0].querySelector('.in-followrow-name').textContent.includes('@ann'));
+  check('endorser avatar falls back to initial', firstEndorsers[0].querySelector('.in-followrow-av').textContent.trim() === 'A');
+  check('endorser with pic uses img', !!firstEndorsers[1].querySelector('.in-followrow-av img'));
+
+  // Row navigates to endorser's profile + closes modal.
+  firstEndorsers[0].click();
+  check('endorser row navigates to #user/', env.window.location.hash === '#user/u-a', env.window.location.hash);
+  check('modal closed on navigate', env.modalOpen === false);
+}
+
+console.log('\n== endorsement detail: gated / empty / error ==');
+{
+  const gated = makeEnv(async () => ({ ok: false, data: { success: false, code: 'not_connected', error: 'nope' } }));
+  await gated.openEndorsementDetail('t');
+  await tick();
+  check('not_connected -> connections message', /only to connections/i.test(gated.$('endo-detail-body').textContent));
+
+  const empty = makeEnv(async () => ({ ok: true, data: { success: true, data: { total: 0, skills: [] } } }));
+  await empty.openEndorsementDetail('t');
+  await tick();
+  check('empty -> no endorsements yet', /no endorsements yet/i.test(empty.$('endo-detail-body').textContent));
+
+  const err = makeEnv(async () => ({ ok: false, data: { success: false, error: 'boom' } }));
+  await err.openEndorsementDetail('t');
+  await tick();
+  check('error -> could not load', /couldn.t load/i.test(err.$('endo-detail-body').textContent));
+}
+
+console.log('\n== owner Skills card: See-endorsements button injection ==');
+{
+  // Reproduces the inline injection snippet from renderProfile so the
+  // placement + wiring logic is covered (openEndorsementDetail is the
+  // shared modal already tested above).
+  const env = makeEnv();
+  const doc = env.document;
+  // A chipSection-style owner Skills card: h2 with an absolute .add button.
+  const card = env.el(`<div class="in-card2" data-section="skill"><h2>Skills<button class="add" title="Add">+</button></h2><div class="in-chips body"></div></div>`);
+  doc.body.appendChild(card);
+  const ownUuid = 'owner-uuid';
+
+  let openedWith = null;
+  env.holder.openEndorsementDetail = (u) => { openedWith = u; };
+  // Wrapper so we can spy the same way openFollowList is spied.
+  const openEndorsementDetail = (u) => (env.holder.openEndorsementDetail || env.openEndorsementDetail)(u);
+
+  const skillsCard = card.querySelector('[data-section="skill"] h2') || card.querySelector('h2');
+  const seeBtn = env.el(`<button class="in-endo-see" id="endo-see-own" title="See who endorsed your skills">See endorsements</button>`);
+  const addBtn = skillsCard.querySelector(".add");
+  if (addBtn) skillsCard.insertBefore(seeBtn, addBtn); else skillsCard.appendChild(seeBtn);
+  seeBtn.onclick = () => openEndorsementDetail(ownUuid);
+
+  check('button injected into skills header', !!card.querySelector("#endo-see-own"));
+  check('button placed before the + add button',
+    card.querySelector("#endo-see-own").nextElementSibling === card.querySelector(".add"));
+  card.querySelector("#endo-see-own").click();
+  check('clicking opens detail with owner uuid', openedWith === ownUuid, String(openedWith));
 }
 
 console.log(`\n=================  ${pass} passed, ${fail} failed  =================`);
