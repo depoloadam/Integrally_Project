@@ -2752,11 +2752,8 @@ function renderSetScores(panel, st) {
 function renderSetAppearance(panel, st) {
   const theme = (st.theme === "dark" || st.theme === "light") ? st.theme : "system";
   const reduceOn = st.reduced_motion === "1";
-  let design = "pro";
-  try {
-    const v = localStorage.getItem("in_design");
-    if (v === "alternate" || v === "original") design = "alternate";
-  } catch (_) {}
+  let design = "alternate";
+  try { if (localStorage.getItem("in_design") === "pro") design = "pro"; } catch (_) {}
   const opt = (val, label, sub) => `
     <button class="in-theme-opt ${theme === val ? "active" : ""}" data-theme-opt="${val}">
       <span class="in-theme-swatch tsw-${val}"></span>
@@ -2781,8 +2778,8 @@ function renderSetAppearance(panel, st) {
       <h3>Design</h3>
       <div class="in-set-toggle-sub" style="margin-bottom:12px">Choose the interface style. Applies on this device.</div>
       <div class="in-theme-opts">
-        ${dopt("pro", "Professional", "The Integrally default. Flat panels, ruled lists.")}
-        ${dopt("alternate", "Alternate", "The previous Integrally design.")}
+        ${dopt("alternate", "Alternate", "The Integrally default.")}
+        ${dopt("pro", "Professional", "The new look. Flat panels, ruled lists.")}
       </div>
     </div>
     <div class="in-set-section">

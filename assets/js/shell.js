@@ -218,18 +218,18 @@ function applyReducedMotion(on) {
 window.applyTheme = applyTheme;
 
 // ---- Design system -----------------------------------------------------
-// The Professional ("Ledger") skin is the DEFAULT: pro.css scopes every
-// rule under html[data-design="pro"], and the inline script in app.html's
-// <head> applies the attribute before first paint. Choosing "Alternate"
-// (the previous design) removes the attribute — original CSS exactly.
-// Stored per device in localStorage("in_design"); legacy value
-// "original" (from the preview phase) is honored as "alternate".
+// The Alternate (original) skin is the DEFAULT. pro.css scopes every rule
+// under html[data-design="pro"]; the attribute is present only when the
+// Professional skin is explicitly chosen. New/unset visitors, and anyone
+// who picks "Alternate", get the original design (no attribute). The
+// inline script in app.html's <head> applies this before first paint.
+// Stored per device in localStorage("in_design"). Legacy value "original"
+// (from the earlier preview phase) resolves to the default too.
 function applyDesign(mode) {
   const root = document.documentElement;
-  const alt = (mode === "alternate" || mode === "original");
-  if (alt) root.removeAttribute("data-design");
-  else root.setAttribute("data-design", "pro");
-  try { localStorage.setItem("in_design", alt ? "alternate" : "pro"); } catch (_) {}
+  if (mode === "pro") { root.setAttribute("data-design", "pro"); }
+  else { root.removeAttribute("data-design"); }
+  try { localStorage.setItem("in_design", mode === "pro" ? "pro" : "alternate"); } catch (_) {}
 }
 window.applyDesign = applyDesign;
 

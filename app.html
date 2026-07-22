@@ -16,16 +16,16 @@
          assets/js/profile.js   (profile + public profile + score views)
          assets/js/feed.js      (feed view, composer, posts)
        ================================================================= -->
-  <!-- Design boot: the Professional skin is the DEFAULT. Runs before the
-       stylesheets so the attribute is set at first paint — no flash.
-       "alternate" (or legacy "original") in localStorage opts out and
-       restores the previous design exactly (pro.css is fully scoped
-       under this attribute). Runtime switching: applyDesign() in shell.js. -->
+  <!-- Design boot: the Alternate (original) skin is the DEFAULT. This
+       script only applies the Professional skin when it's been explicitly
+       chosen and stored. New/unset visitors get the original design.
+       Runs before the stylesheets so there's no flash. Runtime switching:
+       applyDesign() in shell.js. -->
   <script>
     (function () {
       var v = null;
       try { v = localStorage.getItem("in_design"); } catch (e) {}
-      if (v !== "alternate" && v !== "original") {
+      if (v === "pro") {
         document.documentElement.setAttribute("data-design", "pro");
       }
     })();
@@ -150,8 +150,8 @@
 <script src="assets/js/geo.js"></script>
 <script src="assets/js/jobs-catalog.js"></script>
 <script src="assets/js/education-catalog.js"></script>
-<script src="assets/js/shell.js?v=7"></script>
-<script src="assets/js/profile.js?v=20"></script>
+<script src="assets/js/shell.js?v=8"></script>
+<script src="assets/js/profile.js?v=21"></script>
 <script src="assets/js/feed.js?v=13"></script>
 <script src="assets/js/admin.js?v=2"></script>
 <script src="assets/js/jobs.js?v=6"></script>

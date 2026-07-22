@@ -50,26 +50,26 @@ const freshDom = () => new JSDOM(`<!doctype html><html><body><div id="panel"></d
 const bootMatch = appHtml.match(/<script>\s*(\(function \(\) \{[\s\S]*?\}\)\(\);)\s*<\/script>/);
 
 // =====================================================================
-console.log("applyDesign() — default-pro semantics");
+console.log("applyDesign() — default-original semantics");
 {
   const dom = freshDom();
   const { window } = dom;
   const applyDesign = new Function("document", "localStorage", extractFn(shellSrc, "applyDesign") + "; return applyDesign;")(window.document, window.localStorage);
 
-  applyDesign("alternate");
-  ok(!window.document.documentElement.hasAttribute("data-design"), "'alternate' removes data-design");
-  ok(window.localStorage.getItem("in_design") === "alternate", "'alternate' persisted");
-
   applyDesign("pro");
-  ok(window.document.documentElement.getAttribute("data-design") === "pro", "'pro' applies data-design=pro");
+  ok(window.document.documentElement.getAttribute("data-design") === "pro", "'pro' applies data-design=pro (opt-in)");
   ok(window.localStorage.getItem("in_design") === "pro", "'pro' persisted");
 
+  applyDesign("alternate");
+  ok(!window.document.documentElement.hasAttribute("data-design"), "'alternate' removes data-design (the default)");
+  ok(window.localStorage.getItem("in_design") === "alternate", "'alternate' persisted");
+
   applyDesign("original");   // legacy value from the preview phase
-  ok(!window.document.documentElement.hasAttribute("data-design"), "legacy 'original' honored as alternate");
-  ok(window.localStorage.getItem("in_design") === "alternate", "legacy 'original' migrated to 'alternate' in storage");
+  ok(!window.document.documentElement.hasAttribute("data-design"), "legacy 'original' resolves to the default (no attribute)");
 
   applyDesign("garbage");
-  ok(window.document.documentElement.getAttribute("data-design") === "pro", "unknown mode falls back to the DEFAULT (pro)");
+  ok(!window.document.documentElement.hasAttribute("data-design"), "unknown mode falls back to the DEFAULT (original)");
+  ok(window.localStorage.getItem("in_design") === "alternate", "unknown mode persists as 'alternate'");
 }
 
 // =====================================================================
@@ -79,16 +79,16 @@ console.log("head boot script (real, from app.html)");
   if (bootMatch) {
     const boot = new Function("document", "localStorage", bootMatch[1]);
 
-    const d1 = freshDom();   // no stored choice → default pro
+    const d1 = freshDom();   // no stored choice → default original (no attr)
     boot(d1.window.document, d1.window.localStorage);
-    ok(d1.window.document.documentElement.getAttribute("data-design") === "pro", "no stored choice → pro applied at boot (default)");
+    ok(!d1.window.document.documentElement.hasAttribute("data-design"), "no stored choice → original at boot (default, no attribute)");
 
-    const d2 = freshDom();   // alternate opt-out
-    d2.window.localStorage.setItem("in_design", "alternate");
+    const d2 = freshDom();   // pro opt-in
+    d2.window.localStorage.setItem("in_design", "pro");
     boot(d2.window.document, d2.window.localStorage);
-    ok(!d2.window.document.documentElement.hasAttribute("data-design"), "stored 'alternate' → attribute absent at boot");
+    ok(d2.window.document.documentElement.getAttribute("data-design") === "pro", "stored 'pro' → data-design=pro at boot");
 
-    const d3 = freshDom();   // legacy original opt-out
+    const d3 = freshDom();   // legacy original → default
     d3.window.localStorage.setItem("in_design", "original");
     boot(d3.window.document, d3.window.localStorage);
     ok(!d3.window.document.documentElement.hasAttribute("data-design"), "legacy 'original' → attribute absent at boot");
@@ -117,28 +117,28 @@ console.log("Appearance settings control (real renderSetAppearance)");
     return { window, document, panel };
   };
 
-  {  // default: nothing stored → Professional active
+  {  // default: nothing stored → Alternate active
     const { panel } = build(null);
     const proBtn = panel.querySelector('[data-design-opt="pro"]');
     const altBtn = panel.querySelector('[data-design-opt="alternate"]');
-    ok(proBtn && altBtn, "options rendered: Professional + Alternate");
-    ok(proBtn.classList.contains("active") && !altBtn.classList.contains("active"), "no stored choice → Professional shown active (default)");
+    ok(proBtn && altBtn, "options rendered: Alternate + Professional");
+    ok(altBtn.classList.contains("active") && !proBtn.classList.contains("active"), "no stored choice → Alternate shown active (default)");
   }
-  {  // stored alternate → Alternate active; click Professional
-    const { window, document, panel } = build("alternate");
+  {  // stored pro → Professional active; click Alternate
+    const { window, document, panel } = build("pro");
     const proBtn = panel.querySelector('[data-design-opt="pro"]');
     const altBtn = panel.querySelector('[data-design-opt="alternate"]');
-    ok(altBtn.classList.contains("active"), "stored 'alternate' → Alternate shown active");
-    proBtn.click();
-    ok(document.documentElement.getAttribute("data-design") === "pro", "clicking Professional applies pro live");
-    ok(window.localStorage.getItem("in_design") === "pro", "clicking Professional persists");
+    ok(proBtn.classList.contains("active"), "stored 'pro' → Professional shown active");
     altBtn.click();
     ok(!document.documentElement.hasAttribute("data-design"), "clicking Alternate removes the attribute live");
     ok(window.localStorage.getItem("in_design") === "alternate", "clicking Alternate persists");
+    proBtn.click();
+    ok(document.documentElement.getAttribute("data-design") === "pro", "clicking Professional applies pro live");
+    ok(window.localStorage.getItem("in_design") === "pro", "clicking Professional persists");
   }
-  {  // legacy stored original → Alternate active
+  {  // legacy stored original → Alternate active (default)
     const { panel } = build("original");
-    ok(panel.querySelector('[data-design-opt="alternate"]').classList.contains("active"), "legacy 'original' → Alternate shown active");
+    ok(panel.querySelector('[data-design-opt="alternate"]').classList.contains("active"), "legacy 'original' → Alternate shown active (default)");
   }
 }
 
