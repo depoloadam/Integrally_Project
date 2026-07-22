@@ -224,6 +224,57 @@ console.log('\n== live follower-count update math ==');
   check('label plural at 0', head.querySelector('[data-follow-list="followers"]').lastChild.textContent === ' followers');
 }
 
+console.log('\n== tabbed modal: auto-select + switching + caching ==');
+{
+  let followersCalls = 0, followingCalls = 0;
+  const env = makeEnv(async (url) => {
+    if (url.includes('/follow/followers.php')) { followersCalls++; return { ok: true, data: { success: true, data: [{ follower_type:'user', uuid:'u-a', name:'ann' }] } }; }
+    if (url.includes('/follow/following.php')) { followingCalls++; return { ok: true, data: { success: true, data: [{ target_type:'user', uuid:'u-b', name:'ben' }] } }; }
+    return { ok:false, data:{ success:false } };
+  });
+  // Open on the "following" tab -> that tab should be active + fetched.
+  await env.openFollowList('me', 'following');
+  await tick();
+  const modal = env.$('modal');
+  const tabs = modal.querySelectorAll('.in-followtab');
+  check('two tabs rendered', tabs.length === 2);
+  check('following tab auto-active on open', modal.querySelector('.in-followtab[data-tab="following"]').classList.contains('active'));
+  check('followers tab not active', !modal.querySelector('.in-followtab[data-tab="followers"]').classList.contains('active'));
+  check('only following fetched on open', followingCalls === 1 && followersCalls === 0, `f=${followersCalls} g=${followingCalls}`);
+  check('following row shown', /ben/.test(env.$('follow-list-body').textContent));
+
+  // Click followers tab -> fetch + switch.
+  modal.querySelector('.in-followtab[data-tab="followers"]').click();
+  await tick();
+  check('followers tab now active', modal.querySelector('.in-followtab[data-tab="followers"]').classList.contains('active'));
+  check('followers fetched on switch', followersCalls === 1);
+  check('followers row shown', /ann/.test(env.$('follow-list-body').textContent));
+
+  // Click back to following -> served from cache (no 2nd fetch).
+  modal.querySelector('.in-followtab[data-tab="following"]').click();
+  await tick();
+  check('following served from cache (no refetch)', followingCalls === 1, `g=${followingCalls}`);
+  check('following row shown again', /ben/.test(env.$('follow-list-body').textContent));
+
+  // Re-click followers -> also cached.
+  modal.querySelector('.in-followtab[data-tab="followers"]').click();
+  await tick();
+  check('followers served from cache (no refetch)', followersCalls === 1, `f=${followersCalls}`);
+}
+
+console.log('\n== tabbed modal: default mode is followers ==');
+{
+  const env = makeEnv(async () => ({ ok: true, data: { success: true, data: [] } }));
+  await env.openFollowList('me', 'followers');
+  await tick();
+  check('followers tab active by default', env.$('modal').querySelector('.in-followtab[data-tab="followers"]').classList.contains('active'));
+  // unknown mode falls back to followers
+  const env2 = makeEnv(async () => ({ ok: true, data: { success: true, data: [] } }));
+  await env2.openFollowList('me', 'garbage');
+  await tick();
+  check('unknown mode falls back to followers', env2.$('modal').querySelector('.in-followtab[data-tab="followers"]').classList.contains('active'));
+}
+
 console.log(`\n=================  ${pass} passed, ${fail} failed  =================`);
 if (fail) { console.log('FAILURES: ' + fails.join(', ')); process.exit(1); }
 process.exit(0);

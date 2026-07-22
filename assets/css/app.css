@@ -524,13 +524,18 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 .in-back-btn:hover { border-color:var(--in-muted); }
 .in-followcount { font-size:13px; color:var(--in-muted); margin-top:10px; }
 /* Tappable follower / following counts */
-.in-followcounts { display:flex; gap:16px; margin-top:10px; }
+.in-followcounts { display:flex; gap:16px; margin-top:10px; justify-content:center; }
 .in-followstat { background:none; border:none; padding:0; margin:0; font-family:inherit; font-size:13px; color:var(--in-muted); cursor:default; }
 .in-followstat .n { font-weight:700; color:var(--in-ink); }
 .in-followstat.tappable { cursor:pointer; }
 .in-followstat.tappable:hover { color:var(--in-ink-soft); }
 .in-followstat.tappable:hover .n { color:var(--in-accent); }
 /* Follower / following list modal */
+.in-followmodal { display:flex; flex-direction:column; }
+.in-followtabs { display:flex; gap:4px; border-bottom:1px solid var(--in-line); margin-bottom:6px; }
+.in-followtab { flex:1; background:none; border:none; border-bottom:2px solid transparent; padding:10px 6px; margin-bottom:-1px; font-family:inherit; font-size:14px; font-weight:600; color:var(--in-muted); cursor:pointer; }
+.in-followtab:hover { color:var(--in-ink-soft); }
+.in-followtab.active { color:var(--in-accent); border-bottom-color:var(--in-accent); }
 .in-followlist { max-height:60vh; overflow-y:auto; display:flex; flex-direction:column; gap:2px; }
 .in-followrow { display:flex; align-items:center; gap:12px; width:100%; text-align:left; background:none; border:none; border-radius:9px; padding:9px 10px; font-family:inherit; cursor:pointer; color:var(--in-ink); }
 .in-followrow:hover { background:var(--in-bg); }
@@ -1866,6 +1871,9 @@ html.in-reduce-motion *::after {
 .idcard-loc { font-size:12.5px; color:var(--in-muted); margin-top:3px; }
 .idcard-stats { display:flex; border-top:1px solid var(--in-line); margin-top:14px; padding-top:12px; }
 .idcard-stat { flex:1; }
+.idcard-stat.tappable { cursor:pointer; border-radius:8px; padding:4px 0; transition:background .12s; }
+.idcard-stat.tappable:hover { background:var(--in-bg); }
+.idcard-stat.tappable:hover b { color:var(--in-accent); }
 .idcard-stat b { display:block; font-size:15px; color:var(--in-ink); }
 .idcard-stat span { font-size:11px; color:var(--in-muted); text-transform:uppercase; letter-spacing:.5px; }
 .idcard-score { margin-top:14px; }

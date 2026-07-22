@@ -246,7 +246,16 @@ async function buildIdentityRail(mount) {
     if (r.ok && d) {
       card.querySelector(".idc-followers").textContent = d.followers ?? 0;
       card.querySelector(".idc-following").textContent = d.following ?? 0;
-      card.querySelector(".idcard-stats").style.display = "";
+      const stats = card.querySelector(".idcard-stats");
+      stats.style.display = "";
+      // Tappable stats open the unified follower/following modal on the
+      // matching tab. This is the owner's own card, so lists always open.
+      const fWrap = card.querySelector(".idc-followers").closest(".idcard-stat");
+      const gWrap = card.querySelector(".idc-following").closest(".idcard-stat");
+      fWrap.classList.add("tappable");
+      gWrap.classList.add("tappable");
+      fWrap.onclick = () => openFollowList(ME.uuid, "followers");
+      gWrap.onclick = () => openFollowList(ME.uuid, "following");
     }
   } catch (_) { /* counts stay hidden */ }
 

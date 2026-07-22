@@ -38,57 +38,87 @@ function wireFollowCounts(container, uuid, hidden, isOwner) {
 // Open a modal listing a profile's followers or the accounts it follows.
 // Rows are tappable and navigate to that account's profile. Users go to
 // their public profile; companies to the company page.
+// Open the unified follower/following modal. `mode` selects which tab is
+// active on open ('followers' or 'following'). Both tabs live in one
+// popup; each tab's list is fetched lazily the first time it's shown and
+// cached for the life of the modal.
 async function openFollowList(uuid, mode) {
-  const title = mode === "followers" ? "Followers" : "Following";
+  const active = mode === "following" ? "following" : "followers";
   openModal(`
-    <h3 class="in-modal-title">${title}</h3>
-    <div class="in-followlist" id="follow-list-body">
-      <div class="in-loading" style="padding:20px">Loading…</div>
+    <div class="in-followmodal">
+      <div class="in-followtabs" role="tablist">
+        <button class="in-followtab ${active === "followers" ? "active" : ""}" data-tab="followers" role="tab">Followers</button>
+        <button class="in-followtab ${active === "following" ? "active" : ""}" data-tab="following" role="tab">Following</button>
+      </div>
+      <div class="in-followlist" id="follow-list-body">
+        <div class="in-loading" style="padding:20px">Loading…</div>
+      </div>
     </div>
     <div class="in-modal-actions"><button class="in-btn ghost" onclick="closeModal()">Close</button></div>
   `);
 
-  const endpoint = mode === "followers"
-    ? "/follow/followers.php?type=user&uuid=" + encodeURIComponent(uuid)
-    : "/follow/following.php?uuid=" + encodeURIComponent(uuid);
-  const r = await api(endpoint);
-  const body = $("follow-list-body");
-  if (!body) return; // modal closed while loading
+  const cache = {};              // mode -> rendered DocumentFragment content
+  const modalEl = $("modal");    // used to scope tab queries
 
-  if (r.data?.code === "follow_lists_hidden") {
-    body.innerHTML = `<div class="in-empty" style="padding:20px;text-align:center">This list is private.</div>`;
-    return;
-  }
-  if (!r.ok || !r.data?.success) {
-    body.innerHTML = `<div class="in-empty" style="padding:20px;text-align:center">Couldn't load this list.</div>`;
-    return;
-  }
+  const showTab = async (tab) => {
+    // Toggle active tab styling.
+    modalEl.querySelectorAll(".in-followtab").forEach(b =>
+      b.classList.toggle("active", b.getAttribute("data-tab") === tab));
+    const body = $("follow-list-body");
+    if (!body) return;
 
-  const rows = r.data.data || [];
-  if (!rows.length) {
-    const msg = mode === "followers" ? "No followers yet." : "Not following anyone yet.";
-    body.innerHTML = `<div class="in-empty" style="padding:20px;text-align:center">${msg}</div>`;
-    return;
-  }
+    if (cache[tab]) { body.replaceChildren(...cache[tab].cloneNode(true).childNodes); return; }
+    body.innerHTML = `<div class="in-loading" style="padding:20px">Loading…</div>`;
 
-  body.innerHTML = "";
-  rows.forEach(row => {
-    // followers.php uses follower_type; following.php uses target_type.
-    const kind = row.follower_type || row.target_type || "user";
-    const name = row.name || row.username || "";
-    const avatar = row.avatar || row.profile_pic || row.logo || "";
-    const rowUuid = row.uuid;
-    const initial = (name || "?").charAt(0).toUpperCase();
-    const hash = kind === "company" ? "#company/" + rowUuid : "#user/" + rowUuid;
-    const item = el(`
-      <button class="in-followrow" type="button">
-        <span class="in-followrow-av">${avatar ? `<img src="${esc(avatar)}" alt="">` : esc(initial)}</span>
-        <span class="in-followrow-name">${kind === "company" ? "" : "@"}${esc(name)}</span>
-        ${kind === "company" ? `<span class="in-followrow-tag">Company</span>` : ""}
-      </button>`);
-    item.onclick = () => { closeModal(); location.hash = hash; };
-    body.appendChild(item);
+    const endpoint = tab === "followers"
+      ? "/follow/followers.php?type=user&uuid=" + encodeURIComponent(uuid)
+      : "/follow/following.php?uuid=" + encodeURIComponent(uuid);
+    const r = await api(endpoint);
+    const b2 = $("follow-list-body");
+    if (!b2) return; // modal closed while loading
+
+    const frag = document.createDocumentFragment();
+
+    if (r.data?.code === "follow_lists_hidden") {
+      frag.appendChild(el(`<div class="in-empty" style="padding:20px;text-align:center">This list is private.</div>`));
+    } else if (!r.ok || !r.data?.success) {
+      frag.appendChild(el(`<div class="in-empty" style="padding:20px;text-align:center">Couldn't load this list.</div>`));
+    } else {
+      const rows = r.data.data || [];
+      if (!rows.length) {
+        const msg = tab === "followers" ? "No followers yet." : "Not following anyone yet.";
+        frag.appendChild(el(`<div class="in-empty" style="padding:20px;text-align:center">${msg}</div>`));
+      } else {
+        rows.forEach(row => {
+          // followers.php uses follower_type; following.php uses target_type.
+          const kind = row.follower_type || row.target_type || "user";
+          const name = row.name || row.username || "";
+          const avatar = row.avatar || row.profile_pic || row.logo || "";
+          const rowUuid = row.uuid;
+          const initial = (name || "?").charAt(0).toUpperCase();
+          const hash = kind === "company" ? "#company/" + rowUuid : "#user/" + rowUuid;
+          const item = el(`
+            <button class="in-followrow" type="button">
+              <span class="in-followrow-av">${avatar ? `<img src="${esc(avatar)}" alt="">` : esc(initial)}</span>
+              <span class="in-followrow-name">${kind === "company" ? "" : "@"}${esc(name)}</span>
+              ${kind === "company" ? `<span class="in-followrow-tag">Company</span>` : ""}
+            </button>`);
+          item.onclick = () => { closeModal(); location.hash = hash; };
+          frag.appendChild(item);
+        });
+      }
+    }
+
+    // Cache a copy and paint.
+    cache[tab] = frag.cloneNode(true);
+    b2.replaceChildren(...frag.childNodes);
+  };
+
+  modalEl.querySelectorAll(".in-followtab").forEach(btn => {
+    btn.onclick = () => showTab(btn.getAttribute("data-tab"));
   });
+
+  await showTab(active);
 }
 
 // ===================================================================
@@ -228,7 +258,7 @@ async function renderProfile() {
   const scoreRows = (scores.data?.data || []);
   const scoreCard = el(`<div class="in-card2"><h2>Scores<button class="add" id="score-privacy-btn" title="Score privacy settings" aria-label="Score privacy settings">⚙</button></h2><div id="score-body"></div></div>`);
   rightCol.appendChild(scoreCard);
-  $("score-privacy-btn").onclick = () => { location.hash = "settings/privacy"; };
+  $("score-privacy-btn").onclick = () => { location.hash = "settings/scores"; };
   const sb = $("score-body");
   if (!scoreRows.length) {
     sb.appendChild(el(`<div class="in-empty">${onboardingDone
@@ -2369,6 +2399,7 @@ async function renderSettings(tab) {
     { key:"account",       label:"Account" },
     { key:"appearance",    label:"Appearance" },
     { key:"privacy",       label:"Privacy" },
+    { key:"scores",        label:"Scores" },
     { key:"notifications", label:"Notifications" },
     { key:"connections",   label:"Connections" },
     ...(isAdmin ? [{ key:"admin", label:"Admin" }] : []),
@@ -2409,6 +2440,7 @@ function paintSettingsPanel(panel) {
   if (SETTINGS_TAB === "account")            renderSetAccount(panel, p);
   else if (SETTINGS_TAB === "appearance")    renderSetAppearance(panel, st);
   else if (SETTINGS_TAB === "privacy")       renderSetPrivacy(panel, st);
+  else if (SETTINGS_TAB === "scores")        renderSetScores(panel, st);
   else if (SETTINGS_TAB === "notifications") renderSetNotifications(panel);
   else if (SETTINGS_TAB === "connections")   renderSetConnections(panel);
   else if (SETTINGS_TAB === "admin")         renderSetAdmin(panel);
@@ -2455,9 +2487,6 @@ function renderSetAccount(panel, p) {
 function renderSetPrivacy(panel, st) {
   // following_enabled defaults to ON when unset
   const followingOn = st.following_enabled !== "0";
-  const hideScoresOn = st.hide_all_scores === "1";
-  const shareScoresOn = st.share_scores_with_companies !== "0";   // default on
-  const shareHiddenOn = st.share_hidden_scores_with_companies === "1";   // default off
   const discoverableOn = st.discoverable !== "0";                 // default on (live)
   const showCityOn = st.show_city !== "0";                        // default on
   const readReceiptsOn = st.read_receipts !== "0";               // default on (dormant)
@@ -2515,27 +2544,6 @@ function renderSetPrivacy(panel, st) {
         </div>
         <button class="in-toggle ${hideFollowListsOn ? "on" : ""}" id="toggle-hide-follow-lists" role="switch" aria-checked="${hideFollowListsOn}"><span class="in-toggle-knob"></span></button>
       </div>
-      <div class="in-set-toggle" style="margin-top:16px">
-        <div>
-          <div class="in-set-toggle-label">Hide all scores from other users</div>
-          <div class="in-set-toggle-sub">Your scores stay visible to you, but no one else will see them on your profile. You can also hide individual scores from the profile page.</div>
-        </div>
-        <button class="in-toggle ${hideScoresOn ? "on" : ""}" id="toggle-hide-scores" role="switch" aria-checked="${hideScoresOn}"><span class="in-toggle-knob"></span></button>
-      </div>
-      <div class="in-set-toggle" style="margin-top:16px">
-        <div>
-          <div class="in-set-toggle-label">Share my scores with companies I apply to</div>
-          <div class="in-set-toggle-sub">When on, companies reviewing your application can see your most relevant self-scores (top 3). Scores you've hidden are never shared.</div>
-        </div>
-        <button class="in-toggle ${shareScoresOn ? "on" : ""}" id="toggle-share-scores" role="switch" aria-checked="${shareScoresOn}"><span class="in-toggle-knob"></span></button>
-      </div>
-      <div class="in-set-toggle in-set-subtoggle" id="share-hidden-row" style="margin-top:12px;margin-left:22px;${shareScoresOn ? "" : "display:none"}">
-        <div>
-          <div class="in-set-toggle-label">Also include my hidden scores</div>
-          <div class="in-set-toggle-sub">Off by default. When on, scores you've hidden from your profile are also shared with companies you apply to.</div>
-        </div>
-        <button class="in-toggle ${shareHiddenOn ? "on" : ""}" id="toggle-share-hidden" role="switch" aria-checked="${shareHiddenOn}"><span class="in-toggle-knob"></span></button>
-      </div>
       <div class="in-set-msg" id="set-privacy-msg"></div>
     </div>
     </div>`));
@@ -2576,47 +2584,67 @@ function renderSetPrivacy(panel, st) {
       msg.className = "in-set-msg ok"; msg.textContent = "Saved.";
     } else { msg.className = "in-set-msg err"; msg.textContent = r.data?.error || "Could not save."; }
   };
-  $("toggle-hide-scores").onclick = async () => {
-    const btn = $("toggle-hide-scores");
-    const turningOn = !btn.classList.contains("on");
-    btn.disabled = true;
-    const r = await api("/settings/set.php", "POST", { key:"hide_all_scores", value: turningOn ? "1" : "0" });
-    btn.disabled = false;
-    const msg = $("set-privacy-msg");
-    if (r.ok && r.data?.success) {
-      btn.classList.toggle("on", turningOn);
-      btn.setAttribute("aria-checked", turningOn);
-      msg.className = "in-set-msg ok"; msg.textContent = "Saved.";
-    } else { msg.className = "in-set-msg err"; msg.textContent = r.data?.error || "Could not save."; }
+}
+// ---- Scores tab: score visibility + sharing --------------------------
+function renderSetScores(panel, st) {
+  const hideScoresOn = st.hide_all_scores === "1";
+  const shareScoresOn = st.share_scores_with_companies !== "0";        // default on
+  const shareHiddenOn = st.share_hidden_scores_with_companies === "1"; // default off
+  panel.appendChild(el(`
+    <div class="in-set-group">
+    <div class="in-set-section">
+      <h3>Score visibility</h3>
+      <div class="in-set-toggle">
+        <div>
+          <div class="in-set-toggle-label">Hide all scores from other users</div>
+          <div class="in-set-toggle-sub">Your scores stay visible to you, but no one else will see them on your profile. You can also hide individual scores from the profile page.</div>
+        </div>
+        <button class="in-toggle ${hideScoresOn ? "on" : ""}" id="toggle-hide-scores" role="switch" aria-checked="${hideScoresOn}"><span class="in-toggle-knob"></span></button>
+      </div>
+    </div>
+    <div class="in-set-section">
+      <h3>Sharing with companies</h3>
+      <div class="in-set-toggle">
+        <div>
+          <div class="in-set-toggle-label">Share my scores with companies I apply to</div>
+          <div class="in-set-toggle-sub">When on, companies reviewing your application can see your most relevant self-scores (top 3). Scores you've hidden are never shared.</div>
+        </div>
+        <button class="in-toggle ${shareScoresOn ? "on" : ""}" id="toggle-share-scores" role="switch" aria-checked="${shareScoresOn}"><span class="in-toggle-knob"></span></button>
+      </div>
+      <div class="in-set-toggle in-set-subtoggle" id="share-hidden-row" style="margin-top:12px;margin-left:22px;${shareScoresOn ? "" : "display:none"}">
+        <div>
+          <div class="in-set-toggle-label">Also include my hidden scores</div>
+          <div class="in-set-toggle-sub">Off by default. When on, scores you've hidden from your profile are also shared with companies you apply to.</div>
+        </div>
+        <button class="in-toggle ${shareHiddenOn ? "on" : ""}" id="toggle-share-hidden" role="switch" aria-checked="${shareHiddenOn}"><span class="in-toggle-knob"></span></button>
+      </div>
+      <div class="in-set-msg" id="set-scores-msg"></div>
+    </div>
+    </div>`));
+
+  const wireScoreToggle = (id, key, onSaved) => {
+    const btn = $(id);
+    if (!btn) return;
+    btn.onclick = async () => {
+      const turningOn = !btn.classList.contains("on");
+      btn.disabled = true;
+      const r = await api("/settings/set.php", "POST", { key, value: turningOn ? "1" : "0" });
+      btn.disabled = false;
+      const msg = $("set-scores-msg");
+      if (r.ok && r.data?.success) {
+        btn.classList.toggle("on", turningOn);
+        btn.setAttribute("aria-checked", turningOn);
+        if (onSaved) onSaved(turningOn);
+        msg.className = "in-set-msg ok"; msg.textContent = "Saved.";
+      } else { msg.className = "in-set-msg err"; msg.textContent = r.data?.error || "Could not save."; }
+    };
   };
-  $("toggle-share-scores").onclick = async () => {
-    const btn = $("toggle-share-scores");
-    const turningOn = !btn.classList.contains("on");
-    btn.disabled = true;
-    const r = await api("/settings/set.php", "POST", { key:"share_scores_with_companies", value: turningOn ? "1" : "0" });
-    btn.disabled = false;
-    const msg = $("set-privacy-msg");
-    if (r.ok && r.data?.success) {
-      btn.classList.toggle("on", turningOn);
-      btn.setAttribute("aria-checked", turningOn);
-      const sub = $("share-hidden-row");
-      if (sub) sub.style.display = turningOn ? "" : "none";
-      msg.className = "in-set-msg ok"; msg.textContent = "Saved.";
-    } else { msg.className = "in-set-msg err"; msg.textContent = r.data?.error || "Could not save."; }
-  };
-  $("toggle-share-hidden").onclick = async () => {
-    const btn = $("toggle-share-hidden");
-    const turningOn = !btn.classList.contains("on");
-    btn.disabled = true;
-    const r = await api("/settings/set.php", "POST", { key:"share_hidden_scores_with_companies", value: turningOn ? "1" : "0" });
-    btn.disabled = false;
-    const msg = $("set-privacy-msg");
-    if (r.ok && r.data?.success) {
-      btn.classList.toggle("on", turningOn);
-      btn.setAttribute("aria-checked", turningOn);
-      msg.className = "in-set-msg ok"; msg.textContent = "Saved.";
-    } else { msg.className = "in-set-msg err"; msg.textContent = r.data?.error || "Could not save."; }
-  };
+  wireScoreToggle("toggle-hide-scores",  "hide_all_scores");
+  wireScoreToggle("toggle-share-scores", "share_scores_with_companies", (on) => {
+    const sub = $("share-hidden-row");
+    if (sub) sub.style.display = on ? "" : "none";
+  });
+  wireScoreToggle("toggle-share-hidden", "share_hidden_scores_with_companies");
 }
 // ---- Appearance tab: theme + reduced motion (both live) --------------
 function renderSetAppearance(panel, st) {
