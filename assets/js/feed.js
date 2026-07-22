@@ -6,7 +6,7 @@
 // =====================================================================
 
 let FEED_TAB = "main";   // 'main' | 'explore'
-let FEED_SORT = "newest"; // 'newest' | 'oldest' | 'engagement' | 'relevance'
+let FEED_SORT = "relevance"; // feed offers 'engagement' | 'relevance' only (newest/oldest are for profile/saved/search)
 
 // Sort options offered on every post list (feed, saved, profile activity).
 // Order here is the menu order. Labels are shared so the control reads the
@@ -18,6 +18,16 @@ const SORT_OPTIONS = [
   ["relevance", "Relevance"],
 ];
 const SORT_LABEL = Object.fromEntries(SORT_OPTIONS);
+
+// The main feed (Following + Explore) intentionally drops Newest/Oldest:
+// a chronological toggle makes little sense on a ranked, followed-authors
+// feed. Those remain on profile activity, saved, and search where a
+// specific ordering is meaningful. Relevance-first, then engagement.
+const FEED_SORT_OPTIONS = [
+  ["relevance", "Relevance"],
+  ["engagement", "Most engaged"],
+];
+const FEED_SORT_LABEL = Object.fromEntries(FEED_SORT_OPTIONS);
 
 // Time-window filter offered alongside sort on every post list. 'all'
 // means no restriction. Keys mirror PostActions::PERIODS on the server.
@@ -986,7 +996,7 @@ async function renderFeedList(view) {
   controls.appendChild(buildSortControl(FEED_SORT, (key) => {
     FEED_SORT = key;
     loadList();
-  }));
+  }, { options: FEED_SORT_OPTIONS, labels: FEED_SORT_LABEL }));
   head.appendChild(controls);
 
   view.appendChild(head);

@@ -56,6 +56,8 @@ function extractFn(name) {
 const bundle = [
   extractConst('SORT_OPTIONS'),
   'const SORT_LABEL = Object.fromEntries(SORT_OPTIONS);',
+  extractConst('FEED_SORT_OPTIONS'),
+  'const FEED_SORT_LABEL = Object.fromEntries(FEED_SORT_OPTIONS);',
   extractConst('PERIOD_OPTIONS'),
   'const PERIOD_LABEL = Object.fromEntries(PERIOD_OPTIONS);',
   extractFn('buildPeriodControl'),
@@ -74,7 +76,7 @@ function makeEnv() {
   Object.defineProperty(window.HTMLElement.prototype, 'offsetWidth', { configurable:true, get(){ return 120; } });
   Object.defineProperty(window.HTMLElement.prototype, 'offsetHeight', { configurable:true, get(){ return 160; } });
   const factory = new Function('window','document','esc','el',
-    `${bundle}\n; return { buildSortControl, buildPeriodControl, SORT_OPTIONS, PERIOD_OPTIONS };`);
+    `${bundle}\n; return { buildSortControl, buildPeriodControl, SORT_OPTIONS, PERIOD_OPTIONS, FEED_SORT_OPTIONS };`);
   const fns = factory(window, doc, esc, el);
   return { window, document: doc, el, ...fns };
 }
@@ -84,6 +86,23 @@ console.log('== period option set ==');
   const env = makeEnv();
   const keys = env.PERIOD_OPTIONS.map(o => o[0]);
   check('has all five periods', JSON.stringify(keys) === JSON.stringify(['all','today','week','month','year']), JSON.stringify(keys));
+}
+
+console.log('\n== feed sort options exclude newest/oldest ==');
+{
+  const env = makeEnv();
+  const keys = env.FEED_SORT_OPTIONS.map(o => o[0]);
+  check('feed sort excludes newest', !keys.includes('newest'), JSON.stringify(keys));
+  check('feed sort excludes oldest', !keys.includes('oldest'));
+  check('feed sort is [relevance, engagement]', JSON.stringify(keys) === JSON.stringify(['relevance','engagement']), JSON.stringify(keys));
+  // The generic SORT_OPTIONS (profile/saved) still has them.
+  const gen = env.SORT_OPTIONS.map(o => o[0]);
+  check('generic sort still has newest/oldest', gen.includes('newest') && gen.includes('oldest'));
+  // A control built with the feed set renders exactly two items.
+  const ctrl = env.buildSortControl('relevance', () => {}, { options: env.FEED_SORT_OPTIONS, labels: Object.fromEntries(env.FEED_SORT_OPTIONS) });
+  env.document.body.appendChild(ctrl);
+  ctrl.querySelector('.sort-btn').click();
+  check('feed sort menu shows 2 items', env.document.querySelectorAll('.sort-menu-item').length === 2);
 }
 
 console.log('\n== sort control default prefix is "Sort:" ==');
