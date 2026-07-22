@@ -2294,6 +2294,11 @@ async function renderPublicProfile(uuid) {
     const chips = pubAi.skills.map(s => `<span class="in-chip in-ai-chip">${esc(s)}</span>`).join("");
     rightCol.appendChild(el(`<div class="in-card2 in-ai-display"><h2><span class="in-ai-spark">✦</span> AI Skillset</h2><div class="in-chips body">${chips}</div></div>`));
   }
+
+  // Activity feed — same card as the owner view. The endpoint only
+  // returns this author's public posts to a visitor (followers-only posts
+  // are gated server-side to followers/owner), so this is safe to show.
+  renderPersonalFeed(rightCol, uuid);
 }
 function roSection(col, title, items, rowHtml) {
   const card = el(`<div class="in-card2"><h2>${title}</h2><div class="body"></div></div>`);
