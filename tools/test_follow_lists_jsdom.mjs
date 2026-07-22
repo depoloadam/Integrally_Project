@@ -356,7 +356,7 @@ console.log('\n== owner Skills card: See-endorsements button injection ==');
 
   const skillsCard = card.querySelector('[data-section="skill"]') || card;
   const h2 = skillsCard.querySelector('h2');
-  const seeRow = env.el(`<button class="in-endo-see" id="endo-see-own"><span class="in-endo-see-ico">✓</span> See who endorsed your skills</button>`);
+  const seeRow = env.el(`<button class="in-endo-see" id="endo-see-own"><span class="in-endo-see-ico">✓</span> See endorsements</button>`);
   h2.insertAdjacentElement("afterend", seeRow);
   seeRow.onclick = () => openEndorsementDetail(ownUuid);
 

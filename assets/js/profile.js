@@ -252,7 +252,7 @@ async function renderProfile() {
     const skillsCard = leftCol.querySelector('[data-section="skill"]');
     const h2 = skillsCard && skillsCard.querySelector("h2");
     if (h2 && !skillsCard.querySelector("#endo-see-own")) {
-      const seeRow = el(`<button class="in-endo-see" id="endo-see-own" title="See who endorsed your skills"><span class="in-endo-see-ico">✓</span> See who endorsed your skills</button>`);
+      const seeRow = el(`<button class="in-endo-see" id="endo-see-own" title="See who endorsed your skills"><span class="in-endo-see-ico">✓</span> See endorsements</button>`);
       h2.insertAdjacentElement("afterend", seeRow);
       seeRow.onclick = () => openEndorsementDetail(p.uuid);
     }
@@ -2322,7 +2322,7 @@ function renderEndorsableSkills(col, items, targetUuid, canEndorse) {
   col.appendChild(card);
   const body = card.querySelector(".body");
   if (canEndorse) {
-    const seeRow = el(`<button class="in-endo-see" id="endo-see-btn" title="See who endorsed these skills"><span class="in-endo-see-ico">✓</span> See who endorsed these skills</button>`);
+    const seeRow = el(`<button class="in-endo-see" id="endo-see-btn" title="See who endorsed these skills"><span class="in-endo-see-ico">✓</span> See endorsements</button>`);
     card.querySelector("h2").insertAdjacentElement("afterend", seeRow);
     seeRow.onclick = () => openEndorsementDetail(targetUuid);
   }
