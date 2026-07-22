@@ -553,6 +553,13 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 .in-set-nav button.danger.active { color:var(--in-error); }
 
 .in-set-panel { min-width:0; }
+/* Passthrough wrapper: settings tabs render several .in-set-section
+   siblings, but el() only keeps the first child of a template, so the
+   sections are wrapped in one .in-set-group root. It adds no box of its
+   own — sections keep their own margins/borders. Last-child margin reset
+   avoids a trailing gap at the bottom of a tab. */
+.in-set-group { display:block; }
+.in-set-group > .in-set-section:last-child { margin-bottom:0; }
 .in-set-section { background:var(--in-card); border:1px solid var(--in-line); border-radius:14px; padding:22px 24px; margin-bottom:18px; }
 .in-set-section h3 { margin:0 0 16px; font-size:16px; }
 .in-set-section label { display:block; font-size:12.5px; font-weight:600; color:var(--in-ink-soft); margin:12px 0 5px; }

@@ -2303,6 +2303,7 @@ function paintSettingsPanel(panel) {
 // ---- Account tab: edit core fields + password placeholder ------------
 function renderSetAccount(panel, p) {
   panel.appendChild(el(`
+    <div class="in-set-group">
     <div class="in-set-section">
       <h3>Account details</h3>
       <label>Username</label><input id="set-username" value="${esc(p.username||"")}">
@@ -2319,6 +2320,7 @@ function renderSetAccount(panel, p) {
       <h3>Password</h3>
       <div class="in-set-placeholder">Changing your password will require email verification or multi-factor authentication. This is coming soon.</div>
       <button class="in-btn ghost" style="flex:none;padding:9px 18px;opacity:.6;cursor:not-allowed" disabled>Change password</button>
+    </div>
     </div>`));
   geoInitCountryModal($("set-country"), $("set-sub-wrap"), { subId: "set-sub", preselect: { country: p.country || "", state: p.state || "" } });
   $("set-save-account").onclick = async () => {
@@ -2346,6 +2348,7 @@ function renderSetPrivacy(panel, st) {
   const readReceiptsOn = st.read_receipts !== "0";               // default on (dormant)
   const msgConnOnly = st.messages_connections_only === "1";      // default off (dormant)
   panel.appendChild(el(`
+    <div class="in-set-group">
     <div class="in-set-section">
       <h3>Discoverability</h3>
       <div class="in-set-toggle">
@@ -2411,6 +2414,7 @@ function renderSetPrivacy(panel, st) {
         <button class="in-toggle ${shareHiddenOn ? "on" : ""}" id="toggle-share-hidden" role="switch" aria-checked="${shareHiddenOn}"><span class="in-toggle-knob"></span></button>
       </div>
       <div class="in-set-msg" id="set-privacy-msg"></div>
+    </div>
     </div>`));
   // Shared handler for a simple boolean setting toggle. onSaved runs after a
   // successful save (used by share-scores to show/hide its sub-row).
@@ -2500,6 +2504,7 @@ function renderSetAppearance(panel, st) {
       <span class="in-theme-opt-txt"><span class="in-theme-opt-label">${label}</span><span class="in-theme-opt-sub">${sub}</span></span>
     </button>`;
   panel.appendChild(el(`
+    <div class="in-set-group">
     <div class="in-set-section">
       <h3>Theme</h3>
       <div class="in-set-toggle-sub" style="margin-bottom:12px">Choose how Integrally looks. “System” follows your device setting.</div>
@@ -2519,6 +2524,7 @@ function renderSetAppearance(panel, st) {
         <button class="in-toggle ${reduceOn ? "on" : ""}" id="toggle-reduce-motion" role="switch" aria-checked="${reduceOn}"><span class="in-toggle-knob"></span></button>
       </div>
       <div class="in-set-msg" id="set-appearance-msg"></div>
+    </div>
     </div>`));
 
   panel.querySelectorAll("[data-theme-opt]").forEach(btn => {
@@ -2646,6 +2652,7 @@ function renderNotificationPrefs(panel, opts) {
     </div>`;
 
   panel.appendChild(el(`
+    <div class="in-set-group">
     <div class="in-set-section">
       <h3>In-app notifications</h3>
       <div class="in-set-toggle-sub" style="margin-bottom:4px">Control what shows up in your notification bell.</div>
@@ -2657,7 +2664,8 @@ function renderNotificationPrefs(panel, opts) {
       <div class="in-set-toggle-sub" style="margin-bottom:4px">Email delivery isn't live yet — set your preferences now and they'll apply once it launches.</div>
       ${liveTypes.map(t => row(t, "email", emailOn(t.key), false)).join("")}
     </div>
-    <div class="in-set-msg" id="set-notif-msg"></div>`));
+    <div class="in-set-msg" id="set-notif-msg"></div>
+    </div>`));
 
   panel.querySelectorAll("[data-np]").forEach(btn => {
     if (btn.disabled) return;
