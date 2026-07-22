@@ -168,6 +168,46 @@ class PostActions
      */
     public const SORTS = ['newest', 'oldest', 'engagement', 'relevance'];
 
+    /**
+     * Time-window filter keys, in menu order. 'all' means no restriction.
+     * These are independent of sort: any period may combine with any sort.
+     */
+    public const PERIODS = ['all', 'today', 'week', 'month', 'year'];
+
+    /** True if $period is a known period key. */
+    public static function isValidPeriod(string $period): bool
+    {
+        return in_array($period, self::PERIODS, true);
+    }
+
+    /**
+     * A SQL fragment (with leading space, no leading AND) restricting a
+     * posts row to the given time window, or '' for 'all'/unknown. The
+     * caller appends it to its WHERE with " AND" as shown:
+     *
+     *     $sql .= PostActions::periodClause($period, 'p');
+     *
+     * Uses a fixed INTERVAL against NOW(), so there are NO bound params to
+     * thread through — the period is a validated whitelist key, never user
+     * text interpolated raw. $postAlias is the posts-table alias.
+     */
+    public static function periodClause(string $period, string $postAlias = 'p'): string
+    {
+        switch ($period) {
+            case 'today':
+                return " AND {$postAlias}.created_at >= (NOW() - INTERVAL 1 DAY)";
+            case 'week':
+                return " AND {$postAlias}.created_at >= (NOW() - INTERVAL 7 DAY)";
+            case 'month':
+                return " AND {$postAlias}.created_at >= (NOW() - INTERVAL 30 DAY)";
+            case 'year':
+                return " AND {$postAlias}.created_at >= (NOW() - INTERVAL 365 DAY)";
+            case 'all':
+            default:
+                return '';
+        }
+    }
+
     /** True if $sort is a known sort key. */
     public static function isValidSort(string $sort): bool
     {

@@ -21,6 +21,7 @@
 require_once __DIR__ . '/../../src/Database.php';
 require_once __DIR__ . '/../../src/Response.php';
 require_once __DIR__ . '/../../src/Auth.php';
+require_once __DIR__ . '/../../src/PostActions.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     Response::error('Method not allowed.', 405);
@@ -74,6 +75,14 @@ $where = 'WHERE author_type = ? AND author_id = ?';
 if (!$canSeeFollowerPosts) {
     $where .= " AND visibility = 'public'";
 }
+
+// Optional time-window filter (independent of sort). Included in BOTH the
+// count and the page query below so has_more never promises filtered-out
+// rows. Whitelisted key -> fixed INTERVAL, no bound params. Alias is
+// 'posts' here because this query uses the bare table name.
+$period = trim((string) ($_GET['period'] ?? 'all'));
+if (!PostActions::isValidPeriod($period)) $period = 'all';
+$where .= PostActions::periodClause($period, 'posts');
 
 // Total under the SAME visibility rules as the page itself, so has_more
 // can never promise posts the viewer isn't allowed to see.

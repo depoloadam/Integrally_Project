@@ -2087,6 +2087,9 @@ html.in-reduce-motion *::after {
 .feed-listhead .in-feedtabs { margin:0; }   /* header row owns the spacing now */
 
 .sort-control { flex:none; }
+/* Groups the period + sort dropdowns so they sit together on the right
+   of a list header instead of being spread by the header's space-between. */
+.list-controls { display:flex; align-items:center; gap:8px; flex:none; flex-wrap:wrap; justify-content:flex-end; }
 .sort-btn {
   display:inline-flex; align-items:center; gap:6px;
   background:var(--in-card); border:1px solid var(--in-line); border-radius:999px;
@@ -2120,7 +2123,7 @@ html.in-reduce-motion *::after {
 
 /* Saved page header holds title block + sort control on one row. */
 .saved-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
-.saved-head .sort-control { margin-top:4px; }
+.saved-head .list-controls { margin-top:4px; }
 
 /* Feed header wraps gracefully on narrow screens. */
 @media (max-width:520px) {

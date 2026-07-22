@@ -329,6 +329,7 @@ async function renderProfile() {
 // unreachable). Each click appends the next page in place.
 const PERSONAL_FEED_PAGE = 10;
 let PERSONAL_SORT = "newest";
+let PERSONAL_PERIOD = "all";
 
 async function renderPersonalFeed(col, uuid) {
   const card = el(`<div class="in-card2"><div class="activity-head"><h2>Activity</h2></div><div class="body"><div class="in-empty">Loading…</div></div></div>`);
@@ -336,10 +337,13 @@ async function renderPersonalFeed(col, uuid) {
   const body = card.querySelector(".body");
   const headEl = card.querySelector(".activity-head");
   let sortControl = null;
+  let periodControl = null;
+  let controlsWrap = null;
 
   const fetchPage = (offset) => api(
     "/posts/personal.php?type=user&uuid=" + encodeURIComponent(uuid) +
     "&sort=" + encodeURIComponent(PERSONAL_SORT) +
+    "&period=" + encodeURIComponent(PERSONAL_PERIOD) +
     "&limit=" + PERSONAL_FEED_PAGE + "&offset=" + offset
   );
 
@@ -355,18 +359,29 @@ async function renderPersonalFeed(col, uuid) {
     const posts = res.data?.data?.posts || [];
     const author = res.data?.data?.author || {};
 
-    // Sort control appears once there's more than one post to order. Built
-    // once and kept; afterwards only its label updates.
-    if (typeof buildSortControl === "function" && (posts.length > 1 || PERSONAL_SORT !== "newest")) {
-      if (!sortControl) {
+    // Controls appear once there's more than one post, OR when a
+    // non-default sort/period is active (so a narrowing period filter can
+    // always be undone). Built once and kept; afterwards labels update.
+    const showControls = (posts.length > 1 || PERSONAL_SORT !== "newest" || PERSONAL_PERIOD !== "all");
+    if (typeof buildSortControl === "function" && showControls) {
+      if (!controlsWrap) {
+        controlsWrap = el(`<div class="list-controls"></div>`);
+        if (typeof buildPeriodControl === "function") {
+          periodControl = buildPeriodControl(PERSONAL_PERIOD, (key) => {
+            PERSONAL_PERIOD = key;
+            loadFirstPage();
+          });
+          controlsWrap.appendChild(periodControl);
+        }
         sortControl = buildSortControl(PERSONAL_SORT, (key) => {
           PERSONAL_SORT = key;
           loadFirstPage();
         });
-        headEl.appendChild(sortControl);
+        controlsWrap.appendChild(sortControl);
+        headEl.appendChild(controlsWrap);
       }
-    } else if (sortControl) {
-      sortControl.remove(); sortControl = null;
+    } else if (controlsWrap) {
+      controlsWrap.remove(); controlsWrap = null; sortControl = null; periodControl = null;
     }
 
     const frag = document.createDocumentFragment();

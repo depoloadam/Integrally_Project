@@ -19,6 +19,27 @@ const SORT_OPTIONS = [
 ];
 const SORT_LABEL = Object.fromEntries(SORT_OPTIONS);
 
+// Time-window filter offered alongside sort on every post list. 'all'
+// means no restriction. Keys mirror PostActions::PERIODS on the server.
+const PERIOD_OPTIONS = [
+  ["all", "All time"],
+  ["today", "Today"],
+  ["week", "Last 7 days"],
+  ["month", "Last 30 days"],
+  ["year", "Last year"],
+];
+const PERIOD_LABEL = Object.fromEntries(PERIOD_OPTIONS);
+
+// Convenience: build a period dropdown reusing the sort control (same
+// menu, "Time:" prefix). onPick(key) fires on change.
+function buildPeriodControl(current, onPick) {
+  return buildSortControl(current, onPick, {
+    options: PERIOD_OPTIONS, labels: PERIOD_LABEL, prefix: "Time",
+  });
+}
+
+let FEED_PERIOD = "all";
+
 
 // Builds a small right-aligned "Sort: X ▾" dropdown. `current` is the
 // active key at build time, `onPick(key)` fires when a new one is chosen.
@@ -30,10 +51,11 @@ const SORT_LABEL = Object.fromEntries(SORT_OPTIONS);
 function buildSortControl(current, onPick, opts = {}) {
   const options = opts.options || SORT_OPTIONS;
   const labels = opts.labels || SORT_LABEL;
+  const prefix = opts.prefix || "Sort";   // "Sort" | "Time" — the button text before the value
   let active = current;   // live selected key
   const wrap = el(`<div class="sort-control"></div>`);
   const btn = el(`<button class="sort-btn" aria-haspopup="true" aria-expanded="false">
-      <span class="sort-btn-label">Sort: <strong>${esc(labels[active] || "Newest")}</strong></span>
+      <span class="sort-btn-label">${esc(prefix)}: <strong>${esc(labels[active] || "Newest")}</strong></span>
       <span class="sort-caret">▾</span>
     </button>`);
   wrap.appendChild(btn);
@@ -930,7 +952,7 @@ async function renderFeedList(view) {
     list.classList.add("is-loading");
 
     const base = FEED_TAB === "main" ? "/feed/main.php" : "/feed/explore.php";
-    const res = await api(base + "?sort=" + encodeURIComponent(FEED_SORT));
+    const res = await api(base + "?sort=" + encodeURIComponent(FEED_SORT) + "&period=" + encodeURIComponent(FEED_PERIOD));
     const items = res.data?.data?.items || [];
 
     const next = document.createDocumentFragment();
@@ -956,10 +978,16 @@ async function renderFeedList(view) {
     tabs.querySelectorAll("[data-ftab]").forEach(x => x.classList.toggle("active", x.dataset.ftab === FEED_TAB));
     loadList();
   });
-  head.appendChild(buildSortControl(FEED_SORT, (key) => {
+  const controls = el(`<div class="list-controls"></div>`);
+  controls.appendChild(buildPeriodControl(FEED_PERIOD, (key) => {
+    FEED_PERIOD = key;
+    loadList();
+  }));
+  controls.appendChild(buildSortControl(FEED_SORT, (key) => {
     FEED_SORT = key;
     loadList();
   }));
+  head.appendChild(controls);
 
   view.appendChild(head);
   view.appendChild(list);
@@ -1063,6 +1091,7 @@ async function renderSinglePost(id) {
 // small link on the feed page. Sortable; default is most-recently-saved.
 // =====================================================================
 let SAVED_SORT = "saved";
+let SAVED_PERIOD = "all";
 const SAVED_SORT_OPTIONS = [
   ["saved", "Recently saved"],
   ["newest", "Newest"],
@@ -1089,21 +1118,31 @@ async function renderSavedPage() {
   view.appendChild(wrap);
 
   let sortControl = null;
+  let periodControl = null;
+  let controlsWrap = null;
   const loadList = async () => {
     const prevH = list.offsetHeight;
     if (prevH) list.style.minHeight = prevH + "px";
     list.classList.add("is-loading");
 
-    const r = await api("/posts/saved.php?sort=" + encodeURIComponent(SAVED_SORT));
+    const r = await api("/posts/saved.php?sort=" + encodeURIComponent(SAVED_SORT) + "&period=" + encodeURIComponent(SAVED_PERIOD));
     const items = r.data?.data?.items || [];
 
-    // Show the sort control only when there's more than one post to sort.
-    // Add it once; afterwards just keep its label in sync.
-    if (items.length > 1 && !sortControl) {
-      sortControl = buildSortControl(SAVED_SORT, (key) => { SAVED_SORT = key; loadList(); }, { options: SAVED_SORT_OPTIONS, labels: savedLabels });
-      head.appendChild(sortControl);
-    } else if (items.length <= 1 && sortControl) {
-      sortControl.remove(); sortControl = null;
+    // Show the controls when there's more than one post, OR when a
+    // non-default sort/period is active — otherwise a period filter that
+    // narrows to ≤1 result would hide the very control needed to undo it.
+    const showControls = items.length > 1 || SAVED_SORT !== "saved" || SAVED_PERIOD !== "all";
+    if (showControls) {
+      if (!controlsWrap) {
+        controlsWrap = el(`<div class="list-controls"></div>`);
+        periodControl = buildPeriodControl(SAVED_PERIOD, (key) => { SAVED_PERIOD = key; loadList(); });
+        sortControl = buildSortControl(SAVED_SORT, (key) => { SAVED_SORT = key; loadList(); }, { options: SAVED_SORT_OPTIONS, labels: savedLabels });
+        controlsWrap.appendChild(periodControl);
+        controlsWrap.appendChild(sortControl);
+        head.appendChild(controlsWrap);
+      }
+    } else if (controlsWrap) {
+      controlsWrap.remove(); controlsWrap = null; sortControl = null; periodControl = null;
     }
 
     const next = document.createDocumentFragment();

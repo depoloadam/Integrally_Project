@@ -45,6 +45,12 @@ if ($sort === 'saved' && $before !== '') {
     $params[] = $before;
 }
 
+// Optional time-window filter — on the POST's creation time (when it was
+// posted), consistent with the other surfaces, not when it was saved.
+$period = trim((string) ($_GET['period'] ?? 'all'));
+if (!PostActions::isValidPeriod($period)) $period = 'all';
+$sql .= PostActions::periodClause($period, 'p');
+
 switch ($sort) {
     case 'newest':
         $order = 'p.created_at DESC, p.id DESC'; break;

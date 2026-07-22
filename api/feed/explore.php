@@ -33,6 +33,10 @@ $sort = trim((string) ($_GET['sort'] ?? 'newest'));
 if (!PostActions::isValidSort($sort)) $sort = 'newest';
 $sortForOrder = ($sort === 'relevance') ? 'engagement' : $sort;
 
+// Optional time-window filter (independent of sort).
+$period = trim((string) ($_GET['period'] ?? 'all'));
+if (!PostActions::isValidPeriod($period)) $period = 'all';
+
 // Only public posts. Optionally page with ?before=<post_id>.
 $sql = "
     SELECT p.id AS post_id, p.author_type, p.author_id,
@@ -54,6 +58,7 @@ if ($before > 0) {
 $excl   = PostActions::feedExclusion($actor, 'p');
 $sql   .= $excl['sql'];
 $params = array_merge($params, $excl['params']);
+$sql   .= PostActions::periodClause($period, 'p');
 $sql   .= ' ORDER BY ' . PostActions::orderBy($sortForOrder, 'p') . ' LIMIT ' . (int) $limit;
 
 $stmt = $pdo->prepare($sql);

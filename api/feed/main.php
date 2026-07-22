@@ -32,6 +32,11 @@ $limit  = 20;
 $sort = trim((string) ($_GET['sort'] ?? 'newest'));
 if (!PostActions::isValidSort($sort)) $sort = 'newest';
 
+// Optional time-window filter (independent of sort). Whitelisted key ->
+// fixed INTERVAL fragment, no bound params.
+$period = trim((string) ($_GET['period'] ?? 'all'));
+if (!PostActions::isValidPeriod($period)) $period = 'all';
+
 // Exclude posts this user has hidden or whose author they've muted.
 $excl = PostActions::feedExclusion($actor, 'p');
 
@@ -49,6 +54,7 @@ if ($before > 0) {
 }
 $sql   .= $excl['sql'];
 $params = array_merge($params, $excl['params']);
+$sql   .= PostActions::periodClause($period, 'p');
 
 if ($sort === 'relevance') {
     // followed (0) before self (1), then newest within each bucket.
