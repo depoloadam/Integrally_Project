@@ -346,9 +346,13 @@ html[data-design="pro"] .post-milestone.edu .ms-icon { background:#7c3aed; }
 html[data-design="pro"] .in-bio-box::before { background:var(--in-accent); }
 html[data-design="pro"] .in-str-fill,
 html[data-design="pro"] .in-avatar-strfill { background:var(--in-accent); }
-html[data-design="pro"] .in-ai-display,
 html[data-design="pro"] .in-ai-hero,
 html[data-design="pro"] .score-compare { background:var(--in-bg); }
+/* AI Skillset box keeps the alternate skin's teal tint so it pops. */
+html[data-design="pro"] .in-ai-display {
+  border:1px solid rgba(13,148,136,.28);
+  background:linear-gradient(135deg, rgba(13,148,136,.05), rgba(20,184,166,.05));
+}
 html[data-design="pro"] .co-dash-head { background:none; }
 
 /* ---- posts (all surfaces) ---- */

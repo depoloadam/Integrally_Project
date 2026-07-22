@@ -400,6 +400,7 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
   margin:2px 0 12px; background:var(--in-bg); border:1px solid var(--in-line); color:var(--in-accent);
   font-family:inherit; font-size:12.5px; font-weight:600; text-transform:none; letter-spacing:0;
   border-radius:9px; padding:6px 12px; cursor:pointer; transition:border-color .12s, background .12s; }
+.in-endo-see#endo-see-own, .in-endo-see#endo-see-btn { margin:12px 0 0; }
 .in-endo-see:hover { border-color:var(--in-accent); background:#fff; }
 .in-endo-see-ico { display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px;
   border-radius:50%; background:var(--in-accent); color:#fff; font-size:10px; font-weight:700; }
