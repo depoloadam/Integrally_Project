@@ -35,6 +35,23 @@ if ($uuid === '') {
     if (!$r) Response::error('Profile not found.', 404);
     $followerType = 'user';
     $followerId   = (int) $r['id'];
+
+    // --- Follow-list privacy gate ------------------------------------
+    // The profile owner may hide their following list from others.
+    // Owner viewing their own list always passes.
+    $viewerId = Auth::userId();
+    $isOwner  = ($viewerId !== null && $viewerId === $followerId);
+    if (!$isOwner) {
+        $ps = $pdo->prepare(
+            "SELECT setting_value FROM user_settings
+             WHERE user_id = ? AND setting_key = 'hide_follow_lists' LIMIT 1"
+        );
+        $ps->execute([$followerId]);
+        $hp = $ps->fetch();
+        if ($hp && $hp['setting_value'] === '1') {
+            Response::error('This user has hidden their following list.', 403, 'follow_lists_hidden');
+        }
+    }
 }
 
 $sql    = 'SELECT target_type, target_id, created_at FROM follows

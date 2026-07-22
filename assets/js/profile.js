@@ -5,6 +5,93 @@
 // =====================================================================
 
 // ===================================================================
+// Follower / following counts — shared between own + public profiles.
+// Renders a compact bar of two tappable stats. When `hidden` is true
+// (viewer isn't the owner and the target hides their lists) the stats
+// render as plain, non-tappable text. `isOwner` lets the owner always
+// open their own lists regardless of the hide setting.
+// ===================================================================
+function followCountsHtml(followers, following, hidden, isOwner) {
+  const tappable = isOwner || !hidden;
+  const cls = tappable ? "in-followstat tappable" : "in-followstat";
+  const attr = tappable ? "" : ' aria-disabled="true"';
+  return `
+    <div class="in-followcounts">
+      <button class="${cls}" data-follow-list="followers"${attr}>
+        <span class="n">${followers}</span> follower${followers === 1 ? "" : "s"}
+      </button>
+      <button class="${cls}" data-follow-list="following"${attr}>
+        <span class="n">${following}</span> following
+      </button>
+    </div>`;
+}
+
+// Wire the two stat buttons inside a rendered header to open the list
+// modal. `container` is the header element; `uuid` is the profile owner.
+function wireFollowCounts(container, uuid, hidden, isOwner) {
+  container.querySelectorAll("[data-follow-list]").forEach(btn => {
+    if (!btn.classList.contains("tappable")) return;
+    btn.onclick = () => openFollowList(uuid, btn.getAttribute("data-follow-list"));
+  });
+}
+
+// Open a modal listing a profile's followers or the accounts it follows.
+// Rows are tappable and navigate to that account's profile. Users go to
+// their public profile; companies to the company page.
+async function openFollowList(uuid, mode) {
+  const title = mode === "followers" ? "Followers" : "Following";
+  openModal(`
+    <h3 class="in-modal-title">${title}</h3>
+    <div class="in-followlist" id="follow-list-body">
+      <div class="in-loading" style="padding:20px">Loading…</div>
+    </div>
+    <div class="in-modal-actions"><button class="in-btn ghost" onclick="closeModal()">Close</button></div>
+  `);
+
+  const endpoint = mode === "followers"
+    ? "/follow/followers.php?type=user&uuid=" + encodeURIComponent(uuid)
+    : "/follow/following.php?uuid=" + encodeURIComponent(uuid);
+  const r = await api(endpoint);
+  const body = $("follow-list-body");
+  if (!body) return; // modal closed while loading
+
+  if (r.data?.code === "follow_lists_hidden") {
+    body.innerHTML = `<div class="in-empty" style="padding:20px;text-align:center">This list is private.</div>`;
+    return;
+  }
+  if (!r.ok || !r.data?.success) {
+    body.innerHTML = `<div class="in-empty" style="padding:20px;text-align:center">Couldn't load this list.</div>`;
+    return;
+  }
+
+  const rows = r.data.data || [];
+  if (!rows.length) {
+    const msg = mode === "followers" ? "No followers yet." : "Not following anyone yet.";
+    body.innerHTML = `<div class="in-empty" style="padding:20px;text-align:center">${msg}</div>`;
+    return;
+  }
+
+  body.innerHTML = "";
+  rows.forEach(row => {
+    // followers.php uses follower_type; following.php uses target_type.
+    const kind = row.follower_type || row.target_type || "user";
+    const name = row.name || row.username || "";
+    const avatar = row.avatar || row.profile_pic || row.logo || "";
+    const rowUuid = row.uuid;
+    const initial = (name || "?").charAt(0).toUpperCase();
+    const hash = kind === "company" ? "#company/" + rowUuid : "#user/" + rowUuid;
+    const item = el(`
+      <button class="in-followrow" type="button">
+        <span class="in-followrow-av">${avatar ? `<img src="${esc(avatar)}" alt="">` : esc(initial)}</span>
+        <span class="in-followrow-name">${kind === "company" ? "" : "@"}${esc(name)}</span>
+        ${kind === "company" ? `<span class="in-followrow-tag">Company</span>` : ""}
+      </button>`);
+    item.onclick = () => { closeModal(); location.hash = hash; };
+    body.appendChild(item);
+  });
+}
+
+// ===================================================================
 // VIEW: PROFILE (own, editable)
 // ===================================================================
 async function renderProfile() {
@@ -26,6 +113,14 @@ async function renderProfile() {
   const headline = effectiveHeadline(attrs, jobs.data?.data);
   const initial = (p.username || "?").charAt(0).toUpperCase();
   const loc = [p.city, p.state, p.country].filter(Boolean).join(", ");
+
+  // Own follow counts (owner always sees + can open both lists).
+  let ownFollowers = 0, ownFollowing = 0;
+  if (p.uuid) {
+    const c = await api("/follow/counts.php?type=user&uuid=" + encodeURIComponent(p.uuid));
+    ownFollowers = c.data?.data?.followers ?? 0;
+    ownFollowing = c.data?.data?.following ?? 0;
+  }
 
   view.innerHTML = "";
 
@@ -74,7 +169,7 @@ async function renderProfile() {
   grid.appendChild(rightCol);
 
   // header (left column, sticky) with options menu
-  leftCol.appendChild(el(`
+  const ownHead = el(`
     <div class="in-phead">
       <button class="in-phead-menu" id="phead-menu-btn" title="Options">👤</button>
       <div class="in-phead-dropdown" id="phead-dropdown">
@@ -85,9 +180,13 @@ async function renderProfile() {
         <h1>@${esc(p.username || "")}</h1>
         <div class="loc">${esc(loc || "No location set")}</div>
         ${headline ? `<div class="headline">${esc(headline)}</div>` : ""}
+        ${followCountsHtml(ownFollowers, ownFollowing, false, true)}
       </div>
       ${socialLinksHtml(attrs)}
-    </div>`));
+    </div>`);
+  leftCol.appendChild(ownHead);
+  // Owner can always open their own follower/following lists.
+  if (p.uuid) wireFollowCounts(ownHead, p.uuid, false, true);
   const pheadBtn = $("phead-menu-btn");
   const pheadDrop = $("phead-dropdown");
   pheadBtn.onclick = (e) => { e.stopPropagation(); pheadDrop.classList.toggle("show"); };
@@ -2067,6 +2166,8 @@ async function renderPublicProfile(uuid) {
   // Follow state + counts.
   const isFollowing = canFollow ? !!(fstat && fstat.data?.data?.following) : false;
   const followerCount = counts.data?.data?.followers ?? 0;
+  const followingCount = counts.data?.data?.following ?? 0;
+  const listsHidden = !!(counts.data?.data?.lists_hidden);
 
   view.innerHTML = "";
   view.appendChild(el(`<div class="in-back"><button class="in-back-btn" onclick="history.back()">← Back</button></div>`));
@@ -2082,7 +2183,7 @@ async function renderPublicProfile(uuid) {
         <h1>@${esc(p.username || "")}</h1>
         <div class="loc">${esc(loc || "No location set")}</div>
         ${headline ? `<div class="headline">${esc(headline)}</div>` : ""}
-        <div class="in-followcount">${followerCount} follower${followerCount === 1 ? "" : "s"}</div>
+        ${followCountsHtml(followerCount, followingCount, listsHidden, false)}
       </div>
       ${socialLinksHtml(attrs)}
       ${canFollow ? `<button class="in-follow-btn ${isFollowing ? "following" : ""}" id="follow-toggle">${isFollowing ? "Following" : "Follow"}</button>` : ""}
@@ -2092,6 +2193,10 @@ async function renderPublicProfile(uuid) {
   leftCol.appendChild(head);
   const msgBtn = head.querySelector("#msg-user");
   if (msgBtn) msgBtn.onclick = () => openMessageModal(uuid, p.username || "");
+  // Tappable follower/following counts (respects the target's hide setting).
+  wireFollowCounts(head, uuid, listsHidden, false);
+  // Live follower-count state so the number updates without a refresh.
+  let liveFollowers = followerCount;
   const followBtn = head.querySelector("#follow-toggle");
   if (followBtn) {
     followBtn.onclick = async () => {
@@ -2101,7 +2206,17 @@ async function renderPublicProfile(uuid) {
       const endpoint = currentlyFollowing ? "/follow/unfollow.php" : "/follow/follow.php";
       const r = await api(endpoint, "POST", { target_type:"user", target_uuid:uuid });
       btn.disabled = false;
-      if (r.ok && r.data?.success) { btn.classList.toggle("following"); btn.textContent = btn.classList.contains("following") ? "Following" : "Follow"; }
+      if (r.ok && r.data?.success) {
+        btn.classList.toggle("following");
+        const nowFollowing = btn.classList.contains("following");
+        btn.textContent = nowFollowing ? "Following" : "Follow";
+        // Live-update the follower count in the header.
+        liveFollowers = Math.max(0, liveFollowers + (nowFollowing ? 1 : -1));
+        const stat = head.querySelector('[data-follow-list="followers"] .n');
+        const label = head.querySelector('[data-follow-list="followers"]');
+        if (stat) stat.textContent = liveFollowers;
+        if (label) label.lastChild.textContent = ` follower${liveFollowers === 1 ? "" : "s"}`;
+      }
       else { toast(r.data?.error || "Could not update follow status.", "err"); }
     };
   }
@@ -2347,6 +2462,7 @@ function renderSetPrivacy(panel, st) {
   const showCityOn = st.show_city !== "0";                        // default on
   const readReceiptsOn = st.read_receipts !== "0";               // default on (dormant)
   const msgConnOnly = st.messages_connections_only === "1";      // default off (dormant)
+  const hideFollowListsOn = st.hide_follow_lists === "1";        // default off (lists visible)
   panel.appendChild(el(`
     <div class="in-set-group">
     <div class="in-set-section">
@@ -2394,6 +2510,13 @@ function renderSetPrivacy(panel, st) {
       </div>
       <div class="in-set-toggle" style="margin-top:16px">
         <div>
+          <div class="in-set-toggle-label">Hide my followers and following lists</div>
+          <div class="in-set-toggle-sub">When on, other people can still see your follower and following counts, but can't open the lists to see who those people are. You can always view your own lists.</div>
+        </div>
+        <button class="in-toggle ${hideFollowListsOn ? "on" : ""}" id="toggle-hide-follow-lists" role="switch" aria-checked="${hideFollowListsOn}"><span class="in-toggle-knob"></span></button>
+      </div>
+      <div class="in-set-toggle" style="margin-top:16px">
+        <div>
           <div class="in-set-toggle-label">Hide all scores from other users</div>
           <div class="in-set-toggle-sub">Your scores stay visible to you, but no one else will see them on your profile. You can also hide individual scores from the profile page.</div>
         </div>
@@ -2437,6 +2560,7 @@ function renderSetPrivacy(panel, st) {
   };
   wireToggle("toggle-discoverable",  "discoverable");
   wireToggle("toggle-show-city",     "show_city");
+  wireToggle("toggle-hide-follow-lists", "hide_follow_lists");
   wireToggle("toggle-read-receipts", "read_receipts");
   wireToggle("toggle-msg-conn",      "messages_connections_only");
   $("toggle-following").onclick = async () => {

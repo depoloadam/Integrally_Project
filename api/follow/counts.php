@@ -51,7 +51,26 @@ $stmt = $pdo->prepare(
 $stmt->execute([$type, $targetId]);
 $following = (int) $stmt->fetchColumn();
 
+// Whether this target hides their follower/following LISTS (counts stay
+// visible; only the tappable member lists are gated). Owner viewing self
+// is never hidden. Only users have this setting.
+$listsHidden = false;
+if ($type === 'user') {
+    $viewerId = Auth::userId();
+    $isOwner  = ($viewerId !== null && $viewerId === $targetId);
+    if (!$isOwner) {
+        $ps = $pdo->prepare(
+            "SELECT setting_value FROM user_settings
+             WHERE user_id = ? AND setting_key = 'hide_follow_lists' LIMIT 1"
+        );
+        $ps->execute([$targetId]);
+        $hp = $ps->fetch();
+        $listsHidden = ($hp && $hp['setting_value'] === '1');
+    }
+}
+
 Response::success([
-    'followers' => $followers,
-    'following' => $following,
+    'followers'    => $followers,
+    'following'    => $following,
+    'lists_hidden' => $listsHidden,
 ]);

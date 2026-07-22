@@ -523,6 +523,21 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 .in-back-btn { background:none; border:1px solid var(--in-line); border-radius:8px; padding:8px 14px; font-family:inherit; font-size:13px; font-weight:600; color:var(--in-ink-soft); cursor:pointer; }
 .in-back-btn:hover { border-color:var(--in-muted); }
 .in-followcount { font-size:13px; color:var(--in-muted); margin-top:10px; }
+/* Tappable follower / following counts */
+.in-followcounts { display:flex; gap:16px; margin-top:10px; }
+.in-followstat { background:none; border:none; padding:0; margin:0; font-family:inherit; font-size:13px; color:var(--in-muted); cursor:default; }
+.in-followstat .n { font-weight:700; color:var(--in-ink); }
+.in-followstat.tappable { cursor:pointer; }
+.in-followstat.tappable:hover { color:var(--in-ink-soft); }
+.in-followstat.tappable:hover .n { color:var(--in-accent); }
+/* Follower / following list modal */
+.in-followlist { max-height:60vh; overflow-y:auto; display:flex; flex-direction:column; gap:2px; }
+.in-followrow { display:flex; align-items:center; gap:12px; width:100%; text-align:left; background:none; border:none; border-radius:9px; padding:9px 10px; font-family:inherit; cursor:pointer; color:var(--in-ink); }
+.in-followrow:hover { background:var(--in-bg); }
+.in-followrow-av { flex:none; width:38px; height:38px; border-radius:50%; overflow:hidden; display:flex; align-items:center; justify-content:center; background:var(--in-accent); color:#fff; font-weight:700; font-size:15px; }
+.in-followrow-av img { width:100%; height:100%; object-fit:cover; }
+.in-followrow-name { font-size:14px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.in-followrow-tag { margin-left:auto; flex:none; font-size:11px; font-weight:600; color:var(--in-muted); border:1px solid var(--in-line); border-radius:20px; padding:2px 9px; }
 .co-meta-row { display:flex; gap:6px; align-items:baseline; flex-wrap:wrap; }
 .co-meta-row .in-followcount { margin-top:10px; }
 .co-since { font-size:13px; color:var(--in-muted); margin-top:10px; }

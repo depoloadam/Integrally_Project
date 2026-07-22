@@ -39,6 +39,26 @@ $target = $stmt->fetch();
 if (!$target) Response::error('Target not found.', 404);
 $targetId = (int) $target['id'];
 
+// --- Follow-list privacy gate ----------------------------------------
+// The target may hide their follower/following lists from everyone but
+// themselves. Owner (the signed-in user viewing their own lists) always
+// passes; companies never own a user's hide setting.
+if ($type === 'user') {
+    $viewerId = Auth::userId();
+    $isOwner  = ($viewerId !== null && $viewerId === $targetId);
+    if (!$isOwner) {
+        $ps = $pdo->prepare(
+            "SELECT setting_value FROM user_settings
+             WHERE user_id = ? AND setting_key = 'hide_follow_lists' LIMIT 1"
+        );
+        $ps->execute([$targetId]);
+        $hp = $ps->fetch();
+        if ($hp && $hp['setting_value'] === '1') {
+            Response::error('This user has hidden their follower lists.', 403, 'follow_lists_hidden');
+        }
+    }
+}
+
 // Polymorphic follower resolution: join both possible follower tables
 // and pick the matching one per row.
 $stmt = $pdo->prepare(

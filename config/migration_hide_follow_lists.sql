@@ -1,0 +1,24 @@
+-- =====================================================================
+-- migration_hide_follow_lists.sql
+-- Follow-list privacy toggle.
+--
+-- No schema change is required: the setting lives in the existing
+-- user_settings (user_id, setting_key, setting_value) table as the
+-- key 'hide_follow_lists' with value '1' (hidden) or '0'/absent (visible).
+--
+-- This file documents the new key and, optionally, registers it in
+-- attribute_definitions-style tooling if you track known setting keys.
+-- Nothing here must be run for the feature to work; user_settings already
+-- accepts arbitrary keys via api/settings/set.php.
+--
+-- Behaviour:
+--   absent / '0'  -> follower & following LISTS are public (default)
+--   '1'           -> lists are gated; only the owner can open them.
+--                    Counts remain visible to everyone either way.
+-- =====================================================================
+
+-- (Documentation only — no DDL needed.)
+-- Example of manually hiding a user's lists for testing:
+--   INSERT INTO user_settings (user_id, setting_key, setting_value)
+--   VALUES (<uid>, 'hide_follow_lists', '1')
+--   ON DUPLICATE KEY UPDATE setting_value = '1';
