@@ -3001,7 +3001,7 @@ async function renderScoreBreakdown(scoreId) {
   }
   view.innerHTML = "";
   view.appendChild(el(`
-    <div style="max-width:680px;margin:0 auto">
+    <div style="margin:0 auto">
       <div class="in-back"><button class="in-back-btn" onclick="location.hash='profile'">← Back to profile</button></div>
       <div class="in-card2 bd-hero">
         <div class="in-score-badge" style="width:64px;height:64px;font-size:24px;border-radius:14px">${val}</div>
@@ -3070,7 +3070,7 @@ async function renderScoreHistory(encoded) {
 
   if (!rows.length) {
     view.innerHTML = "";
-    view.appendChild(el(`<div style="max-width:720px;margin:0 auto">${back}
+    view.appendChild(el(`<div style="margin:0 auto">${back}
       <div class="in-card2"><div class="in-empty" style="text-align:center">No score history yet for “${esc(targetValue)}”.</div></div></div>`));
     return;
   }
@@ -3086,7 +3086,7 @@ async function renderScoreHistory(encoded) {
 
   view.innerHTML = "";
   view.appendChild(el(`
-    <div style="max-width:720px;margin:0 auto">
+    <div style="margin:0 auto">
       ${back}
       <div class="in-card2 sh-hero">
         <div class="sh-eyebrow">${typeLabel} · score history</div>
