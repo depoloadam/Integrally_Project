@@ -2752,9 +2752,15 @@ function renderSetScores(panel, st) {
 function renderSetAppearance(panel, st) {
   const theme = (st.theme === "dark" || st.theme === "light") ? st.theme : "system";
   const reduceOn = st.reduced_motion === "1";
+  let design = "original";
+  try { if (localStorage.getItem("in_design") === "pro") design = "pro"; } catch (_) {}
   const opt = (val, label, sub) => `
     <button class="in-theme-opt ${theme === val ? "active" : ""}" data-theme-opt="${val}">
       <span class="in-theme-swatch tsw-${val}"></span>
+      <span class="in-theme-opt-txt"><span class="in-theme-opt-label">${label}</span><span class="in-theme-opt-sub">${sub}</span></span>
+    </button>`;
+  const dopt = (val, label, sub) => `
+    <button class="in-theme-opt ${design === val ? "active" : ""}" data-design-opt="${val}">
       <span class="in-theme-opt-txt"><span class="in-theme-opt-label">${label}</span><span class="in-theme-opt-sub">${sub}</span></span>
     </button>`;
   panel.appendChild(el(`
@@ -2769,6 +2775,14 @@ function renderSetAppearance(panel, st) {
       </div>
     </div>
     <div class="in-set-section">
+      <h3>Design <span class="in-soon-pill">Preview</span></h3>
+      <div class="in-set-toggle-sub" style="margin-bottom:12px">Try the new professional look. Applies to the Feed page on this device only — switch back any time.</div>
+      <div class="in-theme-opts">
+        ${dopt("original", "Original", "The current Integrally design.")}
+        ${dopt("pro", "Professional", "Flat panels, ruled lists, squared geometry.")}
+      </div>
+    </div>
+    <div class="in-set-section">
       <h3>Motion</h3>
       <div class="in-set-toggle">
         <div>
@@ -2780,6 +2794,16 @@ function renderSetAppearance(panel, st) {
       <div class="in-set-msg" id="set-appearance-msg"></div>
     </div>
     </div>`));
+
+  // Design preview: client-only (applyDesign persists to localStorage
+  // itself), so no settings API call and no "Saved." message needed.
+  panel.querySelectorAll("[data-design-opt]").forEach(btn => {
+    btn.onclick = () => {
+      panel.querySelectorAll("[data-design-opt]").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      applyDesign(btn.dataset.designOpt);   // live, instant
+    };
+  });
 
   panel.querySelectorAll("[data-theme-opt]").forEach(btn => {
     btn.onclick = async () => {

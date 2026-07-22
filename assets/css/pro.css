@@ -1,0 +1,201 @@
+/* =====================================================================
+   Integrally — pro.css  ("Professional" design preview: the Ledger skin)
+
+   EVERY rule in this file is scoped under html[data-design="pro"].
+   With the attribute absent the file is inert and the site renders the
+   original design untouched — that is the whole rollback story.
+
+   Scope: the FEED PAGE content only (.feed-grid and its children).
+   The nav/shell and all other pages stay original in both modes.
+
+   Direction ("Ledger"): Integrally quantifies careers, so the
+   professional skin reads like an instrument, not a social toy —
+   flat white panels, hairline rules, 6px squared geometry, squared
+   avatars, one deep desaturated teal doing all accent work, underline
+   tabs, uppercase micro-labels, and tabular numerals on every number.
+   Signature element: the career score in the identity rail, set like
+   an index quote.
+
+   Toggled from Settings → Appearance ("Design"), persisted in
+   localStorage("in_design"), applied by applyDesign() in shell.js.
+   ===================================================================== */
+
+/* ---- palette: cool slate + one deep teal (light theme only — the
+   :not() guard keeps these from clobbering the dark-theme variable
+   block in app.css, which shares the same specificity and loads
+   earlier). Overriding --in-teal-bright to the same deep teal is
+   deliberate: it collapses every accent→bright gradient in scope to a
+   flat field with zero markup changes. ---- */
+:root[data-design="pro"]:not([data-theme="dark"]) {
+  --in-ink:#101828; --in-ink-soft:#364152; --in-muted:#697586;
+  --in-line:#e3e8ef; --in-bg:#f8fafc; --in-card:#ffffff;
+  --in-accent:#0f766e; --in-accent-d:#134e4a; --in-teal-bright:#0f766e;
+}
+/* Dark theme keeps its own neutrals from app.css; only calm the accent
+   trio down from the bright mint and flatten gradients the same way. */
+:root[data-design="pro"][data-theme="dark"] {
+  --in-accent:#2aa79b; --in-accent-d:#1f8479; --in-teal-bright:#2aa79b;
+}
+
+/* ---- feed-wide type discipline ---- */
+html[data-design="pro"] .feed-grid {
+  font-variant-numeric: tabular-nums;   /* every count/score aligns */
+  gap: 28px;
+}
+
+/* =====================================================================
+   IDENTITY CARD — the signature. Gradient cover out; a 3px accent
+   rule on top; left-aligned; squared avatar; score set like an index
+   quote.
+   ===================================================================== */
+html[data-design="pro"] .feed-grid .idcard {
+  border-radius:6px;
+  border-top:3px solid var(--in-accent);
+}
+html[data-design="pro"] .feed-grid .idcard-cover { display:none; }
+html[data-design="pro"] .feed-grid .idcard-body {
+  text-align:left;
+  padding:16px 16px 14px;
+}
+html[data-design="pro"] .feed-grid .idcard-ava {
+  width:52px; height:52px;
+  border-radius:6px;
+  margin:0 0 12px;
+  border:none;
+  font-size:22px;
+}
+html[data-design="pro"] .feed-grid .idcard-name {
+  font-size:15px; letter-spacing:-0.01em;
+}
+html[data-design="pro"] .feed-grid .idcard-loc { margin-top:2px; }
+html[data-design="pro"] .feed-grid .idcard-stats {
+  margin-top:12px; padding-top:10px; gap:0;
+}
+html[data-design="pro"] .feed-grid .idcard-stat { text-align:left; padding-right:12px; }
+html[data-design="pro"] .feed-grid .idcard-stat + .idcard-stat {
+  border-left:1px solid var(--in-line); padding-left:12px;
+}
+html[data-design="pro"] .feed-grid .idcard-stat.tappable { border-radius:4px; padding-top:2px; padding-bottom:2px; }
+html[data-design="pro"] .feed-grid .idcard-stat b { font-size:16px; letter-spacing:-0.01em; }
+html[data-design="pro"] .feed-grid .idcard-stat span {
+  font-size:10px; letter-spacing:.7px; margin-top:1px; display:block;
+}
+
+/* Score chip → index quote: flat full-width block, big tabular numeral,
+   the target name as an uppercase micro-label beneath it. */
+html[data-design="pro"] .feed-grid .idcard-score-chip {
+  display:flex; width:100%; align-items:baseline; gap:10px;
+  background:var(--in-bg);
+  border:1px solid var(--in-line); border-left:3px solid var(--in-accent);
+  border-radius:4px;
+  padding:10px 12px;
+  text-align:left;
+}
+html[data-design="pro"] .feed-grid .idcard-score-chip:hover { border-color:var(--in-accent); }
+html[data-design="pro"] .feed-grid .idcard-score-val {
+  width:auto; height:auto; border-radius:0;
+  background:none;
+  color:var(--in-ink);
+  font-size:26px; font-weight:700; letter-spacing:-0.02em; line-height:1;
+}
+html[data-design="pro"] .feed-grid .idcard-score-chip > span:last-child {
+  font-size:10.5px; font-weight:700; letter-spacing:.7px; text-transform:uppercase;
+  color:var(--in-muted);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;
+}
+html[data-design="pro"] .feed-grid .idcard-score-cta {
+  border-radius:4px; border-style:solid;
+}
+html[data-design="pro"] .feed-grid .idcard-saved { border-radius:4px; }
+
+/* =====================================================================
+   RAIL CARDS — flat panels, ruled rows, squared avatars, text buttons.
+   ===================================================================== */
+html[data-design="pro"] .feed-grid .railcard {
+  border-radius:6px; padding:14px 16px 10px;
+}
+html[data-design="pro"] .feed-grid .railcard h3 {
+  font-size:10.5px; letter-spacing:.8px; color:var(--in-muted);
+  padding-bottom:9px; margin-bottom:4px;
+  border-bottom:1px solid var(--in-line);
+}
+html[data-design="pro"] .feed-grid .rail-ava { border-radius:6px; width:36px; height:36px; font-size:14px; }
+html[data-design="pro"] .feed-grid .rail-ava.company { border-radius:6px; }
+html[data-design="pro"] .feed-grid .rail-follow { border-radius:4px; }
+html[data-design="pro"] .feed-grid .rail-follow.done { border-style:dashed; }
+
+/* =====================================================================
+   COMPOSER — flat panel, square editor field.
+   ===================================================================== */
+html[data-design="pro"] .feed-grid .in-composer,
+html[data-design="pro"] .feed-grid .in-card2 {
+  border-radius:6px;
+}
+html[data-design="pro"] .feed-grid .in-composer .rt-editor { border-radius:4px; }
+
+/* =====================================================================
+   FEED TABS — pill segment → underline tabs on a baseline rule.
+   Inset shadow (not border) for the active bar avoids layout shift.
+   ===================================================================== */
+html[data-design="pro"] .feed-grid .in-feedtabs {
+  background:none; border:none; border-radius:0;
+  border-bottom:1px solid var(--in-line);
+  padding:0; gap:22px; width:auto; margin:0 0 16px;
+}
+html[data-design="pro"] .feed-grid .in-feedtabs button {
+  border-radius:0; padding:9px 2px 11px;
+  font-size:13.5px; letter-spacing:.01em;
+}
+html[data-design="pro"] .feed-grid .in-feedtabs button:hover {
+  background:none; color:var(--in-ink);
+}
+html[data-design="pro"] .feed-grid .in-feedtabs button.active {
+  background:none; border:none; color:var(--in-ink);
+  box-shadow:inset 0 -2px 0 var(--in-accent);
+}
+
+/* Sort/Time dropdown triggers + menus: squared, quieter. */
+html[data-design="pro"] .feed-grid .sort-btn { border-radius:4px; }
+html[data-design="pro"] .feed-grid .list-controls .sort-btn { font-size:12.5px; }
+
+/* =====================================================================
+   POSTS — floating shadow cards → flat ruled panels. Hover talks with
+   the border, not elevation.
+   ===================================================================== */
+html[data-design="pro"] .feed-grid .in-post-item {
+  border-radius:6px;
+  margin-bottom:10px;
+  box-shadow:none;
+  transition:border-color .12s ease;
+}
+html[data-design="pro"] .feed-grid .in-post-item:hover {
+  box-shadow:none;
+  border-color:#98a2b3;
+}
+[data-theme="dark"][data-design="pro"] .feed-grid .in-post-item:hover { border-color:#4a5f6b; }
+
+html[data-design="pro"] .feed-grid .post-avatar { border-radius:6px; }
+html[data-design="pro"] .feed-grid .post-avatar.company { border-radius:6px; }
+html[data-design="pro"] .feed-grid .post-name { letter-spacing:-0.01em; }
+html[data-design="pro"] .feed-grid .post-when { font-size:11.5px; }
+html[data-design="pro"] .feed-grid .post-tag {
+  border-radius:3px; text-transform:uppercase; letter-spacing:.5px; font-size:10px;
+}
+html[data-design="pro"] .feed-grid .post-media { border-radius:4px; }
+
+/* Action pills → quiet text-and-count actions with a hairline above. */
+html[data-design="pro"] .feed-grid .post-actions {
+  border-top:1px solid var(--in-line);
+  margin-top:12px; padding-top:6px;
+}
+html[data-design="pro"] .feed-grid .post-act {
+  border-radius:4px; padding:6px 10px; font-size:12.5px;
+}
+html[data-design="pro"] .feed-grid .post-menu-btn { border-radius:4px; }
+
+/* Load-more + generic ghost buttons inside the feed: squared. */
+html[data-design="pro"] .feed-grid .feed-more,
+html[data-design="pro"] .feed-grid .in-btn { border-radius:4px; }
+
+/* Comments area inherits the ruled language. */
+html[data-design="pro"] .feed-grid .post-comments { border-radius:0; }

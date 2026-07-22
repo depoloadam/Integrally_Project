@@ -217,6 +217,27 @@ function applyReducedMotion(on) {
 }
 window.applyTheme = applyTheme;
 
+// ---- Design preview ("pro" skin) -------------------------------------
+// Mirrors the theme mechanism: a data-design attribute on <html> that
+// pro.css scopes every one of its rules under, so removing the
+// attribute restores the original design exactly. Client-side only
+// (localStorage, per device) because this is an evaluation preview —
+// no server setting, no migration, instantly reversible.
+function applyDesign(mode) {
+  const root = document.documentElement;
+  if (mode === "pro") root.setAttribute("data-design", "pro");
+  else root.removeAttribute("data-design");
+  try { localStorage.setItem("in_design", mode === "pro" ? "pro" : "original"); } catch (_) {}
+}
+// Apply the saved choice immediately at script parse, before any view
+// renders, so the feed never flashes the other design.
+try {
+  if (localStorage.getItem("in_design") === "pro") {
+    document.documentElement.setAttribute("data-design", "pro");
+  }
+} catch (_) { /* storage blocked — original design */ }
+window.applyDesign = applyDesign;
+
 // Close on overlay click, but ONLY when the press started on the overlay
 // itself. Without the mousedown guard, selecting text inside the modal and
 // releasing the mouse outside it registers as an overlay click and closes
