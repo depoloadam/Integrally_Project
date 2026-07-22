@@ -202,117 +202,97 @@ async function renderFeed() {
   const view = $("view");
   view.innerHTML = "";
 
-  // ---- two-column scaffold ----
-  // Left: identity card, then "Add to your network" and "Recent
-  // openings" stacked beneath it. Right: composer + tabs + posts. The
-  // whole grid lives inside the standard 980px column, same width as
-  // the top nav. The rail hides itself at narrow widths (CSS), and the
-  // discover cards self-omit if their data calls fail, so the feed
-  // itself never blocks on them.
+  // ---- layout ----
+  // The feed is the spine of this page, so the POST COLUMN leads (left,
+  // where reading starts) and the discover cards sit in a right rail.
+  // "Who you are" is folded into the composer as a compact identity
+  // strip (buildComposerIdentity) rather than a tall standalone profile
+  // card — that block used to dominate and make the posts feel like a
+  // footnote. Network + openings keep their full prominence on the side.
+  // The rail hides itself at narrow widths (CSS); discover cards
+  // self-omit if their data calls fail, so the feed never blocks on them.
   const grid = el(`
     <div class="feed-grid">
-      <aside class="feed-rail-left"></aside>
       <div class="feed-center"></div>
+      <aside class="feed-rail-right"></aside>
     </div>`);
   view.appendChild(grid);
   const center = grid.querySelector(".feed-center");
-  const rail   = grid.querySelector(".feed-rail-left");
+  const rail   = grid.querySelector(".feed-rail-right");
 
-  // ---- composer (user identity) ----
-  buildComposer({
+  // ---- composer, with the identity strip merged into its header ----
+  const composer = buildComposer({
     parent: center,
     avatarHTML: ME.profile_pic ? `<img src="${esc(ME.profile_pic)}" alt="">` : esc((ME.username || "?").charAt(0).toUpperCase()),
     placeholder: `Share an update, @${ME.username}…`,
     onPosted: renderFeed,
+    identity: true,
   });
+  buildComposerIdentity(composer);
 
   // Rail cards load in the background — they must never delay the posts.
-  // The identity card appends synchronously inside buildIdentityRail, so
-  // the discover cards always land below it even though both are async.
-  buildIdentityRail(rail);
   buildDiscoverRail(rail);
 
   // ---- tabs + post list ----
   await renderFeedList(center);
 }
 
-// ---- left rail: identity card ----------------------------------------
-// Avatar + name + location, follower counts, and the latest career score
-// (or a "set up scoring" CTA — the score is the product, so the rail
-// should always point at it). Everything degrades quietly: any failed
-// call just leaves that piece out.
-async function buildIdentityRail(mount) {
-  if (!mount || !ME) return;   // shared mount — never remove it
+// ---- composer identity strip -----------------------------------------
+// Fills the compact identity header inside the composer card (avatar +
+// handle wired to the profile, an inline latest-score readout, and
+// follower/following counts). This replaces the old standalone identity
+// card in the rail: the same signals (score is the product, so it stays
+// front-and-centre) without a tall profile block competing with the
+// posts. Everything degrades quietly — any failed call leaves that piece
+// out, and the header itself is never removed.
+async function buildComposerIdentity(composer) {
+  if (!composer || !ME) return;
+  const strip = composer.querySelector(".comp-identity");
+  if (!strip) return;
 
-  const avaHTML = ME.profile_pic
-    ? `<img src="${esc(ME.profile_pic)}" alt="">`
-    : esc((ME.username || "?").charAt(0).toUpperCase());
-  const loc = [ME.city, ME.state].filter(Boolean).join(", ");
-
-  const card = el(`
-    <div class="idcard">
-      <div class="idcard-cover"></div>
-      <div class="idcard-body">
-        <div class="idcard-ava" title="View profile">${avaHTML}</div>
-        <div class="idcard-name">@${esc(ME.username || "")}</div>
-        ${loc ? `<div class="idcard-loc">${esc(loc)}</div>` : ""}
-        <div class="idcard-stats" style="display:none">
-          <div class="idcard-stat"><b class="idc-followers">–</b><span>Followers</span></div>
-          <div class="idcard-stat"><b class="idc-following">–</b><span>Following</span></div>
-        </div>
-        <div class="idcard-score"></div>
-        <button class="idcard-saved" title="View your saved posts">
-          <span class="pm-ico">${PM_ICONS.saved}</span> Saved posts
-        </button>
-      </div>
-    </div>`);
   const goProfile = () => { location.hash = "profile"; };
-  card.querySelector(".idcard-ava").onclick = goProfile;
-  card.querySelector(".idcard-name").onclick = goProfile;
-  card.querySelector(".idcard-saved").onclick = () => { location.hash = "saved"; };
-  mount.appendChild(card);
+  strip.querySelector(".comp-id-ava").onclick = goProfile;
+  strip.querySelector(".comp-id-name").onclick = goProfile;
+  const savedBtn = strip.querySelector(".comp-id-saved");
+  if (savedBtn) savedBtn.onclick = () => { location.hash = "saved"; };
 
-  // Follower counts.
+  // Follower / following counts — inline stats, tap to open the list.
   try {
     const r = await api(`/follow/counts.php?type=user&uuid=${encodeURIComponent(ME.uuid)}`);
     const d = r.data?.data;
     if (r.ok && d) {
-      card.querySelector(".idc-followers").textContent = d.followers ?? 0;
-      card.querySelector(".idc-following").textContent = d.following ?? 0;
-      const stats = card.querySelector(".idcard-stats");
-      stats.style.display = "";
-      // Tappable stats open the unified follower/following modal on the
-      // matching tab. This is the owner's own card, so lists always open.
-      const fWrap = card.querySelector(".idc-followers").closest(".idcard-stat");
-      const gWrap = card.querySelector(".idc-following").closest(".idcard-stat");
-      fWrap.classList.add("tappable");
-      gWrap.classList.add("tappable");
-      fWrap.onclick = () => openFollowList(ME.uuid, "followers");
-      gWrap.onclick = () => openFollowList(ME.uuid, "following");
+      const fBtn = strip.querySelector(".comp-id-followers");
+      const gBtn = strip.querySelector(".comp-id-following");
+      fBtn.querySelector("b").textContent = d.followers ?? 0;
+      gBtn.querySelector("b").textContent = d.following ?? 0;
+      fBtn.style.display = "";
+      gBtn.style.display = "";
+      fBtn.onclick = () => openFollowList(ME.uuid, "followers");
+      gBtn.onclick = () => openFollowList(ME.uuid, "following");
     }
   } catch (_) { /* counts stay hidden */ }
 
-  // Latest score — show the newest one as a chip, else the setup CTA.
+  // Latest score — inline chip, or a setup CTA if none yet.
   try {
     const r = await api("/score/latest.php");
     const scores = r.data?.data?.scores || [];
-    const box = card.querySelector(".idcard-score");
+    const box = strip.querySelector(".comp-id-score");
     if (r.ok && scores.length) {
       const s = scores[0];
-      box.appendChild(el(`
-        <button class="idcard-score-chip" title="View score history">
-          <span class="idcard-score-val">${esc(String(Math.round(s.score_value)))}</span>
-          <span>${esc(s.target_value || "Career score")}</span>
-        </button>`));
-      box.querySelector(".idcard-score-chip").onclick = () => { location.hash = "profile"; };
+      box.innerHTML = `<span class="comp-id-score-val">${esc(String(Math.round(s.score_value)))}</span> ${esc(s.target_value || "Career score")}`;
+      box.title = "View score history";
+      box.style.display = "";
+      box.onclick = goProfile;
     } else {
-      box.appendChild(el(`<button class="idcard-score-cta">See your career score →</button>`));
-      box.querySelector(".idcard-score-cta").onclick = goProfile;
+      box.innerHTML = `See your career score →`;
+      box.classList.add("is-cta");
+      box.style.display = "";
+      box.onclick = goProfile;
     }
-  } catch (_) { /* score box stays empty */ }
+  } catch (_) { /* score readout stays hidden */ }
 }
 
-// ---- discover cards (left rail, under the identity card) --------------
+// ---- discover cards (right rail) --------------------------------------
 // "Add to your network" (connect suggestions with inline follow) and
 // "Recent openings" (top open jobs). Both cards simply omit themselves
 // if their endpoint returns nothing. The mount is SHARED with the
@@ -394,6 +374,19 @@ async function buildDiscoverRail(mount) {
 function buildComposer(opts) {
   const composer = el(`
     <div class="in-card2 in-composer collapsed">
+      ${opts.identity ? `
+      <div class="comp-identity">
+        <div class="comp-id-ava" title="View profile">${opts.avatarHTML}</div>
+        <div class="comp-id-main">
+          <div class="comp-id-name">@${esc((ME && ME.username) || "")}</div>
+          <div class="comp-id-meta">
+            <span class="comp-id-score" style="display:none"></span>
+            <button class="comp-id-stat comp-id-followers" style="display:none" type="button"><b>–</b> Followers</button>
+            <button class="comp-id-stat comp-id-following" style="display:none" type="button"><b>–</b> Following</button>
+          </div>
+        </div>
+        <button class="comp-id-saved" type="button" title="View your saved posts"><span class="pm-ico">${PM_ICONS.saved}</span> Saved</button>
+      </div>` : ""}
       <div class="comp-top">
         <div class="comp-avatar">${opts.avatarHTML}</div>
         <div id="comp-editor" style="flex:1;min-width:0"></div>
