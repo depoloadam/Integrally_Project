@@ -88,21 +88,21 @@ console.log('== period option set ==');
   check('has all five periods', JSON.stringify(keys) === JSON.stringify(['all','today','week','month','year']), JSON.stringify(keys));
 }
 
-console.log('\n== feed sort options exclude newest/oldest ==');
+console.log('\n== feed sort options exclude oldest but keep newest ==');
 {
   const env = makeEnv();
   const keys = env.FEED_SORT_OPTIONS.map(o => o[0]);
-  check('feed sort excludes newest', !keys.includes('newest'), JSON.stringify(keys));
+  check('feed sort keeps newest', keys.includes('newest'), JSON.stringify(keys));
   check('feed sort excludes oldest', !keys.includes('oldest'));
-  check('feed sort is [relevance, engagement]', JSON.stringify(keys) === JSON.stringify(['relevance','engagement']), JSON.stringify(keys));
-  // The generic SORT_OPTIONS (profile/saved) still has them.
+  check('feed sort is [relevance, newest, engagement]', JSON.stringify(keys) === JSON.stringify(['relevance','newest','engagement']), JSON.stringify(keys));
+  // The generic SORT_OPTIONS (profile/saved) still has oldest.
   const gen = env.SORT_OPTIONS.map(o => o[0]);
-  check('generic sort still has newest/oldest', gen.includes('newest') && gen.includes('oldest'));
-  // A control built with the feed set renders exactly two items.
+  check('generic sort still has oldest', gen.includes('oldest'));
+  // A control built with the feed set renders three items.
   const ctrl = env.buildSortControl('relevance', () => {}, { options: env.FEED_SORT_OPTIONS, labels: Object.fromEntries(env.FEED_SORT_OPTIONS) });
   env.document.body.appendChild(ctrl);
   ctrl.querySelector('.sort-btn').click();
-  check('feed sort menu shows 2 items', env.document.querySelectorAll('.sort-menu-item').length === 2);
+  check('feed sort menu shows 3 items', env.document.querySelectorAll('.sort-menu-item').length === 3);
 }
 
 console.log('\n== sort control default prefix is "Sort:" ==');

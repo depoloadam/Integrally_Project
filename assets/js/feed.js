@@ -19,12 +19,13 @@ const SORT_OPTIONS = [
 ];
 const SORT_LABEL = Object.fromEntries(SORT_OPTIONS);
 
-// The main feed (Following + Explore) intentionally drops Newest/Oldest:
-// a chronological toggle makes little sense on a ranked, followed-authors
-// feed. Those remain on profile activity, saved, and search where a
-// specific ordering is meaningful. Relevance-first, then engagement.
+// The main feed (Following + Explore) drops only Oldest: a reverse-chron
+// toggle makes little sense on a ranked, followed-authors feed. Newest,
+// Relevance, and Most engaged remain. Oldest stays on profile activity,
+// saved, and search where a specific ordering is meaningful.
 const FEED_SORT_OPTIONS = [
   ["relevance", "Relevance"],
+  ["newest", "Newest"],
   ["engagement", "Most engaged"],
 ];
 const FEED_SORT_LABEL = Object.fromEntries(FEED_SORT_OPTIONS);
