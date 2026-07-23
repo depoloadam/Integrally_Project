@@ -245,27 +245,50 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
   position:sticky; top:78px;
   max-height:calc(100vh - 78px - 16px);
   overflow-y:auto; overscroll-behavior:contain;
-  scrollbar-width:thin; scrollbar-gutter:stable;
+  scrollbar-width:thin;
   padding-right:2px;
 }
 .in-col-right { min-width:0; }
 
-/* Subtle scrollbar for the sticky side columns (feed rail + profile
-   left). WebKit needs explicit styling; Firefox uses scrollbar-width
-   above. The track stays transparent so a short rail looks unchanged. */
+/* Near-invisible scrollbar for the sticky side columns (feed rail +
+   profile left). The thumb is fully transparent at rest and only fades
+   in while the column is hovered, so the rail reads as plain cards
+   until you actually reach for it. Track never paints. */
 .feed-rail-right::-webkit-scrollbar,
-.in-col-left::-webkit-scrollbar { width:8px; }
+.in-col-left::-webkit-scrollbar { width:6px; }
 .feed-rail-right::-webkit-scrollbar-track,
 .in-col-left::-webkit-scrollbar-track { background:transparent; }
 .feed-rail-right::-webkit-scrollbar-thumb,
 .in-col-left::-webkit-scrollbar-thumb {
-  background:var(--in-line); border-radius:8px;
+  background:transparent; border-radius:6px;
   border:2px solid transparent; background-clip:content-box;
+  transition:background-color .18s ease;
 }
 .feed-rail-right:hover::-webkit-scrollbar-thumb,
-.in-col-left:hover::-webkit-scrollbar-thumb { background:#c3cdd6; background-clip:content-box; }
+.in-col-left:hover::-webkit-scrollbar-thumb {
+  background:rgba(11,31,42,.18); background-clip:content-box;
+}
+.feed-rail-right::-webkit-scrollbar-thumb:hover,
+.in-col-left::-webkit-scrollbar-thumb:hover {
+  background:rgba(11,31,42,.34); background-clip:content-box;
+}
 [data-theme="dark"] .feed-rail-right:hover::-webkit-scrollbar-thumb,
-[data-theme="dark"] .in-col-left:hover::-webkit-scrollbar-thumb { background:#3d4f5a; background-clip:content-box; }
+[data-theme="dark"] .in-col-left:hover::-webkit-scrollbar-thumb {
+  background:rgba(255,255,255,.16); background-clip:content-box;
+}
+[data-theme="dark"] .feed-rail-right::-webkit-scrollbar-thumb:hover,
+[data-theme="dark"] .in-col-left::-webkit-scrollbar-thumb:hover {
+  background:rgba(255,255,255,.30); background-clip:content-box;
+}
+/* Firefox only: it has no thumb pseudo-element, so colour the bar
+   directly. Guarded by @supports because setting scrollbar-color in
+   Chromium makes it ignore the ::-webkit-scrollbar rules above. */
+@supports (-moz-appearance:none) {
+  .feed-rail-right, .in-col-left { scrollbar-color:transparent transparent; }
+  .feed-rail-right:hover, .in-col-left:hover { scrollbar-color:rgba(11,31,42,.22) transparent; }
+  [data-theme="dark"] .feed-rail-right:hover,
+  [data-theme="dark"] .in-col-left:hover { scrollbar-color:rgba(255,255,255,.20) transparent; }
+}
 
 /* profile header card */
 .in-phead {
@@ -1905,7 +1928,7 @@ html.in-reduce-motion *::after {
   position:sticky; top:78px;
   max-height:calc(100vh - 78px - 16px);
   overflow-y:auto; overscroll-behavior:contain;
-  scrollbar-width:thin; scrollbar-gutter:stable;
+  scrollbar-width:thin;
   padding-right:2px;
 }
 /* The rail drops off before it would crush the post column. */

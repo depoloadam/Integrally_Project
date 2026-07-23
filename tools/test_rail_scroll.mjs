@@ -77,6 +77,27 @@ console.log("mobile reset (profile column is not sticky there)");
   ok(prop(body, "overflow-y") === "visible", "overflow reset — not a short scroll box");
 }
 
+console.log("scrollbars are discreet (invisible at rest, reveal on hover)");
+{
+  const raw = readFileSync(join(root, "assets/css/app.css"), "utf8");
+  const bar = raw.slice(raw.indexOf("Near-invisible scrollbar"), raw.indexOf("/* profile header card */"));
+  ok(/::-webkit-scrollbar\s*,?[\s\S]{0,80}width:\s*6px/.test(bar), "webkit scrollbar narrowed to 6px");
+  ok(/::-webkit-scrollbar-track[\s\S]{0,80}background:\s*transparent/.test(bar), "track never paints");
+  // The at-rest thumb rule (not the :hover ones) must be transparent.
+  const restThumb = bar.split(":hover")[0];
+  ok(/::-webkit-scrollbar-thumb[\s\S]{0,120}background:\s*transparent/.test(restThumb),
+     "thumb is fully transparent at rest");
+  ok(/:hover::-webkit-scrollbar-thumb/.test(bar), "thumb reveals on column hover");
+  ok(/transition:\s*background-color/.test(bar), "reveal is eased, not abrupt");
+  ok(/\[data-theme="dark"\][\s\S]{0,200}::-webkit-scrollbar-thumb/.test(bar), "dark theme variant present");
+  // Chromium ignores ::-webkit-scrollbar-* when scrollbar-color is set, so
+  // the Firefox properties must stay behind @supports.
+  ok(/@supports \(-moz-appearance:none\)/.test(bar), "Firefox scrollbar-color scoped behind @supports");
+  const outsideSupports = bar.slice(0, bar.indexOf("@supports"));
+  ok(!/scrollbar-color/.test(outsideSupports),
+     "no unguarded scrollbar-color (would disable the webkit thumb styling)");
+}
+
 console.log("feed rail hides before it would crush the post column");
 {
   const hid = find(".feed-rail-right", "920px");
