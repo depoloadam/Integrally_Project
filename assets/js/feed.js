@@ -233,7 +233,12 @@ async function renderFeed() {
   // Rail cards load in the background — they must never delay the posts.
   // Scores lead the rail: the score is the product, so a visitor to
   // their own feed should see their whole standing without navigating.
-  buildScoreRail(rail);
+  // Both builders are async, so ORDER CANNOT depend on which fetch
+  // resolves first — reserve the score slot synchronously here and let
+  // buildScoreRail fill (or remove) it.
+  const scoreSlot = el(`<div class="rail-slot"></div>`);
+  rail.appendChild(scoreSlot);
+  buildScoreRail(scoreSlot);
   buildDiscoverRail(rail);
 
   // ---- tabs + post list ----
@@ -306,14 +311,18 @@ async function buildComposerIdentity(composer) {
 const SCORE_RAIL_LIMIT = 5;
 
 async function buildScoreRail(mount) {
-  if (!mount || !ME) return;   // company feeds have no personal scores
+  // `mount` is a slot reserved synchronously by renderFeed so this card
+  // always sits at the top of the rail. On any bail-out the slot is
+  // removed, so a failed load leaves no gap.
+  const drop = () => { if (mount && mount.parentNode) mount.remove(); };
+  if (!mount || !ME) { drop(); return; }   // company feeds have no personal scores
 
   let scores = [];
   try {
     const r = await api("/score/latest.php");
-    if (!r.ok) return;
+    if (!r.ok) { drop(); return; }
     scores = r.data?.data || [];
-  } catch (_) { return; }
+  } catch (_) { drop(); return; }
 
   const card = el(`<div class="railcard scorecard">
     <h3>Your scores</h3>
@@ -360,11 +369,13 @@ async function buildScoreRail(mount) {
     body.appendChild(row);
   });
 
-  if (ranked.length > SCORE_RAIL_LIMIT) {
-    const more = el(`<button class="rail-more">See all ${ranked.length} scores</button>`);
-    more.onclick = () => { location.hash = "profile"; };
-    card.appendChild(more);
-  }
+  // Footer link, always present — mirrors "Show more on Connect" and the
+  // openings card. When the list is capped it also reports the overflow,
+  // so the button doubles as the "there's more" signal.
+  const hiddenCount = ranked.length - shown.length;
+  const more = el(`<button class="rail-more">Explore my scores${hiddenCount > 0 ? ` (${ranked.length})` : ""}</button>`);
+  more.onclick = () => { location.hash = "profile"; };
+  card.appendChild(more);
 
   mount.appendChild(card);
 }

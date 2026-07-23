@@ -40,7 +40,7 @@ const limitMatch = feedSrc.match(/const SCORE_RAIL_LIMIT = (\d+);/);
 const LIMIT = limitMatch ? parseInt(limitMatch[1], 10) : 5;
 
 function build(scores, opts = {}) {
-  const dom = new JSDOM(`<!doctype html><body><aside id="rail"></aside></body>`, { url: "http://localhost/" });
+  const dom = new JSDOM(`<!doctype html><body><aside id="rail"><div class="rail-slot"></div></aside></body>`, { url: "http://localhost/" });
   const { window } = dom;
   const document = window.document;
   const el = (h) => { const t = document.createElement("template"); t.innerHTML = h.trim(); return t.content.firstElementChild; };
@@ -51,7 +51,8 @@ function build(scores, opts = {}) {
   const ME = { username: "adam", uuid: "u-1" };
   const fn = new Function("document", "el", "esc", "api", "ME", "location", "SCORE_RAIL_LIMIT",
     fnSrc + "; return buildScoreRail;")(document, el, esc, api, ME, window.location, LIMIT);
-  return { window, document, mount: document.getElementById("rail"), fn };
+  const rail = document.getElementById("rail");
+  return { window, document, rail, mount: rail.querySelector(".rail-slot"), fn };
 }
 
 const mk = (target, value, hidden = false, type = "job_title") =>
@@ -75,7 +76,10 @@ console.log(`ranking + cap (SCORE_RAIL_LIMIT = ${LIMIT})`);
   ok(vals.join(",") === [...vals].sort((a, b) => b - a).join(","), `values descend (${vals.join(" > ")})`);
   ok(vals[0] === 91, "score value is rounded (91.2 → 91)");
   const more = card.querySelector(".rail-more");
-  ok(more && /all 6 scores/.test(more.textContent), `"see all" shows the true total (${more?.textContent.trim()})`);
+  ok(!!more, "footer button present");
+  ok(/Explore my scores/.test(more.textContent), `footer reads "Explore my scores" (${more.textContent.trim()})`);
+  ok(/\(6\)/.test(more.textContent), "capped list reports the true total in the footer");
+  ok(card.lastElementChild === more, "footer button sits at the BOTTOM of the card");
 }
 
 console.log("\nbar widths");
@@ -109,14 +113,56 @@ console.log("\nempty + failure states");
   ok(!mount.querySelector(".score-rail-row"), "empty state renders no score rows");
 }
 {
-  const { mount, fn } = build([], { notOk: true });
+  const { rail, mount, fn } = build([], { notOk: true });
   await fn(mount);
-  ok(mount.children.length === 0, "API !ok → no card at all (feed unaffected)");
+  ok(rail.querySelector(".scorecard") === null, "API !ok → no card at all (feed unaffected)");
+  ok(rail.querySelector(".rail-slot") === null, "failed load removes the reserved slot (no empty gap)");
 }
 {
-  const { mount, fn } = build([], { failCall: true });
+  const { rail, mount, fn } = build([], { failCall: true });
   await fn(mount);
-  ok(mount.children.length === 0, "thrown API error → no card, no crash");
+  ok(rail.querySelector(".scorecard") === null, "thrown API error → no card, no crash");
+  ok(rail.querySelector(".rail-slot") === null, "thrown error also removes the reserved slot");
+}
+
+console.log("\nfooter on a short (uncapped) list");
+{
+  const { mount, fn } = build([mk("Only Role", 60)]);
+  await fn(mount);
+  const more = mount.querySelector(".rail-more");
+  ok(!!more, "footer button shows even when nothing is truncated");
+  ok(!/\(/.test(more.textContent), `no count when the list is complete (${more.textContent.trim()})`);
+  const { window } = build([]);
+  more.onclick();
+}
+{
+  const { mount, fn, window } = build([mk("Only Role", 60)]);
+  await fn(mount);
+  mount.querySelector(".rail-more").onclick();
+  ok(window.location.hash === "#profile", "footer routes to the profile");
+}
+
+console.log("\nrail ordering is not a fetch race");
+{
+  // The scores card must lead the rail even when its fetch resolves
+  // LAST — renderFeed reserves the slot synchronously, so a slower
+  // score call cannot let a discover card jump ahead of it.
+  const dom = new JSDOM(`<!doctype html><body><aside id="rail"></aside></body>`, { url: "http://localhost/" });
+  const { window } = dom; const document = window.document;
+  const el = (h) => { const t = document.createElement("template"); t.innerHTML = h.trim(); return t.content.firstElementChild; };
+  const rail = document.getElementById("rail");
+
+  // Mirror renderFeed: reserve the slot, then let a "faster" discover
+  // card append while the score fetch is still pending.
+  const slot = el(`<div class="rail-slot"></div>`);
+  rail.appendChild(slot);
+  const slowScore = new Promise(res => setTimeout(res, 20));
+  rail.appendChild(el(`<div class="railcard" id="discover">Add to your network</div>`));
+  await slowScore;
+  slot.appendChild(el(`<div class="railcard scorecard" id="scores">Your scores</div>`));
+
+  const order = [...rail.children].map(c => c.querySelector?.("[id]")?.id || c.id).filter(Boolean);
+  ok(order[0] === "scores", `scores card is first despite resolving last (order: ${order.join(" → ")})`);
 }
 
 console.log("\nsafety + routing");
