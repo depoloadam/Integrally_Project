@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/JobCatalog.php';
 require_once __DIR__ . '/EducationCatalog.php';
+require_once __DIR__ . '/CertCatalog.php';
 
 // =====================================================================
 // FILE: src/ScoreEngine.php
@@ -20,7 +21,7 @@ require_once __DIR__ . '/EducationCatalog.php';
 
 class ScoreEngine
 {
-    const VERSION = 'category-relevance-v2.2';
+    const VERSION = 'cert-catalog-v2.3';
 
     // ------------------------------------------------------------------
     // Tunable weights (must sum to 100). Adjust ratios here — the logic
@@ -191,15 +192,34 @@ class ScoreEngine
         ];
 
         // ---- 4) Certifications (relevance-weighted) -------------------
+        // Mirrors the education pattern: resolve the cert through the
+        // curated CertCatalog first (1.0 on a direct category hit, 0.5
+        // adjacent), fuzzy text matching as fallback/supplement. Points
+        // are graded — 1 (any cert counts a little) + 3×relevance — so
+        // a directly relevant cert earns 4, an adjacent-field one ~2.5,
+        // an unrelated one 1.
         $certPts = 0.0;
         $relCertCount = 0;
         foreach ($profile['certifications'] as $c) {
             $text = trim(($c['name'] ?? '') . ' ' . ($c['issuer'] ?? ''));
             if ($text === '') continue;
-            $rel = JobCatalog::titleSimilarity($text, $target);
+
+            $rel = 0.0;
+            if ($catId !== null) {
+                $certCats = CertCatalog::categoriesForCert($c['name'] ?? '', $c['issuer'] ?? '');
+                if ($certCats !== null && count($certCats)) {
+                    if (in_array($catId, $certCats, true)) {
+                        $rel = 1.0;
+                    } elseif (array_intersect($certCats, JobCatalog::ADJACENCY[$catId] ?? [])) {
+                        $rel = 0.5;
+                    }
+                }
+            }
+            $rel = max($rel, JobCatalog::titleSimilarity($text, $target));
             if ($catId !== null) $rel = max($rel, JobCatalog::tokenRelevance($text, $catId));
-            if ($rel >= self::RELEVANT_THRESHOLD) { $certPts += 4; $relCertCount++; }
-            else                                   { $certPts += 1; }
+
+            $certPts += 1 + 3 * $rel;
+            if ($rel >= self::RELEVANT_THRESHOLD) $relCertCount++;
         }
         $certPts = min(self::W_CERTS, $certPts);
         $factors[] = [

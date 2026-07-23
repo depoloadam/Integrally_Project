@@ -99,7 +99,8 @@ const JOB_CATALOG = [
     "Talent Acquisition Specialist", "HR Business Partner", "People Operations Manager",
     "Compensation Analyst", "Benefits Administrator", "HR Coordinator", "HR Director",
     "Chief People Officer", "Learning and Development Manager", "Employee Relations Manager",
-    "Diversity and Inclusion Manager", "HR Specialist",
+    "Diversity and Inclusion Manager", "HR Specialist", "Human Resources Manager",
+    "Human Resources Specialist", "Human Resources Coordinator",
   ] },
   { category: "Operations & Management", titles: [
     "Operations Manager", "Chief Executive Officer", "Chief Operating Officer",
@@ -113,7 +114,8 @@ const JOB_CATALOG = [
     "Supply Chain Manager", "Logistics Coordinator", "Warehouse Manager",
     "Procurement Manager", "Purchasing Manager", "Inventory Manager", "Supply Chain Analyst",
     "Logistics Manager", "Fleet Manager", "Distribution Manager", "Materials Manager",
-    "Demand Planner", "Buyer",
+    "Demand Planner", "Buyer", "Truck Driver", "Delivery Driver", "CDL Driver",
+    "Dispatcher", "Forklift Operator", "Warehouse Associate", "Courier",
   ] },
   { category: "Healthcare & Medical", titles: [
     "Registered Nurse", "Physician", "Nurse Practitioner", "Physician Assistant",
