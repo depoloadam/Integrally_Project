@@ -77,25 +77,33 @@ console.log("mobile reset (profile column is not sticky there)");
   ok(prop(body, "overflow-y") === "visible", "overflow reset — not a short scroll box");
 }
 
-console.log("scrollbars are discreet (invisible at rest, reveal on hover)");
+console.log("scrollbars are discreet (standard properties)");
 {
   const raw = readFileSync(join(root, "assets/css/app.css"), "utf8");
-  const bar = raw.slice(raw.indexOf("Near-invisible scrollbar"), raw.indexOf("/* profile header card */"));
-  ok(/::-webkit-scrollbar\s*,?[\s\S]{0,80}width:\s*6px/.test(bar), "webkit scrollbar narrowed to 6px");
-  ok(/::-webkit-scrollbar-track[\s\S]{0,80}background:\s*transparent/.test(bar), "track never paints");
-  // The at-rest thumb rule (not the :hover ones) must be transparent.
-  const restThumb = bar.split(":hover")[0];
-  ok(/::-webkit-scrollbar-thumb[\s\S]{0,120}background:\s*transparent/.test(restThumb),
-     "thumb is fully transparent at rest");
-  ok(/:hover::-webkit-scrollbar-thumb/.test(bar), "thumb reveals on column hover");
-  ok(/transition:\s*background-color/.test(bar), "reveal is eased, not abrupt");
-  ok(/\[data-theme="dark"\][\s\S]{0,200}::-webkit-scrollbar-thumb/.test(bar), "dark theme variant present");
-  // Chromium ignores ::-webkit-scrollbar-* when scrollbar-color is set, so
-  // the Firefox properties must stay behind @supports.
-  ok(/@supports \(-moz-appearance:none\)/.test(bar), "Firefox scrollbar-color scoped behind @supports");
-  const outsideSupports = bar.slice(0, bar.indexOf("@supports"));
-  ok(!/scrollbar-color/.test(outsideSupports),
-     "no unguarded scrollbar-color (would disable the webkit thumb styling)");
+  const bar = raw.slice(raw.indexOf("---- side-rail scrollbars ----"), raw.indexOf("/* profile header card */"));
+
+  // Chromium honours the STANDARD scrollbar properties over
+  // ::-webkit-scrollbar sizing whenever scrollbar-width is set (the
+  // rails set it), so the rails MUST be styled via scrollbar-color.
+  ok(/\.feed-rail-right,\s*\.in-col-left\s*\{[^}]*scrollbar-color:\s*transparent transparent/.test(bar),
+     "rails: transparent scrollbar-color at rest");
+  ok(/\.feed-rail-right:hover[^}]*scrollbar-color:\s*rgba/.test(bar.replace(/\n/g, "")),
+     "rails: tinted scrollbar-color on hover");
+
+  // The page bar (html has overflow-y:scroll) is the most visible one.
+  ok(/html\s*\{\s*scrollbar-color:/.test(bar), "page scrollbar is styled, not Chrome's default grey");
+  ok(/\[data-theme="dark"\]\s*html\s*\{\s*scrollbar-color:/.test(bar), "page scrollbar has a dark-theme variant");
+
+  // Opacity ceiling: nothing should be heavy.
+  const alphas = [...bar.matchAll(/rgba\((?:11,\s*31,\s*42|255,\s*255,\s*255),\s*\.(\d+)\)/g)]
+    .map(m => parseFloat("0." + m[1]));
+  ok(alphas.length > 0, `found ${alphas.length} thumb colours`);
+  ok(Math.max(...alphas) <= 0.26, `all thumbs stay light (max alpha ${Math.max(...alphas)})`);
+
+  // The webkit block is a fallback only — it must not apply where the
+  // standard properties do, or it would fight them.
+  ok(/@supports not \(scrollbar-color/.test(bar),
+     "webkit rules are guarded as a fallback for browsers lacking scrollbar-color");
 }
 
 console.log("feed rail hides before it would crush the post column");
