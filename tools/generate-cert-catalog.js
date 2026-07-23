@@ -46,6 +46,7 @@ const toIds = (cats, where) => cats.map(c => {
 // CERT_MAP: canonical names + aliases, all normalized. When two entries
 // share a key (e.g. family aliases), the union of categories wins.
 const certMap = {};
+const roster = [];   // structured list for the admin review screen
 let names = 0, aliases = 0;
 const put = (key, ids) => {
   if (!key) return;
@@ -57,6 +58,8 @@ for (const g of CERT_CATALOG) {
     if (!ids.length) { console.error(`No categories on cert "${c.name}"`); process.exit(1); }
     put(norm(c.name), ids); names++;
     for (const a of (c.aliases || [])) { put(norm(a), ids); aliases++; }
+    roster.push({ name: c.name, issuer: c.issuer || "", group: g.group,
+                  cats: ids, aliases: (c.aliases || []) });
   }
 }
 
@@ -106,6 +109,14 @@ const keysSorted = Object.keys(certMap).sort();
 for (const k of keysSorted) out += `        ${phpStr(k)} => ${phpIds(certMap[k])},\n`;
 out += `    ];
 
+    public const ROSTER = [
+`;
+for (const r of roster.slice().sort((a, b) => a.name.localeCompare(b.name))) {
+  out += `        ['name' => ${phpStr(r.name)}, 'issuer' => ${phpStr(r.issuer)}, 'group' => ${phpStr(r.group)}, `
+       + `'cats' => ${phpIds(r.cats)}, 'aliases' => [${r.aliases.map(phpStr).join(",")}]],\n`;
+}
+out += `    ];
+
     public const TOKEN_MAP = [
 `;
 for (const k of Object.keys(tokenMap).sort()) out += `        ${phpStr(k)} => ${phpIds(tokenMap[k])},\n`;
@@ -148,8 +159,22 @@ out += `    ];
     private static function normText(string $s): string
     {
         $s = strtolower(trim($s));
-        $s = str_replace(['\\u{2013}', '\\u{2014}'], '-', $s);
+        $s = str_replace(["\\u{2013}", "\\u{2014}"], '-', $s);
         return preg_replace('/\\s+/', ' ', $s);
+    }
+
+    /**
+     * The built-in catalog as a structured roster (canonical name,
+     * issuer, group, category ids, aliases) — powers the admin review
+     * screen. The flat CERT_MAP above is what resolution actually uses;
+     * this is the human-readable view of the same source data. Built-in
+     * entries live in code, so admins adjust one by saving an override
+     * (a cert_catalog_entries row keyed on the same name), which wins
+     * during resolution.
+     */
+    public static function staticRoster(): array
+    {
+        return self::ROSTER;
     }
 
     /**

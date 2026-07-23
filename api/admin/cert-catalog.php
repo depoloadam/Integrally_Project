@@ -28,21 +28,71 @@ $adminId = Auth::requireAdmin();
 $pdo = Database::conn();
 
 if ($method === 'GET') {
-    $rows = $pdo->query(
-        'SELECT e.id, e.name, e.issuer, e.aliases, e.cats, e.created_at, u.username AS created_by
-         FROM cert_catalog_entries e
-         LEFT JOIN users u ON u.id = e.created_by
-         ORDER BY e.id DESC'
-    )->fetchAll();
-    foreach ($rows as &$r) {
-        $r['aliases'] = (array) json_decode($r['aliases'] ?? '[]', true);
-        $r['cats']    = array_map('intval', (array) json_decode($r['cats'] ?? '[]', true));
+    require_once __DIR__ . '/../../src/CertCatalog.php';
+
+    // Admin-added rows first — they're what can be edited directly, and
+    // they're also what shadows a built-in when the names match.
+    try {
+        $rows = $pdo->query(
+            'SELECT e.id, e.name, e.issuer, e.aliases, e.cats, e.created_at, u.username AS created_by
+             FROM cert_catalog_entries e
+             LEFT JOIN users u ON u.id = e.created_by
+             ORDER BY e.id DESC'
+        )->fetchAll();
+    } catch (Throwable $e) {
+        $rows = [];   // table not migrated yet — built-ins still list fine
     }
-    Response::success(['entries' => $rows, 'categories' => JobCatalog::CATEGORIES]);
+
+    $custom = [];
+    $shadowed = [];   // normalized names that override a built-in
+    foreach ($rows as $r) {
+        $aliases = (array) json_decode($r['aliases'] ?? '[]', true);
+        $cats    = array_map('intval', (array) json_decode($r['cats'] ?? '[]', true));
+        $norm    = mb_strtolower(trim($r['name']));
+        $shadowed[$norm] = true;
+        $custom[] = [
+            'id'         => (int) $r['id'],
+            'source'     => 'custom',
+            'name'       => $r['name'],
+            'issuer'     => $r['issuer'],
+            'aliases'    => $aliases,
+            'cats'       => $cats,
+            'group'      => '',
+            'created_by' => $r['created_by'],
+            'created_at' => $r['created_at'],
+            'editable'   => true,
+        ];
+    }
+
+    // Built-in roster. Anything an admin has shadowed is flagged so the
+    // UI can show it as overridden rather than as the live mapping.
+    $builtin = [];
+    foreach (CertCatalog::staticRoster() as $s) {
+        $builtin[] = [
+            'id'         => null,
+            'source'     => 'builtin',
+            'name'       => $s['name'],
+            'issuer'     => $s['issuer'],
+            'aliases'    => $s['aliases'],
+            'cats'       => $s['cats'],
+            'group'      => $s['group'],
+            'created_by' => null,
+            'created_at' => null,
+            'editable'   => false,
+            'overridden' => isset($shadowed[mb_strtolower(trim($s['name']))]),
+        ];
+    }
+
+    Response::success([
+        'entries'    => array_merge($custom, $builtin),
+        'categories' => JobCatalog::CATEGORIES,
+        'counts'     => ['custom' => count($custom), 'builtin' => count($builtin)],
+    ]);
 }
 
-// ---- POST: add ----
+// ---- POST: add (no id) or update (id) ----
 $in     = Response::input();
+$editId = (int) ($in['id'] ?? 0);
 $name   = trim($in['name'] ?? '');
 $issuer = trim($in['issuer'] ?? '');
 $cats   = $in['cats'] ?? [];
@@ -77,10 +127,39 @@ foreach ($alias as $a) {
 }
 $aliases = array_keys($aliases);
 
-// Uniqueness on (name, issuer).
-$dupe = $pdo->prepare('SELECT id FROM cert_catalog_entries WHERE name = ? AND issuer = ? LIMIT 1');
-$dupe->execute([$name, $issuer]);
+// Uniqueness on (name, issuer) — excluding the row being edited.
+$dupe = $pdo->prepare('SELECT id FROM cert_catalog_entries WHERE name = ? AND issuer = ? AND id <> ? LIMIT 1');
+$dupe->execute([$name, $issuer, $editId]);
 if ($dupe->fetch()) Response::error('That certification (name + issuer) is already in the catalog.', 409);
+
+if ($editId > 0) {
+    // ---- update an existing admin entry ----
+    $cur = $pdo->prepare('SELECT name, issuer, aliases, cats FROM cert_catalog_entries WHERE id = ? LIMIT 1');
+    $cur->execute([$editId]);
+    $before = $cur->fetch();
+    if (!$before) Response::error('Catalog entry not found.', 404);
+
+    $upd = $pdo->prepare(
+        'UPDATE cert_catalog_entries SET name = ?, issuer = ?, aliases = ?, cats = ? WHERE id = ?'
+    );
+    $upd->execute([$name, $issuer, json_encode($aliases), json_encode($catIds), $editId]);
+
+    Audit::log($adminId, 'cert_catalog_edit', 'cert_catalog', null, $name, [
+        'id'     => $editId,
+        'before' => [
+            'name'    => $before['name'],
+            'issuer'  => $before['issuer'],
+            'cats'    => array_map('intval', (array) json_decode($before['cats'] ?? '[]', true)),
+            'aliases' => (array) json_decode($before['aliases'] ?? '[]', true),
+        ],
+        'after'  => ['name' => $name, 'issuer' => $issuer, 'cats' => $catIds, 'aliases' => $aliases],
+    ]);
+
+    Response::success([
+        'id' => $editId, 'name' => $name, 'issuer' => $issuer,
+        'aliases' => $aliases, 'cats' => $catIds, 'updated' => true,
+    ]);
+}
 
 $ins = $pdo->prepare(
     'INSERT INTO cert_catalog_entries (name, issuer, aliases, cats, created_by)

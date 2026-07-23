@@ -82,5 +82,49 @@ CertCatalog::resetCustom(); CertCatalog::loadCustom($pdo);
 $cats3 = CertCatalog::categoriesForCert('quickbooks', '');
 ok($cats3 === [9], "after deletion the static mapping [9] is back (got [" . implode(',', $cats3 ?? []) . "])");
 
+echo "\nstatic roster (admin review listing)\n";
+$roster = CertCatalog::staticRoster();
+ok(count($roster) > 150, count($roster) . " built-in entries exposed for review");
+$first = $roster[0];
+ok(isset($first['name'], $first['issuer'], $first['group'], $first['cats'], $first['aliases']),
+   "roster rows carry name/issuer/group/cats/aliases");
+// Every roster mapping must agree with what resolution actually returns.
+$mismatch = 0;
+foreach ($roster as $r) {
+    $got = CertCatalog::categoriesForCert($r['name'], $r['issuer']);
+    if ($got === null) { $mismatch++; continue; }
+    if (array_intersect($r['cats'], $got) !== $r['cats']) $mismatch++;
+}
+ok($mismatch === 0, "all roster mappings agree with categoriesForCert (mismatches: $mismatch)");
+
+echo "\nedit an admin entry in place\n";
+$pdo->prepare('INSERT INTO cert_catalog_entries (name, issuer, aliases, cats, created_by) VALUES (?,?,?,?,1)')
+    ->execute(['Editable Test Cert', 'Test Body', json_encode(['etc']), json_encode([0])]);
+$editId = (int) $pdo->lastInsertId();
+CertCatalog::resetCustom(); CertCatalog::loadCustom($pdo);
+ok(CertCatalog::categoriesForCert('Editable Test Cert', 'Test Body') === [0], "entry resolves to its original category [0]");
+// Simulate the endpoint's UPDATE branch.
+$pdo->prepare('UPDATE cert_catalog_entries SET name = ?, issuer = ?, aliases = ?, cats = ? WHERE id = ?')
+    ->execute(['Editable Test Cert', 'Test Body', json_encode(['etc','edited alias']), json_encode([13]), $editId]);
+CertCatalog::resetCustom(); CertCatalog::loadCustom($pdo);
+ok(CertCatalog::categoriesForCert('Editable Test Cert', 'Test Body') === [13], "after edit it resolves to the new category [13]");
+ok(CertCatalog::categoriesForCert('edited alias', '') === [13], "the newly added alias resolves too");
+ok(CertCatalog::categoriesForCert('etc', '') === [13], "the retained alias still resolves, with updated cats");
+
+echo "\noverride lifecycle against a built-in\n";
+$builtinCats = CertCatalog::categoriesForCert('CCNA', 'Cisco');
+ok($builtinCats === [2,3], "built-in CCNA resolves to [2,3] (got [" . implode(',', $builtinCats ?? []) . "])");
+$pdo->prepare('INSERT INTO cert_catalog_entries (name, issuer, aliases, cats, created_by) VALUES (?,?,?,?,1)')
+    ->execute(['CCNA', '', json_encode([]), json_encode([0]), ]);
+$ovId = (int) $pdo->lastInsertId();
+CertCatalog::resetCustom(); CertCatalog::loadCustom($pdo);
+ok(CertCatalog::categoriesForCert('CCNA', '') === [0], "override shadows the built-in mapping");
+$pdo->prepare('DELETE FROM cert_catalog_entries WHERE id = ?')->execute([$ovId]);
+CertCatalog::resetCustom(); CertCatalog::loadCustom($pdo);
+ok(CertCatalog::categoriesForCert('CCNA', 'Cisco') === [2,3], "removing the override restores the built-in mapping");
+
+// cleanup
+$pdo->prepare('DELETE FROM cert_catalog_entries WHERE id = ?')->execute([$editId]);
+
 echo "\n$pass passed, $fail failed\n";
 exit($fail ? 1 : 0);

@@ -97,22 +97,43 @@ function renderAdminSection(section) {
 // relevance (CertCatalog::loadCustom) and the profile cert typeahead,
 // alongside the static generated catalog. Category names come from the
 // global JOB_CATALOG (jobs-catalog.js loads before this file).
+// ---- certification catalog -------------------------------------------
+// Review + adjust the whole catalog. Two sources are merged:
+//   built-in — the generated static catalog (CertCatalog::ROSTER). Lives
+//              in code, so it can't be edited here; "Override" creates a
+//              custom entry keyed on the same name, which wins during
+//              resolution (CertCatalog::categoriesForCert checks custom
+//              keys first).
+//   custom   — admin-added rows (cert_catalog_entries), fully editable.
+// Both feed score relevance and the profile cert typeahead.
 function renderAdminCertsSection(section) {
   const card = el(`<div class="in-card2">
     <h2>Certification catalog</h2>
     <div class="in-set-toggle-sub" style="margin-bottom:14px">
-      Official catalog entries added here are recognized by the score engine and suggested in the
-      profile certification typeahead. The built-in catalog is managed in code and not listed below.
+      Entries here are recognized by the score engine and suggested in the profile certification
+      typeahead. Built-in certifications are managed in code — adjust one by saving an override.
     </div>
     <div id="acert-form"></div>
-    <div id="acert-list" style="margin-top:16px"><div class="in-empty">Loading…</div></div>
+    <div class="acert-toolbar">
+      <input id="acert-q" placeholder="Search name, issuer, or alias…" autocomplete="off">
+      <select id="acert-src">
+        <option value="all">All sources</option>
+        <option value="custom">Admin-added</option>
+        <option value="builtin">Built-in</option>
+      </select>
+      <select id="acert-cat"><option value="">All categories</option></select>
+      <span class="acert-count" id="acert-count"></span>
+    </div>
+    <div id="acert-list"><div class="in-empty">Loading…</div></div>
   </div>`);
   section.appendChild(card);
 
   const catNames = (typeof JOB_CATALOG !== "undefined") ? JOB_CATALOG.map(g => g.category) : [];
+  let ENTRIES = [], CATEGORIES = catNames, EDITING = null;
 
-  // ---- add form ----
+  // ---- add / edit form ----
   const form = el(`<div class="acert-add">
+    <div class="acert-form-head" id="acert-form-head" hidden></div>
     <div class="row">
       <div><label>Name *</label><input id="acert-name" maxlength="190" placeholder="e.g. Certified Widget Engineer"></div>
       <div><label>Issuer</label><input id="acert-issuer" maxlength="190" placeholder="e.g. Widget Institute"></div>
@@ -120,68 +141,192 @@ function renderAdminCertsSection(section) {
     <label>Aliases <span class="in-set-toggle-sub" style="display:inline">(comma-separated match strings — acronyms, short forms)</span></label>
     <input id="acert-aliases" placeholder="e.g. cwe, widget engineer">
     <label>Categories * <span class="in-set-toggle-sub" style="display:inline">(what fields this certification is relevant to)</span></label>
-    <div class="acert-cats" id="acert-cats">
-      ${catNames.map((n, i) => `<label class="acert-cat"><input type="checkbox" value="${i}"> ${esc(n)}</label>`).join("")}
+    <div class="acert-cats" id="acert-cats"></div>
+    <div class="acert-form-actions">
+      <button class="in-btn primary" id="acert-save" style="flex:none;padding:9px 18px">Add to catalog</button>
+      <button class="in-btn ghost" id="acert-cancel" style="flex:none;padding:9px 18px" hidden>Cancel</button>
     </div>
-    <div style="margin-top:10px"><button class="in-btn primary" id="acert-add" style="flex:none;padding:9px 18px">Add to catalog</button></div>
   </div>`);
   card.querySelector("#acert-form").appendChild(form);
 
-  form.querySelector("#acert-add").onclick = async () => {
-    const name = form.querySelector("#acert-name").value.trim();
+  const nameEl = form.querySelector("#acert-name");
+  const issEl  = form.querySelector("#acert-issuer");
+  const aliEl  = form.querySelector("#acert-aliases");
+  const catsEl = form.querySelector("#acert-cats");
+  const headEl = form.querySelector("#acert-form-head");
+  const saveEl = form.querySelector("#acert-save");
+  const cancelEl = form.querySelector("#acert-cancel");
+
+  const drawCats = () => {
+    catsEl.innerHTML = CATEGORIES.map((n, i) =>
+      `<label class="acert-cat"><input type="checkbox" value="${i}"> ${esc(n)}</label>`).join("");
+  };
+  drawCats();
+
+  const setChecked = (ids) => {
+    const want = new Set((ids || []).map(Number));
+    catsEl.querySelectorAll("input").forEach(c => { c.checked = want.has(parseInt(c.value, 10)); });
+  };
+
+  const resetForm = () => {
+    EDITING = null;
+    headEl.hidden = true; headEl.textContent = "";
+    nameEl.value = ""; issEl.value = ""; aliEl.value = "";
+    setChecked([]);
+    nameEl.disabled = false;
+    saveEl.textContent = "Add to catalog";
+    cancelEl.hidden = true;
+  };
+
+  // Load an entry into the form. Built-ins become an override draft:
+  // the name is locked (it's the key that shadows the built-in) and the
+  // existing mapping is pre-filled so the admin edits from a known state.
+  const loadInto = (entry, mode) => {
+    EDITING = { mode, id: entry.id || 0 };
+    nameEl.value = entry.name;
+    issEl.value  = entry.issuer || "";
+    aliEl.value  = (entry.aliases || []).join(", ");
+    setChecked(entry.cats);
+    if (mode === "override") {
+      nameEl.disabled = true;
+      headEl.hidden = false;
+      headEl.innerHTML = `<b>Overriding a built-in:</b> saving creates an admin entry named
+        “${esc(entry.name)}” that takes precedence over the built-in mapping. Remove the override to
+        restore the original.`;
+      saveEl.textContent = "Save override";
+    } else {
+      nameEl.disabled = false;
+      headEl.hidden = false;
+      headEl.innerHTML = `<b>Editing:</b> “${esc(entry.name)}”`;
+      saveEl.textContent = "Save changes";
+    }
+    cancelEl.hidden = false;
+    card.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (mode !== "override") nameEl.focus();
+  };
+
+  cancelEl.onclick = resetForm;
+
+  saveEl.onclick = async () => {
+    const name = nameEl.value.trim();
     if (!name) { toast("A certification name is required.", "err"); return; }
-    const cats = [...form.querySelectorAll("#acert-cats input:checked")].map(c => parseInt(c.value, 10));
+    const cats = [...catsEl.querySelectorAll("input:checked")].map(c => parseInt(c.value, 10));
     if (!cats.length) { toast("Pick at least one category.", "err"); return; }
-    const aliases = form.querySelector("#acert-aliases").value.split(",").map(a => a.trim()).filter(Boolean);
-    const r = await api("/admin/cert-catalog.php", "POST", {
-      name, issuer: form.querySelector("#acert-issuer").value.trim(), aliases, cats,
-    });
-    if (!r.ok || !r.data?.success) { toast(r.data?.error || "Could not add the entry.", "err"); return; }
-    toast("Added to the catalog.");
-    form.querySelector("#acert-name").value = "";
-    form.querySelector("#acert-issuer").value = "";
-    form.querySelector("#acert-aliases").value = "";
-    form.querySelectorAll("#acert-cats input:checked").forEach(c => { c.checked = false; });
+    const aliases = aliEl.value.split(",").map(a => a.trim()).filter(Boolean);
+    const body = { name, issuer: issEl.value.trim(), aliases, cats };
+    // An override is an INSERT (no id); editing an existing custom row
+    // sends its id so the endpoint updates in place.
+    if (EDITING && EDITING.mode === "edit" && EDITING.id) body.id = EDITING.id;
+
+    const r = await api("/admin/cert-catalog.php", "POST", body);
+    if (!r.ok || !r.data?.success) { toast(r.data?.error || "Could not save the entry.", "err"); return; }
+    toast(body.id ? "Changes saved." : (EDITING?.mode === "override" ? "Override saved." : "Added to the catalog."));
+    resetForm();
     loadList();
   };
 
-  // ---- entries list ----
+  // ---- list ----
   const listBox = card.querySelector("#acert-list");
-  async function loadList() {
-    const r = await api("/admin/cert-catalog.php");
-    if (!r.ok || !r.data?.success) {
-      listBox.innerHTML = `<div class="in-empty">Could not load catalog entries. If the cert_catalog_entries migration hasn't been run yet, run it in phpMyAdmin first.</div>`;
-      return;
-    }
-    const { entries, categories } = r.data.data;
-    if (!entries.length) {
-      listBox.innerHTML = `<div class="in-empty">No admin-added entries yet.</div>`;
+  const qEl   = card.querySelector("#acert-q");
+  const srcEl = card.querySelector("#acert-src");
+  const catEl = card.querySelector("#acert-cat");
+  const cntEl = card.querySelector("#acert-count");
+
+  const visible = () => {
+    const q = qEl.value.trim().toLowerCase();
+    const src = srcEl.value;
+    const cat = catEl.value === "" ? null : parseInt(catEl.value, 10);
+    return ENTRIES.filter(e => {
+      if (src !== "all" && e.source !== src) return false;
+      if (cat !== null && !(e.cats || []).includes(cat)) return false;
+      if (!q) return true;
+      return e.name.toLowerCase().includes(q)
+          || (e.issuer || "").toLowerCase().includes(q)
+          || (e.aliases || []).some(a => a.toLowerCase().includes(q));
+    });
+  };
+
+  const draw = () => {
+    const rows = visible();
+    cntEl.textContent = `${rows.length} of ${ENTRIES.length}`;
+    if (!rows.length) {
+      listBox.innerHTML = `<div class="in-empty">No certifications match those filters.</div>`;
       return;
     }
     listBox.innerHTML = `<table class="in-admin-table"><thead><tr>
-        <th>Name</th><th>Issuer</th><th>Categories</th><th>Aliases</th><th>Added by</th><th></th>
+        <th>Name</th><th>Issuer</th><th>Categories</th><th>Aliases</th><th>Source</th><th></th>
       </tr></thead><tbody></tbody></table>`;
     const tbody = listBox.querySelector("tbody");
-    for (const e of entries) {
+    // Cap the DOM: the built-in roster alone is ~184 rows and grows.
+    const LIMIT = 200;
+    for (const e of rows.slice(0, LIMIT)) {
       const tr = el(`<tr>
-        <td></td><td></td><td></td><td></td><td></td>
-        <td><button class="in-btn ghost acert-del" style="flex:none;padding:5px 12px">Remove</button></td>
+        <td></td><td></td><td></td><td></td>
+        <td><span class="acert-src-tag"></span></td>
+        <td class="acert-actions"></td>
       </tr>`);
       const tds = tr.querySelectorAll("td");
       tds[0].textContent = e.name;
       tds[1].textContent = e.issuer || "—";
-      tds[2].textContent = e.cats.map(i => categories[i] || `#${i}`).join(", ");
-      tds[3].textContent = e.aliases.length ? e.aliases.join(", ") : "—";
-      tds[4].textContent = e.created_by || "—";
-      tr.querySelector(".acert-del").onclick = async () => {
-        if (!confirm(`Remove "${e.name}" from the catalog? Scores computed after removal will no longer get its relevance mapping.`)) return;
-        const r2 = await api("/admin/delete-cert-catalog.php", "POST", { id: e.id });
-        if (!r2.ok || !r2.data?.success) { toast(r2.data?.error || "Could not remove the entry.", "err"); return; }
-        toast("Removed.");
-        loadList();
-      };
+      tds[2].textContent = (e.cats || []).map(i => CATEGORIES[i] || `#${i}`).join(", ");
+      tds[3].textContent = (e.aliases || []).length ? e.aliases.join(", ") : "—";
+
+      const tag = tr.querySelector(".acert-src-tag");
+      if (e.source === "custom") { tag.textContent = "Admin"; tag.classList.add("is-custom"); }
+      else if (e.overridden)     { tag.textContent = "Overridden"; tag.classList.add("is-over"); }
+      else                       { tag.textContent = "Built-in"; }
+
+      const act = tr.querySelector(".acert-actions");
+      if (e.source === "custom") {
+        const ed = el(`<button class="in-btn ghost acert-btn">Edit</button>`);
+        ed.onclick = () => loadInto(e, "edit");
+        const rm = el(`<button class="in-btn ghost acert-btn">Remove</button>`);
+        rm.onclick = async () => {
+          if (!confirm(`Remove "${e.name}" from the catalog? Scores computed after removal lose this mapping.`)) return;
+          const r2 = await api("/admin/delete-cert-catalog.php", "POST", { id: e.id });
+          if (!r2.ok || !r2.data?.success) { toast(r2.data?.error || "Could not remove the entry.", "err"); return; }
+          toast("Removed."); loadList();
+        };
+        act.appendChild(ed); act.appendChild(rm);
+      } else {
+        const ov = el(`<button class="in-btn ghost acert-btn">${e.overridden ? "Edit override" : "Override"}</button>`);
+        ov.onclick = () => {
+          if (e.overridden) {
+            const own = ENTRIES.find(x => x.source === "custom"
+              && x.name.trim().toLowerCase() === e.name.trim().toLowerCase());
+            if (own) { loadInto(own, "edit"); return; }
+          }
+          loadInto(e, "override");
+        };
+        act.appendChild(ov);
+      }
       tbody.appendChild(tr);
     }
+    if (rows.length > LIMIT) {
+      listBox.appendChild(el(`<div class="in-set-toggle-sub" style="margin-top:10px">
+        Showing the first ${LIMIT} of ${rows.length}. Narrow the search to see the rest.</div>`));
+    }
+  };
+
+  qEl.oninput = draw;
+  srcEl.onchange = draw;
+  catEl.onchange = draw;
+
+  async function loadList() {
+    const r = await api("/admin/cert-catalog.php");
+    if (!r.ok || !r.data?.success) {
+      listBox.innerHTML = `<div class="in-empty">Could not load the catalog.</div>`;
+      return;
+    }
+    const d = r.data.data;
+    ENTRIES = d.entries || [];
+    if (Array.isArray(d.categories) && d.categories.length) {
+      CATEGORIES = d.categories;
+      drawCats();
+      catEl.innerHTML = `<option value="">All categories</option>`
+        + CATEGORIES.map((n, i) => `<option value="${i}">${esc(n)}</option>`).join("");
+    }
+    draw();
   }
   loadList();
 }
