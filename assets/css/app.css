@@ -241,8 +241,31 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 
 /* profile two-column layout */
 .in-profile-grid { display:grid; grid-template-columns:240px 1fr; gap:18px; align-items:start; }
-.in-col-left { position:sticky; top:78px; }
+.in-col-left {
+  position:sticky; top:78px;
+  max-height:calc(100vh - 78px - 16px);
+  overflow-y:auto; overscroll-behavior:contain;
+  scrollbar-width:thin; scrollbar-gutter:stable;
+  padding-right:2px;
+}
 .in-col-right { min-width:0; }
+
+/* Subtle scrollbar for the sticky side columns (feed rail + profile
+   left). WebKit needs explicit styling; Firefox uses scrollbar-width
+   above. The track stays transparent so a short rail looks unchanged. */
+.feed-rail-right::-webkit-scrollbar,
+.in-col-left::-webkit-scrollbar { width:8px; }
+.feed-rail-right::-webkit-scrollbar-track,
+.in-col-left::-webkit-scrollbar-track { background:transparent; }
+.feed-rail-right::-webkit-scrollbar-thumb,
+.in-col-left::-webkit-scrollbar-thumb {
+  background:var(--in-line); border-radius:8px;
+  border:2px solid transparent; background-clip:content-box;
+}
+.feed-rail-right:hover::-webkit-scrollbar-thumb,
+.in-col-left:hover::-webkit-scrollbar-thumb { background:#c3cdd6; background-clip:content-box; }
+[data-theme="dark"] .feed-rail-right:hover::-webkit-scrollbar-thumb,
+[data-theme="dark"] .in-col-left:hover::-webkit-scrollbar-thumb { background:#3d4f5a; background-clip:content-box; }
 
 /* profile header card */
 .in-phead {
@@ -1411,7 +1434,12 @@ textarea.jf-input { resize:vertical; }
 /* ---------- responsive ---------- */
 @media (max-width:760px) {
   .in-profile-grid { grid-template-columns:1fr; }
-  .in-col-left { position:static; top:auto; }
+  /* Not sticky here, so drop the viewport cap too — otherwise the
+     column becomes a short scrollable box instead of flowing. */
+  .in-col-left {
+    position:static; top:auto;
+    max-height:none; overflow-y:visible; padding-right:0;
+  }
 }
 @media (max-width:560px) {
   .in-nav-user { display:none; }
@@ -1868,7 +1896,18 @@ html.in-reduce-motion *::after {
   gap:22px; align-items:start;
 }
 .feed-center { min-width:0; }
-.feed-rail-right { position:sticky; top:78px; }
+/* Sticky rail, capped to the viewport so a rail taller than the screen
+   scrolls on its own instead of waiting for the post column to run out.
+   overscroll-behavior stops the page from lurching once the rail hits
+   its end, and the gutter reserves scrollbar space so content doesn't
+   shift when it appears. */
+.feed-rail-right {
+  position:sticky; top:78px;
+  max-height:calc(100vh - 78px - 16px);
+  overflow-y:auto; overscroll-behavior:contain;
+  scrollbar-width:thin; scrollbar-gutter:stable;
+  padding-right:2px;
+}
 /* The rail drops off before it would crush the post column. */
 @media (max-width:920px) {
   .feed-rail-right { display:none; }
