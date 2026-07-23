@@ -1819,6 +1819,22 @@ function addCert(existing) {
   // only appears once the box is ticked, and unticking it clears the
   // value so an empty string reaches the API (which stores NULL).
   const expBox = $("c-has-exp"), expWrap = $("c-exp-wrap");
+
+  // Cert-name typeahead: suggests canonical catalog names (which the
+  // score engine recognizes deterministically) and autofills the issuer
+  // when the picked cert has one and the field is still empty. Free
+  // text remains fully allowed — uncataloged certs are relevance-scored
+  // by token/field fallbacks server-side.
+  if (typeof jobMountTypeahead === "function" && typeof certCatalogSearch === "function") {
+    jobMountTypeahead($("c-name"), {
+      search: certCatalogSearch, minChars: 2, limit: 8,
+      onPick: (title, item) => {
+        const issEl = $("c-issuer");
+        if (item && item.issuer && issEl && !issEl.value.trim()) issEl.value = item.issuer;
+      },
+    });
+  }
+
   expBox.onchange = () => {
     expWrap.hidden = !expBox.checked;
     if (!expBox.checked) $("c-exp").value = "";

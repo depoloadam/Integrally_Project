@@ -100,6 +100,24 @@ ok($weld >= 4.0, sprintf("CWI (American Welding Society) → Welder: %.1f pts (w
 $weldVsSwe = certPoints('Certified Welding Inspector', 'software engineer', 'American Welding Society');
 ok($weldVsSwe <= 1.5, sprintf("CWI → Software Engineer: %.1f pts (not boosted by the 'AWS' acronym)", $weldVsSwe));
 
+echo "\nuncataloged certs still resolve (token + education-field fallbacks)\n";
+$long = [
+    // [cert, issuer, target, min pts, label]
+    ['Fortinet NSE 4 Network Security', 'Fortinet', 'network administrator', 4.0, 'Fortinet NSE 4 (uncataloged) → Network Admin'],
+    ['Advanced IT Fundamentals Certificate', '', 'systems administrator', 4.0, 'Generic IT cert (uncataloged) → Sysadmin'],
+    ['Certificate in Accounting', 'Local Community College', 'accountant', 4.0, 'Certificate in Accounting (edu-field fallback) → Accountant'],
+    ['Human Resource Management Certificate', '', 'human resources manager', 4.0, 'HR Management Certificate (edu-field fallback) → HR Manager'],
+    ['Palo Alto Networks PCNSA', 'Palo Alto Networks', 'network administrator', 2.5, 'PCNSA (vendor uncataloged, "networks" token) → Network Admin'],
+    ['Advanced Welding Techniques Certificate', 'Trade School', 'welder', 4.0, 'Welding techniques cert (uncataloged) → Welder'],
+];
+foreach ($long as [$cert, $iss, $target, $min, $label]) {
+    $p = certPoints($cert, $target, $iss);
+    ok($p >= $min, sprintf("%s → %.1f pts (expect ≥ %.1f)", $label, $p, $min));
+}
+// And uncataloged certs must still floor against unrelated targets.
+$p = certPoints('Fortinet NSE 4 Network Security', 'chef', 'Fortinet');
+ok($p <= 1.5, sprintf("Fortinet NSE 4 → Chef: %.1f pts (unrelated floor holds)", $p));
+
 echo "\ndetail string\n";
 $r = ScoreEngine::compute(profileWithCert('PMP', 'PMI'), 'job_title', 'project manager');
 $detail = '';

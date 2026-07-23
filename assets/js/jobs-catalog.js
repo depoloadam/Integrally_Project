@@ -311,7 +311,7 @@ function jobMountTypeahead(input, opts) {
   const pick = (i) => {
     if (i < 0 || i >= items.length) return;
     input.value = items[i].title;
-    if (opts.onPick) opts.onPick(items[i].title);
+    if (opts.onPick) opts.onPick(items[i].title, items[i]);
     close();
   };
 
