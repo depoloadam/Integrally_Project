@@ -388,7 +388,7 @@ function buildComposer(opts) {
         <button class="comp-id-saved" type="button" title="View your saved posts"><span class="pm-ico">${PM_ICONS.saved}</span> Saved</button>
       </div>` : ""}
       <div class="comp-top">
-        <div class="comp-avatar">${opts.avatarHTML}</div>
+        ${opts.identity ? "" : `<div class="comp-avatar">${opts.avatarHTML}</div>`}
         <div id="comp-editor" style="flex:1;min-width:0"></div>
       </div>
       <button type="button" class="comp-expand" id="comp-expand" title="Expand composer" aria-label="Expand composer">
