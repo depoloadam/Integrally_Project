@@ -203,7 +203,7 @@ async function renderThread(convId) {
     <div class="in-msgs-thread-head">
       <button class="in-msgs-back" id="msgs-back" title="Back">←</button>
       <div class="in-notif-ava">${av}</div>
-      <a class="in-msgs-thread-name" href="#${esc(profHash)}">${esc(name)}</a>
+      <a class="in-msgs-thread-name" href="#${esc(profHash)}"${peer.uuid ? ` data-hover-card="${peer.type === "company" ? "company" : "user"}" data-hover-uuid="${esc(peer.uuid)}"` : ""}>${esc(name)}</a>
       <div class="in-msgs-menu-wrap">
         <button class="in-msgs-menu-btn" id="msgs-menu-btn" title="Conversation options" aria-label="Conversation options">⋯</button>
         <div class="in-msgs-menu" id="msgs-menu" hidden>

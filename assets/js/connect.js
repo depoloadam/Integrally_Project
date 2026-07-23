@@ -187,11 +187,17 @@ function appendConnectRows(box, results) {
       ? locHtml
       : [jobHtml, locHtml].filter(Boolean).join(" - ");
 
+    // Hover preview attaches to the avatar and the title, NOT the whole
+    // row: the row is click-to-navigate and stretches to the Follow
+    // button, so a row-level trigger would fire while the cursor is
+    // merely travelling toward that button.
+    const hov = ` data-hover-card="${isCompany ? "company" : "user"}" data-hover-uuid="${esc(res.uuid)}"`;
+
     const row = el(`
       <div class="connect-row">
-        <div class="connect-ava ${isCompany ? "company" : ""}">${res.image ? `<img src="${esc(res.image)}" alt="">` : esc(avatarChar)}</div>
+        <div class="connect-ava ${isCompany ? "company" : ""}"${hov}>${res.image ? `<img src="${esc(res.image)}" alt="">` : esc(avatarChar)}</div>
         <div class="connect-main">
-          <div class="connect-title">${mainLine}${verified}</div>
+          <div class="connect-title"${hov}>${mainLine}${verified}</div>
           <div class="connect-sub">${subLine}</div>
           ${res.reason ? `<div class="connect-reason">${esc(res.reason)}</div>` : ""}
         </div>

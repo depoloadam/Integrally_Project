@@ -241,60 +241,8 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 
 /* profile two-column layout */
 .in-profile-grid { display:grid; grid-template-columns:240px 1fr; gap:18px; align-items:start; }
-.in-col-left {
-  position:sticky; top:78px;
-  max-height:calc(100vh - 78px - 16px);
-  overflow-y:auto; overscroll-behavior:contain;
-  scrollbar-width:thin;
-  padding-right:2px;
-}
+.in-col-left { position:sticky; top:78px; }
 .in-col-right { min-width:0; }
-
-/* ---- side-rail scrollbars ----
-   The rails set scrollbar-width:thin, and modern Chromium honours the
-   STANDARD scrollbar properties in preference to ::-webkit-scrollbar
-   sizing — so style them with scrollbar-color, which works in Chrome
-   and Firefox alike. Transparent thumb at rest; a soft tint on hover so
-   the rail reads as plain cards until you reach for it. */
-.feed-rail-right, .in-col-left { scrollbar-color:transparent transparent; }
-.feed-rail-right:hover, .in-col-left:hover {
-  scrollbar-color:rgba(11,31,42,.16) transparent;
-}
-[data-theme="dark"] .feed-rail-right:hover,
-[data-theme="dark"] .in-col-left:hover {
-  scrollbar-color:rgba(255,255,255,.16) transparent;
-}
-
-/* ---- page scrollbar ----
-   html sets overflow-y:scroll, so a full-height bar is ALWAYS present on
-   the right edge of the window. Unstyled it renders as Chrome's heavy
-   default grey — the most prominent scrollbar on the page. This is the
-   bar most visible next to the feed rail, so it gets the same restrained
-   treatment: transparent track, soft thumb, slightly darker on hover. */
-html { scrollbar-color:rgba(11,31,42,.16) transparent; }
-html:hover { scrollbar-color:rgba(11,31,42,.24) transparent; }
-[data-theme="dark"] html { scrollbar-color:rgba(255,255,255,.14) transparent; }
-[data-theme="dark"] html:hover { scrollbar-color:rgba(255,255,255,.22) transparent; }
-
-/* WebKit fallback for browsers that don't support scrollbar-color
-   (older Safari/Chrome). Ignored where the standard properties apply. */
-@supports not (scrollbar-color:transparent transparent) {
-  ::-webkit-scrollbar { width:10px; height:10px; }
-  ::-webkit-scrollbar-track { background:transparent; }
-  ::-webkit-scrollbar-thumb {
-    background:rgba(11,31,42,.16); border-radius:8px;
-    border:3px solid transparent; background-clip:content-box;
-  }
-  ::-webkit-scrollbar-thumb:hover { background:rgba(11,31,42,.26); background-clip:content-box; }
-  .feed-rail-right::-webkit-scrollbar, .in-col-left::-webkit-scrollbar { width:6px; }
-  .feed-rail-right::-webkit-scrollbar-thumb, .in-col-left::-webkit-scrollbar-thumb {
-    background:transparent; border:2px solid transparent; background-clip:content-box;
-  }
-  .feed-rail-right:hover::-webkit-scrollbar-thumb,
-  .in-col-left:hover::-webkit-scrollbar-thumb {
-    background:rgba(11,31,42,.16); background-clip:content-box;
-  }
-}
 
 /* profile header card */
 .in-phead {
@@ -1463,12 +1411,7 @@ textarea.jf-input { resize:vertical; }
 /* ---------- responsive ---------- */
 @media (max-width:760px) {
   .in-profile-grid { grid-template-columns:1fr; }
-  /* Not sticky here, so drop the viewport cap too — otherwise the
-     column becomes a short scrollable box instead of flowing. */
-  .in-col-left {
-    position:static; top:auto;
-    max-height:none; overflow-y:visible; padding-right:0;
-  }
+  .in-col-left { position:static; top:auto; }
 }
 @media (max-width:560px) {
   .in-nav-user { display:none; }
@@ -1925,18 +1868,7 @@ html.in-reduce-motion *::after {
   gap:22px; align-items:start;
 }
 .feed-center { min-width:0; }
-/* Sticky rail, capped to the viewport so a rail taller than the screen
-   scrolls on its own instead of waiting for the post column to run out.
-   overscroll-behavior stops the page from lurching once the rail hits
-   its end, and the gutter reserves scrollbar space so content doesn't
-   shift when it appears. */
-.feed-rail-right {
-  position:sticky; top:78px;
-  max-height:calc(100vh - 78px - 16px);
-  overflow-y:auto; overscroll-behavior:contain;
-  scrollbar-width:thin;
-  padding-right:2px;
-}
+.feed-rail-right { position:sticky; top:78px; }
 /* The rail drops off before it would crush the post column. */
 @media (max-width:920px) {
   .feed-rail-right { display:none; }
@@ -2067,45 +1999,6 @@ html.in-reduce-motion *::after {
   color:var(--in-accent); cursor:pointer; text-align:center;
 }
 .rail-more:hover { text-decoration:underline; }
-
-/* ---- right rail: score summary card ----
-   A concise portfolio view of every scored target. Reuses the strength
-   meter's accent gradient for the bars so the score language is
-   consistent with the profile. */
-.score-rail-body { display:flex; flex-direction:column; gap:2px; }
-.score-rail-row {
-  display:block; width:100%; text-align:left; background:none; border:none;
-  font-family:inherit; padding:7px 8px; border-radius:8px; cursor:pointer;
-  transition:background .12s ease;
-}
-.score-rail-row:hover { background:var(--in-bg); }
-.score-rail-top { display:flex; align-items:baseline; gap:8px; margin-bottom:5px; }
-.score-rail-target {
-  flex:1; min-width:0; font-size:12.5px; font-weight:600; color:var(--in-ink);
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-}
-.score-rail-val {
-  flex:none; font-size:14px; font-weight:800; color:var(--in-ink); letter-spacing:-0.3px;
-  font-variant-numeric:tabular-nums;
-}
-.score-rail-bar {
-  height:5px; border-radius:5px; background:var(--in-line); overflow:hidden;
-}
-.score-rail-bar > i {
-  display:block; height:100%; border-radius:5px;
-  background:linear-gradient(90deg,var(--in-accent),var(--in-teal-bright));
-  transition:width .4s ease;
-}
-.score-rail-row.is-hidden-score .score-rail-target,
-.score-rail-row.is-hidden-score .score-rail-val { color:var(--in-muted); }
-.score-rail-row.is-hidden-score .score-rail-bar > i { background:var(--in-muted); opacity:.55; }
-.score-rail-tag {
-  flex:none; font-size:9.5px; font-weight:700; letter-spacing:.4px; text-transform:uppercase;
-  color:var(--in-muted); background:var(--in-bg); border:1px solid var(--in-line);
-  border-radius:999px; padding:1px 6px;
-}
-.score-rail-empty { text-align:center; padding:4px 4px 8px; }
-.score-rail-empty-txt { font-size:12.5px; color:var(--in-muted); line-height:1.5; margin-bottom:10px; }
 
 /* ---------- split post cards (feed route only) ---------- */
 /* Inside the feed grid each post becomes its own card; the old shared
@@ -2318,3 +2211,94 @@ html.in-reduce-motion *::after {
 .acert-src-tag.is-over { background:rgba(214,158,46,.12); border-color:rgba(214,158,46,.35); color:#8a6116; }
 .acert-actions { display:flex; gap:6px; white-space:nowrap; }
 .acert-btn { flex:none; padding:5px 12px; font-size:12.5px; }
+
+/* =====================================================================
+   Hover cards — profile / company previews (shell.js)
+   ---------------------------------------------------------------------
+   Lives on document.body at position:fixed, so it is immune to the
+   overflow:auto clipping on .in-modal, the profile left column and the
+   feed rails. Colours come from the CSS variables, so dark mode and the
+   Professional skin both inherit without a separate block.
+   ===================================================================== */
+.in-hovercard {
+  position:fixed; z-index:1200; width:320px; max-width:calc(100vw - 24px);
+  background:var(--in-card); border:1px solid var(--in-line); border-radius:12px;
+  box-shadow:0 12px 32px rgba(11,31,42,.16), 0 2px 6px rgba(11,31,42,.08);
+  padding:14px; font-family:var(--in-font); color:var(--in-ink);
+  opacity:0; transform:translateY(-4px); transition:opacity .12s ease, transform .12s ease;
+  pointer-events:auto;
+}
+.in-hovercard.show { opacity:1; transform:translateY(0); }
+
+.in-hovercard .hc-head { display:flex; align-items:flex-start; gap:10px; }
+.in-hovercard .hc-avatar {
+  flex:none; width:44px; height:44px; border-radius:50%; overflow:hidden;
+  display:grid; place-items:center; font-weight:700; font-size:17px; color:#fff;
+  background:linear-gradient(135deg,var(--in-accent),var(--in-teal-bright));
+}
+.in-hovercard .hc-avatar.company { border-radius:10px; }
+.in-hovercard .hc-avatar img { width:100%; height:100%; object-fit:cover; display:block; }
+
+.in-hovercard .hc-id { min-width:0; flex:1; }
+.in-hovercard .hc-name {
+  font-weight:700; font-size:15px; line-height:1.3; color:var(--in-ink);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.in-hovercard .hc-verified { color:var(--in-accent); font-size:12px; }
+.in-hovercard .hc-handle { font-size:12.5px; color:var(--in-muted); margin-top:1px; }
+
+.in-hovercard .hc-score { flex:none; text-align:right; line-height:1.15; }
+.in-hovercard .hc-score-val { display:block; font-weight:800; font-size:18px; color:var(--in-accent); }
+.in-hovercard .hc-score-label {
+  display:block; font-size:10.5px; color:var(--in-muted); max-width:96px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+
+.in-hovercard .hc-sub {
+  margin-top:9px; font-size:13px; color:var(--in-ink-soft); line-height:1.4;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+}
+.in-hovercard .hc-desc {
+  margin-top:6px; font-size:12.5px; color:var(--in-muted); line-height:1.45;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+}
+
+.in-hovercard .hc-stats {
+  display:flex; gap:14px; margin-top:10px; padding-top:10px;
+  border-top:1px solid var(--in-line); font-size:12.5px; color:var(--in-muted);
+}
+.in-hovercard .hc-stats b { color:var(--in-ink); font-weight:700; }
+
+.in-hovercard .hc-actions { display:flex; gap:8px; margin-top:12px; }
+.in-hovercard .hc-btn {
+  flex:1; padding:7px 10px; border-radius:8px; font-size:13px; font-weight:600;
+  font-family:inherit; cursor:pointer; border:1px solid var(--in-accent);
+  background:var(--in-accent); color:#fff; transition:background .12s ease, border-color .12s ease;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.in-hovercard .hc-btn:hover:not(:disabled) { background:var(--in-accent-d); border-color:var(--in-accent-d); }
+.in-hovercard .hc-btn.hc-message,
+.in-hovercard .hc-btn.hc-openings,
+.in-hovercard .hc-btn.hc-follow.following {
+  background:transparent; color:var(--in-accent); border-color:var(--in-line);
+}
+.in-hovercard .hc-btn.hc-message:hover:not(:disabled),
+.in-hovercard .hc-btn.hc-openings:hover:not(:disabled),
+.in-hovercard .hc-btn.hc-follow.following:hover:not(:disabled) {
+  background:var(--in-bg); border-color:var(--in-accent); color:var(--in-accent);
+}
+/* Greyed-out state for actions unavailable to this viewer (signed out,
+   blocked, company actor, no open roles). Kept visible rather than
+   hidden so the card's shape doesn't jump between people. */
+.in-hovercard .hc-btn:disabled {
+  opacity:.5; cursor:not-allowed; background:transparent;
+  color:var(--in-muted); border-color:var(--in-line);
+}
+
+/* Trigger affordance: only the ones that aren't already styled links. */
+[data-hover-card] { cursor:pointer; }
+
+/* No hover on touch — suppress entirely rather than fighting long-press. */
+@media (hover:none), (pointer:coarse) {
+  .in-hovercard { display:none !important; }
+}

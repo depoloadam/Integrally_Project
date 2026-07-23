@@ -218,11 +218,15 @@ function entityRow(res) {
   const locHtml = res.location ? esc(res.location) : "";
   const detailHtml = isCompany ? locHtml : [jobHtml, locHtml].filter(Boolean).join(" - ");
 
+  // Same scoping rationale as connect.js: avatar + title only, never the
+  // whole click-to-navigate row.
+  const hov = ` data-hover-card="${isCompany ? "company" : "user"}" data-hover-uuid="${esc(res.uuid)}"`;
+
   const row = el(`
     <div class="connect-row">
-      <div class="connect-ava ${isCompany ? "company" : ""}">${res.image ? `<img src="${esc(res.image)}" alt="">` : esc(avatarChar)}</div>
+      <div class="connect-ava ${isCompany ? "company" : ""}"${hov}>${res.image ? `<img src="${esc(res.image)}" alt="">` : esc(avatarChar)}</div>
       <div class="connect-main">
-        <div class="connect-title">${mainLine}${verified}</div>
+        <div class="connect-title"${hov}>${mainLine}${verified}</div>
         <div class="connect-sub">${subLine}</div>
       </div>
       ${detailHtml ? `<div class="connect-details">${detailHtml}</div>` : ""}

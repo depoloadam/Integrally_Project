@@ -997,3 +997,312 @@ function routeFromHash() {
 window.addEventListener("hashchange", routeFromHash);
 
 // ---- settings view lives in profile.js (renderSettings) --------------
+// =====================================================================
+// hover cards — profile / company previews
+// ---------------------------------------------------------------------
+// Any element carrying
+//     data-hover-card="user"|"company"  data-hover-uuid="<uuid>"
+// gets a preview card on pointer intent. One delegated listener on
+// document handles every surface, so a new view opts in by adding two
+// attributes to markup it already renders — there is no per-surface
+// wiring to keep in sync, and elements added after load work with no
+// re-binding.
+//
+// Deliberately mouse-only for now: there is no focus/keyboard path, so
+// the card's buttons are unreachable by keyboard. That is a known,
+// accepted gap. The card is marked `inert` while hidden so it never
+// pollutes tab order for people who will never see it, which also
+// leaves the door open for adding a focus path later.
+//
+// PLACEMENT. The card is appended to document.body with position:fixed
+// and coordinates from getBoundingClientRect(). It must NOT be appended
+// near its trigger: `.in-modal { overflow-y:auto }` clips absolutely
+// positioned children, and the profile left column and feed rails are
+// now overflow:auto too. Anything else clips.
+// =====================================================================
+
+const HOVER_OPEN_DELAY  = 350;   // pointer must rest this long before we fetch
+const HOVER_CLOSE_DELAY = 220;   // grace period to travel from trigger to card
+const HOVER_CARD_W      = 320;
+const HOVER_EDGE_PAD    = 12;
+
+// Session cache keyed "type:uuid". Re-hovering the same person in a feed
+// full of their posts costs one request, not one per hover. `null` is a
+// legitimate cached value meaning "we asked and there is nothing to show"
+// (404 / private / rate-limited), so misses are not retried in a loop.
+const HOVER_CACHE = new Map();
+
+let hoverEl        = null;   // the single reused card element
+let hoverTrigger   = null;   // element the visible card belongs to
+let hoverOpenTimer = null;
+let hoverCloseTimer= null;
+let hoverToken     = 0;      // guards against out-of-order fetch resolution
+let hoverInside    = false;  // pointer is over the card itself
+
+function hoverCardEl() {
+  if (hoverEl) return hoverEl;
+  hoverEl = document.createElement("div");
+  hoverEl.className = "in-hovercard";
+  hoverEl.setAttribute("role", "tooltip");
+  hoverEl.style.display = "none";
+  hoverEl.inert = true;
+  hoverEl.addEventListener("mouseenter", () => {
+    hoverInside = true;
+    clearTimeout(hoverCloseTimer);
+  });
+  hoverEl.addEventListener("mouseleave", () => {
+    hoverInside = false;
+    scheduleHoverClose();
+  });
+  document.body.appendChild(hoverEl);
+  return hoverEl;
+}
+
+function hideHoverCard() {
+  clearTimeout(hoverOpenTimer);
+  clearTimeout(hoverCloseTimer);
+  hoverToken++;                       // invalidate any in-flight fetch
+  hoverInside = false;
+  hoverTrigger = null;
+  if (!hoverEl) return;
+  hoverEl.style.display = "none";
+  hoverEl.classList.remove("show");
+  hoverEl.inert = true;
+  hoverEl.innerHTML = "";
+}
+
+function scheduleHoverClose() {
+  clearTimeout(hoverCloseTimer);
+  hoverCloseTimer = setTimeout(() => {
+    if (!hoverInside) hideHoverCard();
+  }, HOVER_CLOSE_DELAY);
+}
+
+// Position against the trigger, flipping when the preferred placement
+// would leave the viewport. Measured after the card has real content so
+// the height is the true rendered height, not an estimate.
+function placeHoverCard(trigger) {
+  const card = hoverCardEl();
+  const r = trigger.getBoundingClientRect();
+  const vw = document.documentElement.clientWidth;
+  const vh = document.documentElement.clientHeight;
+
+  card.style.left = "0px";
+  card.style.top  = "0px";
+  const h = card.offsetHeight;
+  const w = card.offsetWidth || HOVER_CARD_W;
+
+  // Prefer below; flip above when there isn't room and there is room up top.
+  let top = r.bottom + 8;
+  if (top + h > vh - HOVER_EDGE_PAD && r.top - 8 - h > HOVER_EDGE_PAD) {
+    top = r.top - 8 - h;
+  }
+  top = Math.max(HOVER_EDGE_PAD, Math.min(top, vh - h - HOVER_EDGE_PAD));
+
+  // Prefer left-aligned with the trigger; pull back inside on the right.
+  let left = r.left;
+  if (left + w > vw - HOVER_EDGE_PAD) left = vw - w - HOVER_EDGE_PAD;
+  left = Math.max(HOVER_EDGE_PAD, left);
+
+  card.style.left = Math.round(left) + "px";
+  card.style.top  = Math.round(top) + "px";
+}
+
+function hoverAvatar(d) {
+  const isCo = d.type === "company";
+  const label = (d.name || "?").trim().charAt(0).toUpperCase();
+  const inner = d.avatar
+    ? `<img src="${esc(d.avatar)}" alt="">`
+    : esc(label || "?");
+  return `<div class="hc-avatar${isCo ? " company" : ""}">${inner}</div>`;
+}
+
+// Score pill. target_type is the enum from `scores` ('job_title' |
+// 'skill' | 'field'); the label shown is the target_value itself.
+function hoverScore(d) {
+  if (!d.score) return "";
+  return `
+    <div class="hc-score">
+      <span class="hc-score-val">${esc(String(d.score.value))}</span>
+      <span class="hc-score-label">${esc(d.score.target_value)}</span>
+    </div>`;
+}
+
+function hoverStats(d) {
+  if (!d.stats) return "";
+  if (d.type === "company") {
+    const f = d.stats.followers || 0, o = d.stats.openings || 0;
+    return `<div class="hc-stats">
+      <span><b>${f}</b> ${f === 1 ? "follower" : "followers"}</span>
+      <span><b>${o}</b> open ${o === 1 ? "role" : "roles"}</span>
+    </div>`;
+  }
+  const f = d.stats.followers || 0, g = d.stats.following || 0;
+  return `<div class="hc-stats">
+    <span><b>${f}</b> ${f === 1 ? "follower" : "followers"}</span>
+    <span><b>${g}</b> following</span>
+  </div>`;
+}
+
+function hoverActions(d) {
+  // Own card: nothing to act on.
+  if (d.viewer && d.viewer.is_self) return "";
+
+  const signedIn = !!(d.viewer && d.viewer.signed_in);
+  const following = !!(d.viewer && d.viewer.following);
+  const dis = signedIn ? "" : "disabled";
+  const why = signedIn ? "" : ` title="Sign in to do this"`;
+
+  const followBtn = `<button class="hc-btn hc-follow${following ? " following" : ""}" ${dis}${why}
+      data-act="follow">${following ? "Following" : "Follow"}</button>`;
+
+  if (d.type === "company") {
+    // Companies aren't messageable; openings is the useful second action.
+    const n = (d.stats && d.stats.openings) || 0;
+    return `<div class="hc-actions">
+      ${followBtn}
+      <button class="hc-btn hc-openings" data-act="openings" ${n ? "" : "disabled"}
+        ${n ? "" : ' title="No open roles right now"'}>View openings</button>
+    </div>`;
+  }
+
+  const m = d.message || {};
+  const mDis = m.available ? "" : "disabled";
+  const mWhy = m.reason ? ` title="${esc(m.reason)}"` : "";
+  const mLabel = m.pending ? "Request sent" : "Message";
+  return `<div class="hc-actions">
+    ${followBtn}
+    <button class="hc-btn hc-message" data-act="message" ${mDis}${mWhy}>${esc(mLabel)}</button>
+  </div>`;
+}
+
+function hoverCardHtml(d) {
+  const sub = d.type === "company"
+    ? [d.industry, d.location].filter(Boolean).join(" · ")
+    : [d.headline, d.location].filter(Boolean).join(" · ");
+
+  const verified = d.verified ? ' <span class="hc-verified" title="Verified">✓</span>' : "";
+  const handle = d.type === "user" && d.username
+    ? `<div class="hc-handle">@${esc(d.username)}</div>` : "";
+
+  return `
+    <div class="hc-head">
+      ${hoverAvatar(d)}
+      <div class="hc-id">
+        <div class="hc-name">${esc(d.name || "Unknown")}${verified}</div>
+        ${handle}
+      </div>
+      ${hoverScore(d)}
+    </div>
+    ${sub ? `<div class="hc-sub">${esc(sub)}</div>` : ""}
+    ${d.type === "company" && d.subtitle ? `<div class="hc-desc">${esc(d.subtitle)}</div>` : ""}
+    ${hoverStats(d)}
+    ${hoverActions(d)}`;
+}
+
+// Wire the card's buttons. Follow mirrors the optimistic toggle used on
+// the Connect and Search rows; the others just navigate, which closes
+// the card via the route change.
+function wireHoverActions(d) {
+  const card = hoverCardEl();
+
+  const followBtn = card.querySelector(".hc-follow");
+  if (followBtn && !followBtn.disabled) {
+    followBtn.onclick = async (e) => {
+      e.stopPropagation();
+      const wasFollowing = followBtn.classList.contains("following");
+      followBtn.disabled = true;
+      const endpoint = wasFollowing ? "/follow/unfollow.php" : "/follow/follow.php";
+      const resp = await api(endpoint, "POST", { target_type: d.type, target_uuid: d.uuid });
+      if (resp.ok && resp.data?.success) {
+        followBtn.classList.toggle("following");
+        followBtn.textContent = followBtn.classList.contains("following") ? "Following" : "Follow";
+        // Keep the cache honest so re-hovering shows the new state.
+        const key = d.type + ":" + d.uuid;
+        const cached = HOVER_CACHE.get(key);
+        if (cached && cached.viewer) cached.viewer.following = !wasFollowing;
+      } else {
+        toast(resp.data?.error || "Could not update follow status.", "err");
+      }
+      followBtn.disabled = false;
+    };
+  }
+
+  const msgBtn = card.querySelector(".hc-message");
+  if (msgBtn && !msgBtn.disabled) {
+    msgBtn.onclick = (e) => {
+      e.stopPropagation();
+      hideHoverCard();
+      location.hash = "messages/" + d.uuid;
+    };
+  }
+
+  const openBtn = card.querySelector(".hc-openings");
+  if (openBtn && !openBtn.disabled) {
+    openBtn.onclick = (e) => {
+      e.stopPropagation();
+      hideHoverCard();
+      location.hash = "company/" + d.uuid;
+    };
+  }
+}
+
+async function showHoverCard(trigger, type, uuid) {
+  const key = type + ":" + uuid;
+  const token = ++hoverToken;
+
+  let data;
+  if (HOVER_CACHE.has(key)) {
+    data = HOVER_CACHE.get(key);
+  } else {
+    const resp = await api(`/profile/card.php?type=${encodeURIComponent(type)}&uuid=${encodeURIComponent(uuid)}`);
+    // A hover that 404s (private, deleted, not discoverable) or gets
+    // throttled simply shows nothing — no toast, because a toast on
+    // mouse movement would be intolerable.
+    data = (resp.ok && resp.data?.success) ? resp.data.data : null;
+    HOVER_CACHE.set(key, data);
+  }
+
+  // The pointer may have moved on, or another card may have been
+  // requested, while this was in flight.
+  if (token !== hoverToken || hoverTrigger !== trigger || !data) return;
+
+  const card = hoverCardEl();
+  card.innerHTML = hoverCardHtml(data);
+  card.style.display = "block";
+  card.inert = false;
+  placeHoverCard(trigger);
+  // Fade in only after placement, so it never appears mid-flight.
+  requestAnimationFrame(() => card.classList.add("show"));
+  wireHoverActions(data);
+}
+
+// ---- delegated triggers ---------------------------------------------
+document.addEventListener("mouseover", (e) => {
+  const t = e.target.closest?.("[data-hover-card]");
+  if (!t) return;
+  const type = t.dataset.hoverCard;
+  const uuid = t.dataset.hoverUuid;
+  if ((type !== "user" && type !== "company") || !uuid) return;
+  if (t === hoverTrigger) { clearTimeout(hoverCloseTimer); return; }
+
+  clearTimeout(hoverOpenTimer);
+  clearTimeout(hoverCloseTimer);
+  hoverTrigger = t;
+  hoverOpenTimer = setTimeout(() => showHoverCard(t, type, uuid), HOVER_OPEN_DELAY);
+});
+
+document.addEventListener("mouseout", (e) => {
+  const t = e.target.closest?.("[data-hover-card]");
+  if (!t || t !== hoverTrigger) return;
+  // Moving within the same trigger (e.g. name -> its own avatar) is not a leave.
+  if (e.relatedTarget && t.contains(e.relatedTarget)) return;
+  clearTimeout(hoverOpenTimer);
+  scheduleHoverClose();
+});
+
+// Any navigation or scroll invalidates the anchor position, so close.
+window.addEventListener("hashchange", hideHoverCard);
+window.addEventListener("scroll", hideHoverCard, true);
+window.addEventListener("resize", hideHoverCard);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideHoverCard(); });

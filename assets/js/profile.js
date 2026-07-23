@@ -97,8 +97,12 @@ async function openFollowList(uuid, mode) {
           const rowUuid = row.uuid;
           const initial = (name || "?").charAt(0).toUpperCase();
           const hash = kind === "company" ? "#company/" + rowUuid : "#user/" + rowUuid;
+          // These rows live INSIDE a modal (.in-modal is overflow-y:auto),
+          // which is exactly why the card is body-appended and fixed —
+          // an in-place popover would be clipped here.
+          const hov = rowUuid ? ` data-hover-card="${kind === "company" ? "company" : "user"}" data-hover-uuid="${esc(rowUuid)}"` : "";
           const item = el(`
-            <button class="in-followrow" type="button">
+            <button class="in-followrow" type="button"${hov}>
               <span class="in-followrow-av">${avatar ? `<img src="${esc(avatar)}" alt="">` : esc(initial)}</span>
               <span class="in-followrow-name">${kind === "company" ? "" : "@"}${esc(name)}</span>
               ${kind === "company" ? `<span class="in-followrow-tag">Company</span>` : ""}
@@ -297,7 +301,7 @@ async function renderProfile() {
   // sections
   section(rightCol, "Experience", jobs.data?.data, j => {
     const companyDisplay = j.company_uuid
-      ? `<a href="#company/${esc(j.company_uuid)}" class="emp-link" onclick="event.stopPropagation()">${esc(j.company_name || "")}</a>`
+      ? `<a href="#company/${esc(j.company_uuid)}" class="emp-link" onclick="event.stopPropagation()" data-hover-card="company" data-hover-uuid="${esc(j.company_uuid)}">${esc(j.company_name || "")}</a>`
       : esc(j.company_name || "");
     return `
     <div class="meta"><div class="t">${esc(j.title)}</div>
@@ -2518,7 +2522,7 @@ async function openEndorsementDetail(targetUuid) {
       const name = person.username || "";
       const initial = (name || "?").charAt(0).toUpperCase();
       const row = el(`
-        <button class="in-followrow" type="button">
+        <button class="in-followrow" type="button"${person.uuid ? ` data-hover-card="user" data-hover-uuid="${esc(person.uuid)}"` : ""}>
           <span class="in-followrow-av">${person.profile_pic ? `<img src="${esc(person.profile_pic)}" alt="">` : esc(initial)}</span>
           <span class="in-followrow-name">@${esc(name)}</span>
         </button>`);

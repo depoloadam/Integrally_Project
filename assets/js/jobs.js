@@ -192,7 +192,7 @@ async function renderJobDetail(uuid) {
         <div>
           <h1 style="margin:0 0 4px;font-size:22px;letter-spacing:-0.4px">${esc(j.title)}</h1>
           <div class="job-company" style="font-size:14.5px">
-            <a href="#company/${esc(c.uuid)}" style="color:var(--in-accent);font-weight:600;text-decoration:none">${esc(c.name)}</a>${c.industry ? " · " + esc(c.industry) : ""}
+            <a href="#company/${esc(c.uuid)}" style="color:var(--in-accent);font-weight:600;text-decoration:none" data-hover-card="company" data-hover-uuid="${esc(c.uuid)}">${esc(c.name)}</a>${c.industry ? " · " + esc(c.industry) : ""}
           </div>
           ${salary ? `<div class="job-salary-sm">${esc(salary)}</div>` : ""}
           ${j.status !== "open" ? `<span class="in-admin-badge off" style="margin-top:8px;display:inline-block">${esc(j.status)}</span>` : ""}

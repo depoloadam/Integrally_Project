@@ -81,6 +81,14 @@ class RateLimit
         // --- heavy reads (LIKE '%q%' => full scans) -------------------
         'search'             => [60,  60],
 
+        // --- hover cards ----------------------------------------------
+        // Fires on pointer intent, not on click, so the natural rate is
+        // an order of magnitude above any other read. The client caches
+        // per (type,uuid) for the session and waits out a hover delay
+        // before requesting, which keeps ordinary browsing far below
+        // this ceiling while still capping a scripted enumeration.
+        'hover_card'         => [240, 60],
+
         // --- ordinary writes ------------------------------------------
         'write'              => [30,  60],
         'follow'             => [30,  60],

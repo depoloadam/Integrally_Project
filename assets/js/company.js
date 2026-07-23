@@ -336,11 +336,12 @@ async function loadCompanyEmployees() {
     const nm = e.name || ("@" + e.username);
     const dates = (e.start_date || "") + (e.is_current ? " – Present" : (e.end_date ? " – " + e.end_date : ""));
     const avatarChar = (e.username || "?").charAt(0).toUpperCase();
+    const hov = e.user_uuid ? ` data-hover-card="user" data-hover-uuid="${esc(e.user_uuid)}"` : "";
     const row = el(`
       <div class="in-item" role="button" tabindex="0" style="cursor:pointer">
-        <div class="connect-ava" style="width:42px;height:42px;font-size:16px">${e.profile_pic ? `<img src="${esc(e.profile_pic)}" alt="">` : esc(avatarChar)}</div>
+        <div class="connect-ava" style="width:42px;height:42px;font-size:16px"${hov}>${e.profile_pic ? `<img src="${esc(e.profile_pic)}" alt="">` : esc(avatarChar)}</div>
         <div class="meta" style="margin-left:12px">
-          <div class="t">${esc(nm)} ${e.is_current ? `<span class="in-admin-badge ok">Current</span>` : `<span class="in-admin-badge off">Past</span>`}</div>
+          <div class="t"${hov}>${esc(nm)} ${e.is_current ? `<span class="in-admin-badge ok">Current</span>` : `<span class="in-admin-badge off">Past</span>`}</div>
           <div class="s">${esc(e.title || "")}${dates.trim() ? " · " + esc(dates.trim()) : ""}</div>
         </div>
         <span style="color:var(--in-muted);align-self:center">›</span>
@@ -465,13 +466,14 @@ async function renderJobApplicants(jobUuid) {
       ? `<div class="ja-score" title="Score at apply time">${Math.round(a.score_value)}</div>`
       : `<div class="ja-score none" title="No score">—</div>`;
     const dim = a.status !== "submitted" ? ' style="opacity:.55"' : "";
+    const hov = cand.uuid ? ` data-hover-card="user" data-hover-uuid="${esc(cand.uuid)}"` : "";
     const row = el(`
       <div class="ja-row"${dim}>
         <div class="ja-rank">${idx + 1}</div>
         ${score}
-        <div class="connect-ava" style="width:40px;height:40px">${av}</div>
+        <div class="connect-ava" style="width:40px;height:40px"${hov}>${av}</div>
         <div class="ja-main">
-          <div class="ja-name">${esc(name)} ${a.status !== "submitted" ? `<span class="in-admin-badge off" style="margin-left:6px">${esc(a.status_label)}</span>` : ""}</div>
+          <div class="ja-name"${hov}>${esc(name)} ${a.status !== "submitted" ? `<span class="in-admin-badge off" style="margin-left:6px">${esc(a.status_label)}</span>` : ""}</div>
           <div class="ja-sub">@${esc(cand.username || "")}${a.has_resume ? " · 📎 resume" : ""}</div>
         </div>
         <button class="in-btn ghost" style="flex:none;padding:7px 14px;font-size:13px">View</button>
@@ -542,7 +544,7 @@ async function openApplicantDetail(appUuid) {
   modal.innerHTML = `
     <h2 style="margin-bottom:2px">${esc(name)}</h2>
     <div style="color:var(--in-muted);font-size:13px;margin-bottom:4px">
-      <a href="#user/${esc(cand.uuid)}" onclick="closeModal()" style="color:var(--in-accent);text-decoration:none">@${esc(cand.username || "")}</a>${cand.location ? " · " + esc(cand.location) : ""}
+      <a href="#user/${esc(cand.uuid)}" onclick="closeModal()" style="color:var(--in-accent);text-decoration:none" data-hover-card="user" data-hover-uuid="${esc(cand.uuid)}">@${esc(cand.username || "")}</a>${cand.location ? " · " + esc(cand.location) : ""}
     </div>
     <div style="color:var(--in-muted);font-size:12px;margin-bottom:16px">Applied ${esc(timeAgo(a.applied_at))} · ${esc(a.status_label)}</div>
 
