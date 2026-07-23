@@ -381,6 +381,13 @@ html[data-design="pro"] .comp-id-score-val {
   font-size:14px; font-weight:700; letter-spacing:-0.02em;
 }
 html[data-design="pro"] .comp-id-saved { border-radius:4px; }
+
+/* score rail — squared bars, flat accent fill, ledger numerals */
+html[data-design="pro"] .score-rail-row { border-radius:4px; }
+html[data-design="pro"] .score-rail-bar { border-radius:2px; height:4px; }
+html[data-design="pro"] .score-rail-bar > i { border-radius:2px; background:var(--in-accent); }
+html[data-design="pro"] .score-rail-val { letter-spacing:-0.02em; }
+html[data-design="pro"] .score-rail-tag { border-radius:3px; }
 html[data-design="pro"] .feed-grid .in-post-item {
   margin-bottom:10px; box-shadow:none; transition:border-color .12s ease;
 }

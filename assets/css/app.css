@@ -2000,6 +2000,45 @@ html.in-reduce-motion *::after {
 }
 .rail-more:hover { text-decoration:underline; }
 
+/* ---- right rail: score summary card ----
+   A concise portfolio view of every scored target. Reuses the strength
+   meter's accent gradient for the bars so the score language is
+   consistent with the profile. */
+.score-rail-body { display:flex; flex-direction:column; gap:2px; }
+.score-rail-row {
+  display:block; width:100%; text-align:left; background:none; border:none;
+  font-family:inherit; padding:7px 8px; border-radius:8px; cursor:pointer;
+  transition:background .12s ease;
+}
+.score-rail-row:hover { background:var(--in-bg); }
+.score-rail-top { display:flex; align-items:baseline; gap:8px; margin-bottom:5px; }
+.score-rail-target {
+  flex:1; min-width:0; font-size:12.5px; font-weight:600; color:var(--in-ink);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.score-rail-val {
+  flex:none; font-size:14px; font-weight:800; color:var(--in-ink); letter-spacing:-0.3px;
+  font-variant-numeric:tabular-nums;
+}
+.score-rail-bar {
+  height:5px; border-radius:5px; background:var(--in-line); overflow:hidden;
+}
+.score-rail-bar > i {
+  display:block; height:100%; border-radius:5px;
+  background:linear-gradient(90deg,var(--in-accent),var(--in-teal-bright));
+  transition:width .4s ease;
+}
+.score-rail-row.is-hidden-score .score-rail-target,
+.score-rail-row.is-hidden-score .score-rail-val { color:var(--in-muted); }
+.score-rail-row.is-hidden-score .score-rail-bar > i { background:var(--in-muted); opacity:.55; }
+.score-rail-tag {
+  flex:none; font-size:9.5px; font-weight:700; letter-spacing:.4px; text-transform:uppercase;
+  color:var(--in-muted); background:var(--in-bg); border:1px solid var(--in-line);
+  border-radius:999px; padding:1px 6px;
+}
+.score-rail-empty { text-align:center; padding:4px 4px 8px; }
+.score-rail-empty-txt { font-size:12.5px; color:var(--in-muted); line-height:1.5; margin-bottom:10px; }
+
 /* ---------- split post cards (feed route only) ---------- */
 /* Inside the feed grid each post becomes its own card; the old shared
    .in-card2 wrapper turns invisible. Other surfaces (profile activity,

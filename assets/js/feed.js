@@ -231,6 +231,9 @@ async function renderFeed() {
   buildComposerIdentity(composer);
 
   // Rail cards load in the background — they must never delay the posts.
+  // Scores lead the rail: the score is the product, so a visitor to
+  // their own feed should see their whole standing without navigating.
+  buildScoreRail(rail);
   buildDiscoverRail(rail);
 
   // ---- tabs + post list ----
@@ -290,6 +293,80 @@ async function buildComposerIdentity(composer) {
       box.onclick = goProfile;
     }
   } catch (_) { /* score readout stays hidden */ }
+}
+
+// ---- right rail: score summary ---------------------------------------
+// A concise portfolio view of the user's scores — every scored target
+// ranked high-to-low with a compact bar, so relative standing reads at a
+// glance without leaving the feed. The composer strip shows only the
+// single latest score; this is the whole picture. Hidden scores are
+// included (this is the owner's own feed) but marked, matching how the
+// profile treats them. Fails quietly: no scores yet → setup CTA; a
+// failed call → no card at all, so the feed never blocks on it.
+const SCORE_RAIL_LIMIT = 5;
+
+async function buildScoreRail(mount) {
+  if (!mount || !ME) return;   // company feeds have no personal scores
+
+  let scores = [];
+  try {
+    const r = await api("/score/latest.php");
+    if (!r.ok) return;
+    scores = r.data?.data || [];
+  } catch (_) { return; }
+
+  const card = el(`<div class="railcard scorecard">
+    <h3>Your scores</h3>
+    <div class="score-rail-body"></div>
+  </div>`);
+  const body = card.querySelector(".score-rail-body");
+
+  if (!scores.length) {
+    body.appendChild(el(`<div class="score-rail-empty">
+      <div class="score-rail-empty-txt">Score yourself against a job title to see where you stand.</div>
+      <button class="in-btn primary score-rail-cta" style="flex:none;padding:8px 14px">Get your score</button>
+    </div>`));
+    body.querySelector(".score-rail-cta").onclick = () => { location.hash = "profile"; };
+    mount.appendChild(card);
+    return;
+  }
+
+  // Highest first — the headline standing leads.
+  const ranked = scores.slice().sort((a, b) => b.score_value - a.score_value);
+  const shown = ranked.slice(0, SCORE_RAIL_LIMIT);
+
+  shown.forEach(s => {
+    const val = Math.max(0, Math.min(100, Math.round(s.score_value)));
+    const row = el(`
+      <button class="score-rail-row" title="View score history">
+        <div class="score-rail-top">
+          <span class="score-rail-target"></span>
+          <span class="score-rail-val">${val}</span>
+        </div>
+        <div class="score-rail-bar"><i style="width:${val}%"></i></div>
+      </button>`);
+    // textContent for the target: it's user-supplied free text.
+    row.querySelector(".score-rail-target").textContent = s.target_value || "Career score";
+    if (s.hidden) {
+      row.classList.add("is-hidden-score");
+      row.querySelector(".score-rail-top").appendChild(
+        el(`<span class="score-rail-tag" title="Hidden from your profile">Hidden</span>`));
+    }
+    row.onclick = () => {
+      // Route format: #score-history/<encoded "type|value"> — matches
+      // the profile's score rows (see profile.js renderScoreHistory).
+      location.hash = "score-history/" + encodeURIComponent(s.target_type + "|" + s.target_value);
+    };
+    body.appendChild(row);
+  });
+
+  if (ranked.length > SCORE_RAIL_LIMIT) {
+    const more = el(`<button class="rail-more">See all ${ranked.length} scores</button>`);
+    more.onclick = () => { location.hash = "profile"; };
+    card.appendChild(more);
+  }
+
+  mount.appendChild(card);
 }
 
 // ---- discover cards (right rail) --------------------------------------
