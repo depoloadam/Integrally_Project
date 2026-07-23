@@ -111,27 +111,70 @@ out += `    ];
 for (const k of Object.keys(tokenMap).sort()) out += `        ${phpStr(k)} => ${phpIds(tokenMap[k])},\n`;
 out += `    ];
 
+    // Admin-added catalog entries (cert_catalog_entries), merged with the
+    // static CERT_MAP at resolution time. Custom keys win collisions so
+    // admins can also override a static mapping. Loaded once per request
+    // by ScoreEngine::gatherProfile; when never loaded (or the table is
+    // absent) resolution is static-only, so scoring never breaks on a
+    // missing migration.
+    private static ?array $customMap = null;
+    private static ?array $keyCache  = null;   // sorted union of match keys
+
+    public static function loadCustom(PDO $pdo): void
+    {
+        if (self::$customMap !== null) return;   // per-request cache
+        self::$customMap = [];
+        try {
+            $rows = $pdo->query('SELECT name, issuer, aliases, cats FROM cert_catalog_entries')->fetchAll();
+        } catch (Throwable $e) {
+            return;   // table not migrated yet — static catalog only
+        }
+        foreach ($rows as $r) {
+            $ids = array_values(array_filter(array_map('intval', (array) json_decode($r['cats'] ?? '[]', true)),
+                fn($i) => $i >= 0));
+            if (!$ids) continue;
+            $keys = [self::normText($r['name'] . ' ' . ($r['issuer'] ?? '')), self::normText($r['name'])];
+            foreach ((array) json_decode($r['aliases'] ?? '[]', true) as $a) {
+                if (is_string($a) && trim($a) !== '') $keys[] = self::normText($a);
+            }
+            foreach ($keys as $k) if ($k !== '') self::$customMap[$k] = $ids;
+        }
+        self::$keyCache = null;   // rebuild the sorted union on next resolve
+    }
+
+    /** Test hook: reset the per-request custom cache. */
+    public static function resetCustom(): void { self::$customMap = null; self::$keyCache = null; }
+
+    private static function normText(string $s): string
+    {
+        $s = strtolower(trim($s));
+        $s = str_replace(['\\u{2013}', '\\u{2014}'], '-', $s);
+        return preg_replace('/\\s+/', ' ', $s);
+    }
+
     /**
      * Resolve a certification (name + issuer) to job categories, or
-     * null when nothing in the catalog, token vocabulary, or education
-     * field map recognizes it.
+     * null when nothing in the catalog (static or admin-added), token
+     * vocabulary, or education field map recognizes it.
      */
     public static function categoriesForCert(string $name, string $issuer = ''): ?array
     {
-        $norm = strtolower(trim($name . ' ' . $issuer));
-        $norm = str_replace(['\\u{2013}', '\\u{2014}'], '-', $norm);
-        $norm = preg_replace('/\\s+/', ' ', $norm);
+        $norm = self::normText($name . ' ' . $issuer);
         if ($norm === '') return null;
 
+        $custom = self::$customMap ?? [];
+        if (isset($custom[$norm]))        return $custom[$norm];
         if (isset(self::CERT_MAP[$norm])) return self::CERT_MAP[$norm];
 
-        static $byLength = null;
-        if ($byLength === null) {
-            $byLength = array_keys(self::CERT_MAP);
-            usort($byLength, fn($a, $b) => strlen($b) <=> strlen($a));
+        // Longest-substring containment over the UNION of custom and
+        // static keys (custom wins ties via the lookup order above and
+        // key precedence here).
+        if (self::$keyCache === null) {
+            self::$keyCache = array_merge(array_keys($custom), array_keys(self::CERT_MAP));
+            usort(self::$keyCache, fn($a, $b) => strlen($b) <=> strlen($a));
         }
-        foreach ($byLength as $key) {
-            if (str_contains($norm, $key)) return self::CERT_MAP[$key];
+        foreach (self::$keyCache as $key) {
+            if (str_contains($norm, $key)) return $custom[$key] ?? self::CERT_MAP[$key];
         }
 
         // Token vote: collect every category any known token points at.

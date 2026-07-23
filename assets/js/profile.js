@@ -1802,6 +1802,42 @@ function certSubLine(c) {
   return out;
 }
 
+
+// ---- cert typeahead: static catalog + admin-added entries ------------
+// Admin-added official catalog entries (api/certs/custom.php) merge into
+// the suggestion list alongside the static certs-catalog.js. Fetched
+// once per page load; a failed fetch just means static-only suggestions.
+let CERT_CUSTOM_ENTRIES = null;
+async function certCustomEntries() {
+  if (CERT_CUSTOM_ENTRIES !== null) return CERT_CUSTOM_ENTRIES;
+  CERT_CUSTOM_ENTRIES = [];
+  try {
+    const r = await api("/certs/custom.php");
+    const rows = r.data?.data?.entries || [];
+    const catNames = (typeof JOB_CATALOG !== "undefined") ? JOB_CATALOG.map(g => g.category) : [];
+    CERT_CUSTOM_ENTRIES = rows.map(e => ({
+      title: e.name,
+      issuer: e.issuer || "",
+      category: catNames[(e.cats || [])[0]] || "",
+      _n: (e.name || "").toLowerCase(),
+      _alts: (e.aliases || []).map(a => a.toLowerCase()).concat(e.issuer ? [e.issuer.toLowerCase()] : []),
+    }));
+  } catch (_) { /* static-only */ }
+  return CERT_CUSTOM_ENTRIES;
+}
+function certMergedSearch(q, limit) {
+  limit = limit || 8;
+  const base = (typeof certCatalogSearch === "function") ? certCatalogSearch(q, limit) : [];
+  const needle = (q || "").trim().toLowerCase();
+  if (!needle || !Array.isArray(CERT_CUSTOM_ENTRIES) || !CERT_CUSTOM_ENTRIES.length) return base;
+  const extra = CERT_CUSTOM_ENTRIES.filter(e =>
+    e._n.startsWith(needle) || e._n.includes(needle) || e._alts.some(a => a.startsWith(needle) || a.includes(needle)));
+  // Custom entries lead (they're the freshest official additions),
+  // deduplicated against static titles.
+  const seen = new Set(extra.map(e => e.title));
+  return [...extra, ...base.filter(b => !seen.has(b.title))].slice(0, limit);
+}
+
 function addCert(existing) {
   const isEdit = !!(existing && existing.id);
   const hasExp = !!(isEdit && existing.expiry_date);
@@ -1826,8 +1862,9 @@ function addCert(existing) {
   // text remains fully allowed — uncataloged certs are relevance-scored
   // by token/field fallbacks server-side.
   if (typeof jobMountTypeahead === "function" && typeof certCatalogSearch === "function") {
+    certCustomEntries();   // warm the admin-entries cache in the background
     jobMountTypeahead($("c-name"), {
-      search: certCatalogSearch, minChars: 2, limit: 8,
+      search: certMergedSearch, minChars: 2, limit: 8,
       onPick: (title, item) => {
         const issEl = $("c-issuer");
         if (item && item.issuer && issEl && !issEl.value.trim()) issEl.value = item.issuer;

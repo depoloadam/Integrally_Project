@@ -63,6 +63,7 @@ async function renderAdmin() {
       <button data-atab="posts">Posts</button>
       <button data-atab="jobs">Jobs</button>
       <button data-atab="reports">Reports<span class="in-tab-badge" id="admin-reports-badge" hidden></span></button>
+      <button data-atab="certs">Certs</button>
       <button data-atab="audit">Audit</button>
     </div>`);
   wrap.appendChild(tabs);
@@ -85,8 +86,104 @@ function renderAdminSection(section) {
   else if (ADMIN_TAB === "companies") renderAdminCompaniesSection(section);
   else if (ADMIN_TAB === "posts")     renderAdminPostsSection(section);
   else if (ADMIN_TAB === "reports")   renderAdminReportsSection(section);
+  else if (ADMIN_TAB === "certs")     renderAdminCertsSection(section);
   else if (ADMIN_TAB === "audit")     renderAdminAuditSection(section);
   else                                renderAdminJobsSection(section);
+}
+
+
+// ---- certification catalog -------------------------------------------
+// Admin-added OFFICIAL catalog entries. These merge into score
+// relevance (CertCatalog::loadCustom) and the profile cert typeahead,
+// alongside the static generated catalog. Category names come from the
+// global JOB_CATALOG (jobs-catalog.js loads before this file).
+function renderAdminCertsSection(section) {
+  const card = el(`<div class="in-card2">
+    <h2>Certification catalog</h2>
+    <div class="in-set-toggle-sub" style="margin-bottom:14px">
+      Official catalog entries added here are recognized by the score engine and suggested in the
+      profile certification typeahead. The built-in catalog is managed in code and not listed below.
+    </div>
+    <div id="acert-form"></div>
+    <div id="acert-list" style="margin-top:16px"><div class="in-empty">Loading…</div></div>
+  </div>`);
+  section.appendChild(card);
+
+  const catNames = (typeof JOB_CATALOG !== "undefined") ? JOB_CATALOG.map(g => g.category) : [];
+
+  // ---- add form ----
+  const form = el(`<div class="acert-add">
+    <div class="row">
+      <div><label>Name *</label><input id="acert-name" maxlength="190" placeholder="e.g. Certified Widget Engineer"></div>
+      <div><label>Issuer</label><input id="acert-issuer" maxlength="190" placeholder="e.g. Widget Institute"></div>
+    </div>
+    <label>Aliases <span class="in-set-toggle-sub" style="display:inline">(comma-separated match strings — acronyms, short forms)</span></label>
+    <input id="acert-aliases" placeholder="e.g. cwe, widget engineer">
+    <label>Categories * <span class="in-set-toggle-sub" style="display:inline">(what fields this certification is relevant to)</span></label>
+    <div class="acert-cats" id="acert-cats">
+      ${catNames.map((n, i) => `<label class="acert-cat"><input type="checkbox" value="${i}"> ${esc(n)}</label>`).join("")}
+    </div>
+    <div style="margin-top:10px"><button class="in-btn primary" id="acert-add" style="flex:none;padding:9px 18px">Add to catalog</button></div>
+  </div>`);
+  card.querySelector("#acert-form").appendChild(form);
+
+  form.querySelector("#acert-add").onclick = async () => {
+    const name = form.querySelector("#acert-name").value.trim();
+    if (!name) { toast("A certification name is required.", "err"); return; }
+    const cats = [...form.querySelectorAll("#acert-cats input:checked")].map(c => parseInt(c.value, 10));
+    if (!cats.length) { toast("Pick at least one category.", "err"); return; }
+    const aliases = form.querySelector("#acert-aliases").value.split(",").map(a => a.trim()).filter(Boolean);
+    const r = await api("/admin/cert-catalog.php", "POST", {
+      name, issuer: form.querySelector("#acert-issuer").value.trim(), aliases, cats,
+    });
+    if (!r.ok || !r.data?.success) { toast(r.data?.error || "Could not add the entry.", "err"); return; }
+    toast("Added to the catalog.");
+    form.querySelector("#acert-name").value = "";
+    form.querySelector("#acert-issuer").value = "";
+    form.querySelector("#acert-aliases").value = "";
+    form.querySelectorAll("#acert-cats input:checked").forEach(c => { c.checked = false; });
+    loadList();
+  };
+
+  // ---- entries list ----
+  const listBox = card.querySelector("#acert-list");
+  async function loadList() {
+    const r = await api("/admin/cert-catalog.php");
+    if (!r.ok || !r.data?.success) {
+      listBox.innerHTML = `<div class="in-empty">Could not load catalog entries. If the cert_catalog_entries migration hasn't been run yet, run it in phpMyAdmin first.</div>`;
+      return;
+    }
+    const { entries, categories } = r.data.data;
+    if (!entries.length) {
+      listBox.innerHTML = `<div class="in-empty">No admin-added entries yet.</div>`;
+      return;
+    }
+    listBox.innerHTML = `<table class="in-admin-table"><thead><tr>
+        <th>Name</th><th>Issuer</th><th>Categories</th><th>Aliases</th><th>Added by</th><th></th>
+      </tr></thead><tbody></tbody></table>`;
+    const tbody = listBox.querySelector("tbody");
+    for (const e of entries) {
+      const tr = el(`<tr>
+        <td></td><td></td><td></td><td></td><td></td>
+        <td><button class="in-btn ghost acert-del" style="flex:none;padding:5px 12px">Remove</button></td>
+      </tr>`);
+      const tds = tr.querySelectorAll("td");
+      tds[0].textContent = e.name;
+      tds[1].textContent = e.issuer || "—";
+      tds[2].textContent = e.cats.map(i => categories[i] || `#${i}`).join(", ");
+      tds[3].textContent = e.aliases.length ? e.aliases.join(", ") : "—";
+      tds[4].textContent = e.created_by || "—";
+      tr.querySelector(".acert-del").onclick = async () => {
+        if (!confirm(`Remove "${e.name}" from the catalog? Scores computed after removal will no longer get its relevance mapping.`)) return;
+        const r2 = await api("/admin/delete-cert-catalog.php", "POST", { id: e.id });
+        if (!r2.ok || !r2.data?.success) { toast(r2.data?.error || "Could not remove the entry.", "err"); return; }
+        toast("Removed.");
+        loadList();
+      };
+      tbody.appendChild(tr);
+    }
+  }
+  loadList();
 }
 
 // ---- stats overview ---------------------------------------------------

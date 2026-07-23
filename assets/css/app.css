@@ -2188,3 +2188,12 @@ html.in-reduce-motion *::after {
    sort control) and rails stay put — only this dims. */
 #feed-list.is-loading, #saved-list.is-loading, .in-card2 .body.is-loading { opacity:.55; transition:opacity .12s ease; }
 #feed-list, #saved-list, .in-card2 .body { transition:opacity .12s ease; }
+
+/* ---- admin: certification catalog tab ---- */
+.acert-add label { display:block; margin:10px 0 4px; font-size:12.5px; font-weight:600; color:var(--in-ink-soft); }
+.acert-add input { width:100%; }
+.acert-cats { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:4px 12px;
+  border:1px solid var(--in-line); border-radius:8px; padding:10px 12px; max-height:180px; overflow-y:auto; }
+.acert-cat { display:flex; align-items:center; gap:7px; font-size:12.5px; font-weight:500; color:var(--in-ink);
+  margin:0; cursor:pointer; }
+.acert-cat input { width:auto; margin:0; }

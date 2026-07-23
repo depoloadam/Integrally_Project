@@ -278,6 +278,10 @@ class ScoreEngine
      */
     public static function gatherProfile(PDO $pdo, int $userId): array
     {
+        // Merge admin-added catalog entries into cert resolution (cached
+        // per request; a no-op if the table isn't migrated yet).
+        CertCatalog::loadCustom($pdo);
+
         $skills = $pdo->prepare(
             'SELECT s.name, us.proficiency
              FROM user_skills us JOIN skills s ON s.id = us.skill_id
