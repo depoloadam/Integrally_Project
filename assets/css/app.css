@@ -254,15 +254,23 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
    The rails set scrollbar-width:thin, and modern Chromium honours the
    STANDARD scrollbar properties in preference to ::-webkit-scrollbar
    sizing — so style them with scrollbar-color, which works in Chrome
-   and Firefox alike. Transparent thumb at rest; a soft tint on hover so
-   the rail reads as plain cards until you reach for it. */
-.feed-rail-right, .in-col-left { scrollbar-color:transparent transparent; }
+   and Firefox alike.
+
+   A fully transparent thumb at rest hid the fact that the rails scroll
+   at all — there was no signifier until you happened to hover. The thumb
+   now rests at a faint tint: visible enough to read as an affordance,
+   light enough not to compete with the cards. Hover deepens it. */
+.feed-rail-right, .in-col-left { scrollbar-color:rgba(11,31,42,.10) transparent; }
 .feed-rail-right:hover, .in-col-left:hover {
-  scrollbar-color:rgba(11,31,42,.16) transparent;
+  scrollbar-color:rgba(11,31,42,.22) transparent;
+}
+[data-theme="dark"] .feed-rail-right,
+[data-theme="dark"] .in-col-left {
+  scrollbar-color:rgba(255,255,255,.09) transparent;
 }
 [data-theme="dark"] .feed-rail-right:hover,
 [data-theme="dark"] .in-col-left:hover {
-  scrollbar-color:rgba(255,255,255,.16) transparent;
+  scrollbar-color:rgba(255,255,255,.22) transparent;
 }
 
 /* ---- page scrollbar ----
@@ -288,11 +296,11 @@ html:hover { scrollbar-color:rgba(11,31,42,.24) transparent; }
   ::-webkit-scrollbar-thumb:hover { background:rgba(11,31,42,.26); background-clip:content-box; }
   .feed-rail-right::-webkit-scrollbar, .in-col-left::-webkit-scrollbar { width:6px; }
   .feed-rail-right::-webkit-scrollbar-thumb, .in-col-left::-webkit-scrollbar-thumb {
-    background:transparent; border:2px solid transparent; background-clip:content-box;
+    background:rgba(11,31,42,.10); border:2px solid transparent; background-clip:content-box;
   }
   .feed-rail-right:hover::-webkit-scrollbar-thumb,
   .in-col-left:hover::-webkit-scrollbar-thumb {
-    background:rgba(11,31,42,.16); background-clip:content-box;
+    background:rgba(11,31,42,.22); background-clip:content-box;
   }
 }
 
@@ -476,7 +484,12 @@ html:hover { scrollbar-color:rgba(11,31,42,.24) transparent; }
 .in-ai-chip { background:#fff; border-color:rgba(13,148,136,.35); }
 .in-ai-edit { background:none; border:none; color:var(--in-muted); cursor:pointer; font-size:14px; margin-left:auto; }
 .in-ai-edit:hover { color:var(--in-accent); }
-/* AI Skillset page */
+/* AI Skillset page.
+   The page previously carried an inline max-width:760px, which made it
+   noticeably narrower than every other route. Width now comes from
+   `.in-main` (980px) like the rest of the app — this wrapper just fills
+   the column it's given. */
+.in-aipage { width:100%; }
 .in-ai-hero { border:1px solid rgba(13,148,136,.28); background:linear-gradient(135deg, rgba(13,148,136,.06), rgba(20,184,166,.04)); }
 .in-ai-hero-eyebrow { display:flex; align-items:center; gap:6px; font-size:12px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; color:var(--in-accent); }
 .in-ai-hero-title { font-size:24px; font-weight:800; color:var(--in-ink); margin:6px 0 12px; }

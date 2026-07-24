@@ -247,7 +247,7 @@ async function renderProfile() {
   // Skills — moved to the left column, directly under the identity box.
   chipSection(leftCol, "Skills", skills.data?.data, s => `
     ${esc(s.name)}`,
-    addSkill, s => ({ id:s.id, kind:"skill" }), "skill");
+    addSkill, s => ({ id:s.id, kind:"skill", name:s.name }), "skill");
   // Owner can view who endorsed their skills, same modal as the public
   // profile. The endpoint allows the owner regardless of follow state.
   // Rendered as its own full-width row under the header (not crammed into
@@ -1086,7 +1086,7 @@ async function renderAiSkillset() {
   let chosen = new Set(aiSkills(st));
 
   view.innerHTML = "";
-  const wrap = el(`<div style="max-width:760px;margin:0 auto">
+  const wrap = el(`<div class="in-aipage">
     <div class="in-back"><button class="in-back-btn" onclick="location.hash='profile'">← Back to profile</button></div>
 
     <div class="in-card2 in-ai-hero">
@@ -1235,7 +1235,7 @@ async function refreshChipSection(kind) {
   if (!card) return;
   const body = card.querySelector(".body");
   const res = await api("/profile/skills/list.php");
-  fillChips(body, res.data?.data, s => `${esc(s.name)}`, s => ({ id:s.id, kind:"skill" }));
+  fillChips(body, res.data?.data, s => `${esc(s.name)}`, s => ({ id:s.id, kind:"skill", name:s.name }));
 }
 
 // ---- admin: edit another user's core profile -------------------------
@@ -1975,7 +1975,12 @@ async function removeRecord(kind, id) {
   await api(RECORD_ENDPOINTS[kind], "POST", { id });
   refreshAfterProfileChange();
 }
+// Skill chips sat behind a bare ✕ with no confirm, so a stray click
+// silently deleted a skill. Matches removeRecord's dialog; the name is
+// passed through so the prompt says what's actually being removed.
 async function removeChip(ref) {
+  const what = ref.name ? `Remove "${ref.name}" from your skills?` : "Remove this skill?";
+  if (!(await confirmDialog(what, { confirmText: "Remove", danger: true }))) return;
   await api("/profile/skills/remove.php","POST",{ skill_id:ref.id });
   refreshChipSection(ref.kind);
 }

@@ -85,8 +85,15 @@ console.log("scrollbars are discreet (standard properties)");
   // Chromium honours the STANDARD scrollbar properties over
   // ::-webkit-scrollbar sizing whenever scrollbar-width is set (the
   // rails set it), so the rails MUST be styled via scrollbar-color.
-  ok(/\.feed-rail-right,\s*\.in-col-left\s*\{[^}]*scrollbar-color:\s*transparent transparent/.test(bar),
-     "rails: transparent scrollbar-color at rest");
+  // The rest state used to be fully transparent, which left no signifier
+  // that the rails scroll at all. It now rests at a faint tint — visible
+  // enough to read as an affordance, still lighter than the hover state.
+  const restRule = bar.match(/\.feed-rail-right,\s*\.in-col-left\s*\{([^}]*)\}/);
+  ok(!!restRule && /scrollbar-color:\s*rgba\([^)]*\)\s+transparent/.test(restRule[1]),
+     "rails: tinted (not transparent) scrollbar-color at rest");
+  const restAlpha = restRule && parseFloat((restRule[1].match(/rgba\([^)]*?,\s*([\d.]+)\s*\)/) || [])[1]);
+  ok(restAlpha > 0 && restAlpha < 0.16,
+     `rails: rest tint is subtle (alpha ${restAlpha})`);
   ok(/\.feed-rail-right:hover[^}]*scrollbar-color:\s*rgba/.test(bar.replace(/\n/g, "")),
      "rails: tinted scrollbar-color on hover");
 
