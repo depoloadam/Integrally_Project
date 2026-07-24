@@ -254,23 +254,15 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
    The rails set scrollbar-width:thin, and modern Chromium honours the
    STANDARD scrollbar properties in preference to ::-webkit-scrollbar
    sizing — so style them with scrollbar-color, which works in Chrome
-   and Firefox alike.
-
-   A fully transparent thumb at rest hid the fact that the rails scroll
-   at all — there was no signifier until you happened to hover. The thumb
-   now rests at a faint tint: visible enough to read as an affordance,
-   light enough not to compete with the cards. Hover deepens it. */
-.feed-rail-right, .in-col-left { scrollbar-color:rgba(11,31,42,.10) transparent; }
+   and Firefox alike. Transparent thumb at rest; a soft tint on hover so
+   the rail reads as plain cards until you reach for it. */
+.feed-rail-right, .in-col-left { scrollbar-color:transparent transparent; }
 .feed-rail-right:hover, .in-col-left:hover {
-  scrollbar-color:rgba(11,31,42,.22) transparent;
-}
-[data-theme="dark"] .feed-rail-right,
-[data-theme="dark"] .in-col-left {
-  scrollbar-color:rgba(255,255,255,.09) transparent;
+  scrollbar-color:rgba(11,31,42,.16) transparent;
 }
 [data-theme="dark"] .feed-rail-right:hover,
 [data-theme="dark"] .in-col-left:hover {
-  scrollbar-color:rgba(255,255,255,.22) transparent;
+  scrollbar-color:rgba(255,255,255,.16) transparent;
 }
 
 /* ---- page scrollbar ----
@@ -296,11 +288,11 @@ html:hover { scrollbar-color:rgba(11,31,42,.24) transparent; }
   ::-webkit-scrollbar-thumb:hover { background:rgba(11,31,42,.26); background-clip:content-box; }
   .feed-rail-right::-webkit-scrollbar, .in-col-left::-webkit-scrollbar { width:6px; }
   .feed-rail-right::-webkit-scrollbar-thumb, .in-col-left::-webkit-scrollbar-thumb {
-    background:rgba(11,31,42,.10); border:2px solid transparent; background-clip:content-box;
+    background:transparent; border:2px solid transparent; background-clip:content-box;
   }
   .feed-rail-right:hover::-webkit-scrollbar-thumb,
   .in-col-left:hover::-webkit-scrollbar-thumb {
-    background:rgba(11,31,42,.22); background-clip:content-box;
+    background:rgba(11,31,42,.16); background-clip:content-box;
   }
 }
 
