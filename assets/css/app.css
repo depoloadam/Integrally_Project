@@ -241,8 +241,60 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 
 /* profile two-column layout */
 .in-profile-grid { display:grid; grid-template-columns:240px 1fr; gap:18px; align-items:start; }
-.in-col-left { position:sticky; top:78px; }
+.in-col-left {
+  position:sticky; top:78px;
+  max-height:calc(100vh - 78px - 16px);
+  overflow-y:auto; overscroll-behavior:contain;
+  scrollbar-width:thin;
+  padding-right:2px;
+}
 .in-col-right { min-width:0; }
+
+/* ---- side-rail scrollbars ----
+   The rails set scrollbar-width:thin, and modern Chromium honours the
+   STANDARD scrollbar properties in preference to ::-webkit-scrollbar
+   sizing — so style them with scrollbar-color, which works in Chrome
+   and Firefox alike. Transparent thumb at rest; a soft tint on hover so
+   the rail reads as plain cards until you reach for it. */
+.feed-rail-right, .in-col-left { scrollbar-color:transparent transparent; }
+.feed-rail-right:hover, .in-col-left:hover {
+  scrollbar-color:rgba(11,31,42,.16) transparent;
+}
+[data-theme="dark"] .feed-rail-right:hover,
+[data-theme="dark"] .in-col-left:hover {
+  scrollbar-color:rgba(255,255,255,.16) transparent;
+}
+
+/* ---- page scrollbar ----
+   html sets overflow-y:scroll, so a full-height bar is ALWAYS present on
+   the right edge of the window. Unstyled it renders as Chrome's heavy
+   default grey — the most prominent scrollbar on the page. This is the
+   bar most visible next to the feed rail, so it gets the same restrained
+   treatment: transparent track, soft thumb, slightly darker on hover. */
+html { scrollbar-color:rgba(11,31,42,.16) transparent; }
+html:hover { scrollbar-color:rgba(11,31,42,.24) transparent; }
+[data-theme="dark"] html { scrollbar-color:rgba(255,255,255,.14) transparent; }
+[data-theme="dark"] html:hover { scrollbar-color:rgba(255,255,255,.22) transparent; }
+
+/* WebKit fallback for browsers that don't support scrollbar-color
+   (older Safari/Chrome). Ignored where the standard properties apply. */
+@supports not (scrollbar-color:transparent transparent) {
+  ::-webkit-scrollbar { width:10px; height:10px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb {
+    background:rgba(11,31,42,.16); border-radius:8px;
+    border:3px solid transparent; background-clip:content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background:rgba(11,31,42,.26); background-clip:content-box; }
+  .feed-rail-right::-webkit-scrollbar, .in-col-left::-webkit-scrollbar { width:6px; }
+  .feed-rail-right::-webkit-scrollbar-thumb, .in-col-left::-webkit-scrollbar-thumb {
+    background:transparent; border:2px solid transparent; background-clip:content-box;
+  }
+  .feed-rail-right:hover::-webkit-scrollbar-thumb,
+  .in-col-left:hover::-webkit-scrollbar-thumb {
+    background:rgba(11,31,42,.16); background-clip:content-box;
+  }
+}
 
 /* profile header card */
 .in-phead {
@@ -1411,7 +1463,10 @@ textarea.jf-input { resize:vertical; }
 /* ---------- responsive ---------- */
 @media (max-width:760px) {
   .in-profile-grid { grid-template-columns:1fr; }
-  .in-col-left { position:static; top:auto; }
+  .in-col-left {
+    position:static; top:auto;
+    max-height:none; overflow-y:visible; padding-right:0;
+  }
 }
 @media (max-width:560px) {
   .in-nav-user { display:none; }
@@ -1868,7 +1923,17 @@ html.in-reduce-motion *::after {
   gap:22px; align-items:start;
 }
 .feed-center { min-width:0; }
-.feed-rail-right { position:sticky; top:78px; }
+/* Sticky rails need their own height bound, or content past the fold is
+   unreachable until the main column scrolls past. overscroll-behavior
+   stops the page lurching when the rail hits its end, and the gutter
+   reserves scrollbar space so content doesn't shift when it appears. */
+.feed-rail-right {
+  position:sticky; top:78px;
+  max-height:calc(100vh - 78px - 16px);
+  overflow-y:auto; overscroll-behavior:contain;
+  scrollbar-width:thin;
+  padding-right:2px;
+}
 /* The rail drops off before it would crush the post column. */
 @media (max-width:920px) {
   .feed-rail-right { display:none; }
@@ -1969,6 +2034,48 @@ html.in-reduce-motion *::after {
 /* ---------- rail cards (right rail) ---------- */
 .railcard { background:var(--in-card); border:1px solid var(--in-line); border-radius:14px; padding:16px 16px 12px; margin-bottom:16px; }
 .railcard h3 { margin:0 0 10px; font-size:12.5px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--in-ink-soft); }
+/* =====================================================================
+   Feed rail — "Your scores" card
+   ---------------------------------------------------------------------
+   RESTORED. This block was lost when the hover-card drop overwrote
+   app.css from a base that predated it (commit 061d224). The rail slot
+   is reserved synchronously in renderFeed so card ORDER never depends
+   on which async fetch resolves first.
+   ===================================================================== */
+.score-rail-body { display:flex; flex-direction:column; gap:2px; }
+.score-rail-row {
+  display:block; width:100%; text-align:left; background:none; border:none;
+  font-family:inherit; padding:7px 8px; border-radius:8px; cursor:pointer;
+  transition:background .12s ease;
+}
+.score-rail-row:hover { background:var(--in-bg); }
+.score-rail-top { display:flex; align-items:baseline; gap:8px; margin-bottom:5px; }
+.score-rail-target {
+  flex:1; min-width:0; font-size:12.5px; font-weight:600; color:var(--in-ink);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.score-rail-val {
+  flex:none; font-size:14px; font-weight:800; color:var(--in-ink); letter-spacing:-0.3px;
+  font-variant-numeric:tabular-nums;
+}
+.score-rail-bar {
+  height:5px; border-radius:5px; background:var(--in-line); overflow:hidden;
+}
+.score-rail-bar > i {
+  display:block; height:100%; border-radius:5px;
+  background:linear-gradient(90deg,var(--in-accent),var(--in-teal-bright));
+  transition:width .4s ease;
+}
+.score-rail-row.is-hidden-score .score-rail-val { color:var(--in-muted); }
+.score-rail-row.is-hidden-score .score-rail-bar > i { background:var(--in-muted); opacity:.55; }
+.score-rail-tag {
+  flex:none; font-size:9.5px; font-weight:700; letter-spacing:.4px; text-transform:uppercase;
+  color:var(--in-muted); background:var(--in-bg); border:1px solid var(--in-line);
+  border-radius:999px; padding:1px 6px;
+}
+.score-rail-empty { text-align:center; padding:4px 4px 8px; }
+.score-rail-empty-txt { font-size:12.5px; color:var(--in-muted); line-height:1.5; margin-bottom:10px; }
+
 .rail-row { display:flex; gap:10px; align-items:center; padding:7px 0; }
 .rail-ava {
   width:40px; height:40px; border-radius:50%; flex:none; overflow:hidden;

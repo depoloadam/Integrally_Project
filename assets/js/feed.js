@@ -231,6 +231,14 @@ async function renderFeed() {
   buildComposerIdentity(composer);
 
   // Rail cards load in the background — they must never delay the posts.
+  // Scores lead the rail: the score is the product, so a visitor to
+  // their own feed should see their whole standing without navigating.
+  // Both builders are async, so ORDER CANNOT depend on which fetch
+  // resolves first — reserve the score slot synchronously here and let
+  // buildScoreRail fill (or remove) it.
+  const scoreSlot = el(`<div class="rail-slot"></div>`);
+  rail.appendChild(scoreSlot);
+  buildScoreRail(scoreSlot);
   buildDiscoverRail(rail);
 
   // ---- tabs + post list ----
@@ -293,10 +301,82 @@ async function buildComposerIdentity(composer) {
 }
 
 // ---- discover cards (right rail) --------------------------------------
+const SCORE_RAIL_LIMIT = 5;
+
 // "Add to your network" (connect suggestions with inline follow) and
 // "Recent openings" (top open jobs). Both cards simply omit themselves
 // if their endpoint returns nothing. The mount is SHARED with the
 // identity card, so never remove it from here.
+async function buildScoreRail(mount) {
+  // `mount` is a slot reserved synchronously by renderFeed so this card
+  // always sits at the top of the rail. On any bail-out the slot is
+  // removed, so a failed load leaves no gap.
+  const drop = () => { if (mount && mount.parentNode) mount.remove(); };
+  if (!mount || !ME) { drop(); return; }   // company feeds have no personal scores
+
+  let scores = [];
+  try {
+    const r = await api("/score/latest.php");
+    if (!r.ok) { drop(); return; }
+    scores = r.data?.data || [];
+  } catch (_) { drop(); return; }
+
+  const card = el(`<div class="railcard scorecard">
+    <h3>Your scores</h3>
+    <div class="score-rail-body"></div>
+  </div>`);
+  const body = card.querySelector(".score-rail-body");
+
+  if (!scores.length) {
+    body.appendChild(el(`<div class="score-rail-empty">
+      <div class="score-rail-empty-txt">Score yourself against a job title to see where you stand.</div>
+      <button class="in-btn primary score-rail-cta" style="flex:none;padding:8px 14px">Get your score</button>
+    </div>`));
+    body.querySelector(".score-rail-cta").onclick = () => { location.hash = "profile"; };
+    mount.appendChild(card);
+    return;
+  }
+
+  // Highest first — the headline standing leads.
+  const ranked = scores.slice().sort((a, b) => b.score_value - a.score_value);
+  const shown = ranked.slice(0, SCORE_RAIL_LIMIT);
+
+  shown.forEach(s => {
+    const val = Math.max(0, Math.min(100, Math.round(s.score_value)));
+    const row = el(`
+      <button class="score-rail-row" title="View score history">
+        <div class="score-rail-top">
+          <span class="score-rail-target"></span>
+          <span class="score-rail-val">${val}</span>
+        </div>
+        <div class="score-rail-bar"><i style="width:${val}%"></i></div>
+      </button>`);
+    // textContent for the target: it's user-supplied free text.
+    row.querySelector(".score-rail-target").textContent = s.target_value || "Career score";
+    if (s.hidden) {
+      row.classList.add("is-hidden-score");
+      row.querySelector(".score-rail-top").appendChild(
+        el(`<span class="score-rail-tag" title="Hidden from your profile">Hidden</span>`));
+    }
+    row.onclick = () => {
+      // Route format: #score-history/<encoded "type|value"> — matches
+      // the profile's score rows (see profile.js renderScoreHistory).
+      location.hash = "score-history/" + encodeURIComponent(s.target_type + "|" + s.target_value);
+    };
+    body.appendChild(row);
+  });
+
+  // Footer link, always present — mirrors "Show more on Connect" and the
+  // openings card. When the list is capped it also reports the overflow,
+  // so the button doubles as the "there's more" signal.
+  const hiddenCount = ranked.length - shown.length;
+  const more = el(`<button class="rail-more">Explore my scores${hiddenCount > 0 ? ` (${ranked.length})` : ""}</button>`);
+  more.onclick = () => { location.hash = "profile"; };
+  card.appendChild(more);
+
+  mount.appendChild(card);
+}
+
 async function buildDiscoverRail(mount) {
   if (!mount || !(ME || CO)) return;
 
