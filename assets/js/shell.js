@@ -1301,8 +1301,31 @@ document.addEventListener("mouseout", (e) => {
   scheduleHoverClose();
 });
 
-// Any navigation or scroll invalidates the anchor position, so close.
+// Any navigation or resize invalidates the anchor position, so close.
 window.addEventListener("hashchange", hideHoverCard);
-window.addEventListener("scroll", hideHoverCard, true);
 window.addEventListener("resize", hideHoverCard);
+
+// Scroll is subtler. A capture-phase listener on window fires for EVERY
+// scrollable element in the page, and since last session the feed rails
+// are `overflow-y:auto` — so the merest wheel movement over the "Add to
+// your network" card closed the preview before it could be used, and
+// the rail's own sticky settling could kill it outright.
+//
+// Instead: reposition against the live rect while the trigger is still
+// on screen, and only close once it has actually scrolled out of view.
+// Non-capture on window still catches page scroll, and the scroller the
+// trigger lives in is handled by the same rect check.
+function onHoverScroll() {
+  if (!hoverTrigger || !hoverEl || hoverEl.style.display === "none") return;
+  const r = hoverTrigger.getBoundingClientRect();
+  const vh = document.documentElement.clientHeight;
+  // Fully out of view (or detached from the DOM) — nothing to anchor to.
+  if (r.bottom < 0 || r.top > vh || (r.width === 0 && r.height === 0)) {
+    hideHoverCard();
+    return;
+  }
+  placeHoverCard(hoverTrigger);
+}
+window.addEventListener("scroll", onHoverScroll, true);
+
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideHoverCard(); });

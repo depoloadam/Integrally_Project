@@ -342,6 +342,74 @@ console.log("\nhover card — teardown");
   t.remove();
 }
 
+console.log("\nhover card — scrolling inside a scrollable rail (regression)");
+{
+  // REGRESSION: the close handler was bound capture-phase on window, so
+  // a scroll on ANY element — including the overflow-y:auto feed rails
+  // that host "Add to your network" — closed the card immediately. The
+  // card must survive a scroll in an unrelated scroller and instead
+  // re-anchor to its trigger.
+  mod.HOVER_CACHE.clear();
+  const rail = document.createElement("div");
+  rail.className = "in-col-right";
+  document.body.appendChild(rail);
+
+  const t = trigger("user", "u-alice");
+  rail.appendChild(t);
+  fire(t, "mouseover"); await sleep(D);
+  ok(card().style.display === "block", "card opens for a trigger inside a scrollable rail");
+
+  // Scroll the RAIL, not the page. Trigger stays on screen.
+  rail.dispatchEvent(new window.Event("scroll", { bubbles: false }));
+  await sleep(20);
+  ok(card().style.display === "block", "a scroll inside the rail does NOT close the card");
+
+  // Now move the trigger out of view and scroll again.
+  t.getBoundingClientRect = () => ({ top: -400, bottom: -380, left: 100, right: 200, width: 100, height: 20 });
+  rail.dispatchEvent(new window.Event("scroll", { bubbles: false }));
+  await sleep(20);
+  ok(card().style.display === "none", "the card closes once its trigger scrolls out of view");
+  rail.remove();
+}
+
+{
+  // Re-anchoring: as the trigger moves, the card should follow it rather
+  // than stay pinned to a stale coordinate.
+  mod.HOVER_CACHE.clear();
+  const t = trigger("user", "u-alice", { top: 300, bottom: 320, left: 100, right: 200, width: 100, height: 20 });
+  fire(t, "mouseover"); await sleep(D);
+  const before = parseInt(card().style.top, 10);
+  t.getBoundingClientRect = () => ({ top: 240, bottom: 260, left: 100, right: 200, width: 100, height: 20 });
+  window.dispatchEvent(new window.Event("scroll"));
+  await sleep(20);
+  const after = parseInt(card().style.top, 10);
+  ok(after !== before, "card re-anchors to the trigger's new position on scroll");
+  ok(after < before, "card followed the trigger upward");
+  mod.hideHoverCard(); t.remove();
+}
+
+console.log("\nhover card — descender clipping (regression)");
+{
+  // REGRESSION: .hc-sub / .hc-desc clamp with -webkit-line-clamp, which
+  // clips at the computed line-box height and IGNORES padding-bottom.
+  // Job titles with descenders ("Senior Design Manager @ Apogee") had
+  // their tails sheared. They need explicit max-height headroom instead.
+  const css = readFileSync("assets/css/app.css", "utf8");
+  const block = (sel) => {
+    const i = css.indexOf(sel + " {");
+    return i === -1 ? "" : css.slice(i, css.indexOf("}", i));
+  };
+  for (const sel of [".in-hovercard .hc-sub", ".in-hovercard .hc-desc"]) {
+    const b = block(sel);
+    ok(/-webkit-line-clamp:\s*2/.test(b), `${sel} clamps to 2 lines`);
+    ok(/max-height:\s*([\d.]+)em/.test(b), `${sel} sets explicit max-height (padding-bottom does not work under line-clamp)`);
+    const lh = parseFloat((/line-height:\s*([\d.]+)/.exec(b) || [])[1] || "0");
+    const mh = parseFloat((/max-height:\s*([\d.]+)em/.exec(b) || [])[1] || "0");
+    ok(mh > lh * 2, `${sel} max-height (${mh}em) exceeds 2 line-boxes (${(lh * 2).toFixed(2)}em) so descenders clear`);
+    ok(!/padding-bottom/.test(b), `${sel} no longer relies on padding-bottom under line-clamp`);
+  }
+}
+
 console.log("\nhover card — malformed triggers");
 {
   apiCalls = [];
@@ -356,6 +424,37 @@ console.log("\nhover card — malformed triggers");
   fire(bad2, "mouseover"); await sleep(D);
   ok(apiCalls.length === 0, "an unrecognised card type never fetches");
   bad2.remove();
+}
+
+console.log("\nhover card — descender clipping (CSS regression)");
+{
+  // Any rule that pairs overflow:hidden with a fixed line box must leave
+  // room for descenders in the TALLEST font the stack can fall back to.
+  // Inter's glyph box is ~1.21em; Segoe UI (the Windows fallback, since
+  // Inter is never actually loaded via @font-face) is ~1.33em. Rules
+  // tuned to Inter shear "g/j/p/q/y" on Windows — which is exactly the
+  // bug this guards against.
+  const css = readFileSync("assets/css/app.css", "utf8");
+  const SEGOE = (2210 + 514) / 2048;   // Segoe UI ascent+descent / unitsPerEm
+
+  const block = css.slice(css.indexOf("Hover cards — profile / company previews"));
+  const rules = [...block.matchAll(/\.in-hovercard\s+\.(hc-[a-z-]+)\s*\{([^}]*)\}/g)];
+  ok(rules.length > 0, "hover card rules are present in app.css");
+
+  let clipped = [];
+  for (const [, name, body] of rules) {
+    if (!/overflow\s*:\s*hidden/.test(body)) continue;
+    const fsM = /font-size\s*:\s*([\d.]+)px/.exec(body);
+    const lhM = /line-height\s*:\s*([\d.]+)/.exec(body);
+    if (!fsM) continue;
+    ok(!!lhM, `.${name} declares an explicit line-height (it clips overflow)`);
+    if (!lhM) { clipped.push(name); continue; }
+    const fs = parseFloat(fsM[1]), lh = parseFloat(lhM[1]);
+    const headroom = (fs * lh - fs * SEGOE) / 2;
+    ok(headroom >= 0, `.${name} line box clears the Segoe UI glyph box (${headroom.toFixed(2)}px headroom)`);
+    if (headroom < 0) clipped.push(name);
+  }
+  ok(clipped.length === 0, "no hover card text rule shears descenders on a tall-metric fallback font");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

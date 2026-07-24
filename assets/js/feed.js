@@ -309,11 +309,15 @@ async function buildDiscoverRail(mount) {
       const listEl = cardEl.querySelector(".rail-list");
       results.forEach(s => {
         const isCo = s.kind === "company";
+        // Hover preview on the avatar and name only — the Follow button
+        // sits at the row's right edge, so a row-wide trigger would fire
+        // while the cursor travels toward it.
+        const hov = s.uuid ? ` data-hover-card="${isCo ? "company" : "user"}" data-hover-uuid="${esc(s.uuid)}"` : "";
         const row = el(`
           <div class="rail-row">
-            <div class="rail-ava${isCo ? " company" : ""}">${s.image ? `<img src="${esc(s.image)}" alt="">` : esc((s.title || "?").charAt(0).toUpperCase())}</div>
+            <div class="rail-ava${isCo ? " company" : ""}"${hov}>${s.image ? `<img src="${esc(s.image)}" alt="">` : esc((s.title || "?").charAt(0).toUpperCase())}</div>
             <div class="rail-info">
-              <div class="rail-name">${esc(s.title || "")}</div>
+              <div class="rail-name"${hov}>${esc(s.title || "")}</div>
               <div class="rail-sub">${esc(s.subtitle || s.reason || "")}</div>
             </div>
             <button class="rail-follow">Follow</button>

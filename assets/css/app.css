@@ -2233,34 +2233,51 @@ html.in-reduce-motion *::after {
 .in-hovercard .hc-head { display:flex; align-items:flex-start; gap:10px; }
 .in-hovercard .hc-avatar {
   flex:none; width:44px; height:44px; border-radius:50%; overflow:hidden;
-  display:grid; place-items:center; font-weight:700; font-size:17px; color:#fff;
+  display:grid; place-items:center; font-weight:700; font-size:17px; line-height:1.4;
+  color:#fff;
   background:linear-gradient(135deg,var(--in-accent),var(--in-teal-bright));
 }
 .in-hovercard .hc-avatar.company { border-radius:10px; }
 .in-hovercard .hc-avatar img { width:100%; height:100%; object-fit:cover; display:block; }
 
 .in-hovercard .hc-id { min-width:0; flex:1; }
+/* Descender safety: these lines pair overflow:hidden with a fixed line
+   box, so the line-height has to clear the tallest fallback font's glyph
+   box or "g/j/p/q/y" get sheared. Inter's content box is ~1.21em but the
+   stack falls back to Segoe UI on Windows at ~1.33em, so anything tuned
+   to Inter clips there. 1.45+ clears both, and the small bottom padding
+   moves the clip edge off the glyphs entirely. */
 .in-hovercard .hc-name {
-  font-weight:700; font-size:15px; line-height:1.3; color:var(--in-ink);
+  font-weight:700; font-size:15px; line-height:1.45; color:var(--in-ink);
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  padding-bottom:2px;
 }
 .in-hovercard .hc-verified { color:var(--in-accent); font-size:12px; }
-.in-hovercard .hc-handle { font-size:12.5px; color:var(--in-muted); margin-top:1px; }
+.in-hovercard .hc-handle { font-size:12.5px; line-height:1.5; color:var(--in-muted); margin-top:1px; }
 
 .in-hovercard .hc-score { flex:none; text-align:right; line-height:1.15; }
 .in-hovercard .hc-score-val { display:block; font-weight:800; font-size:18px; color:var(--in-accent); }
 .in-hovercard .hc-score-label {
-  display:block; font-size:10.5px; color:var(--in-muted); max-width:96px;
-  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  display:block; font-size:10.5px; line-height:1.5; color:var(--in-muted);
+  max-width:96px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  padding-bottom:2px;
 }
 
+/* -webkit-line-clamp clips at the computed line-box height and IGNORES
+   padding-bottom, so descenders (g j p q y) in a job title like
+   "Senior Design Manager @ Apogee" get their tails sliced off. The fix
+   is to give the box explicit room: max-height sized to the clamped
+   line count plus a fractional line, so the clip lands below the
+   baseline's descent rather than through it. */
 .in-hovercard .hc-sub {
-  margin-top:9px; font-size:13px; color:var(--in-ink-soft); line-height:1.4;
-  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+  margin-top:9px; font-size:13px; color:var(--in-ink-soft); line-height:1.5;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+  overflow:hidden; max-height:3.3em;
 }
 .in-hovercard .hc-desc {
-  margin-top:6px; font-size:12.5px; color:var(--in-muted); line-height:1.45;
-  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+  margin-top:6px; font-size:12.5px; color:var(--in-muted); line-height:1.5;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+  overflow:hidden; max-height:3.3em;
 }
 
 .in-hovercard .hc-stats {
@@ -2271,7 +2288,8 @@ html.in-reduce-motion *::after {
 
 .in-hovercard .hc-actions { display:flex; gap:8px; margin-top:12px; }
 .in-hovercard .hc-btn {
-  flex:1; padding:7px 10px; border-radius:8px; font-size:13px; font-weight:600;
+  flex:1; padding:7px 10px; border-radius:8px; font-size:13px; line-height:1.5;
+  font-weight:600;
   font-family:inherit; cursor:pointer; border:1px solid var(--in-accent);
   background:var(--in-accent); color:#fff; transition:background .12s ease, border-color .12s ease;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
