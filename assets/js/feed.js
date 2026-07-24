@@ -280,24 +280,12 @@ async function buildComposerIdentity(composer) {
     }
   } catch (_) { /* counts stay hidden */ }
 
-  // Latest score — inline chip, or a setup CTA if none yet.
-  try {
-    const r = await api("/score/latest.php");
-    const scores = r.data?.data?.scores || [];
-    const box = strip.querySelector(".comp-id-score");
-    if (r.ok && scores.length) {
-      const s = scores[0];
-      box.innerHTML = `<span class="comp-id-score-val">${esc(String(Math.round(s.score_value)))}</span> ${esc(s.target_value || "Career score")}`;
-      box.title = "View score history";
-      box.style.display = "";
-      box.onclick = goProfile;
-    } else {
-      box.innerHTML = `See your career score →`;
-      box.classList.add("is-cta");
-      box.style.display = "";
-      box.onclick = goProfile;
-    }
-  } catch (_) { /* score readout stays hidden */ }
+  // NOTE: the inline score chip / "See your career score" CTA that used
+  // to live here was removed once the "Your scores" rail card shipped.
+  // The rail shows every target ranked, with its own empty-state CTA, so
+  // a single-score readout beside it was redundant. .comp-id-score stays
+  // in the markup (hidden) rather than being deleted, so the strip's
+  // flex layout and its CSS are untouched.
 }
 
 // ---- discover cards (right rail) --------------------------------------

@@ -71,9 +71,13 @@ await buildComposerIdentity(composer);
 const score = composer.querySelector(".comp-id-score");
 const fol = composer.querySelector(".comp-id-followers");
 const fing = composer.querySelector(".comp-id-following");
-ok(score.style.display === "", "score readout shown when a score exists");
-ok(score.textContent.includes("82"), "score value rounded and displayed (82)");
-ok(score.textContent.includes("Software Engineer"), "score target label displayed");
+// The inline score chip was REMOVED when the "Your scores" rail card
+// shipped — the rail lists every target ranked, so a single-score
+// readout beside it was redundant. The element stays in the markup
+// (hidden) so the strip's flex layout and CSS are untouched.
+ok(score.style.display === "none", "score chip stays hidden (superseded by the Your scores rail)");
+ok(score.textContent === "", "score chip renders no content");
+ok(!/career score/i.test(composer.textContent), "no 'See your career score' CTA in the strip");
 ok(fol.style.display === "" && fol.querySelector("b").textContent === "128", "followers count filled + shown");
 ok(fing.style.display === "" && fing.querySelector("b").textContent === "91", "following count filled + shown");
 fol.onclick(); fing.onclick();
@@ -87,7 +91,8 @@ const apiNoScore = async (path)=> path.includes("score") ? {ok:true,data:{data:{
 const build2 = new Function("composer","ME","api","el","esc","openFollowList","location", buildIdentitySrc + "; return buildComposerIdentity;")(composer2, ME, apiNoScore, el, esc, openFollowList, window.location);
 await build2(composer2);
 const s2 = composer2.querySelector(".comp-id-score");
-ok(s2.classList.contains("is-cta") && /career score/i.test(s2.textContent), "no score → CTA readout shown");
+ok(s2.style.display === "none" && s2.textContent === "",
+   "with no scores the strip still shows no chip — the rail card owns the empty-state CTA");
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
