@@ -62,7 +62,7 @@ async function renderAdmin() {
       <button data-atab="companies">Companies</button>
       <button data-atab="posts">Posts</button>
       <button data-atab="jobs">Jobs</button>
-      <button data-atab="reports">Reports<span class="in-tab-badge" id="admin-reports-badge" hidden></span></button>
+      <button data-atab="reports">Moderation<span class="in-tab-badge" id="admin-reports-badge" hidden></span></button>
       <button data-atab="certs">Certs</button>
       <button data-atab="audit">Audit</button>
     </div>`);

@@ -446,12 +446,16 @@ function renderScoreRow(s, showOwnerControls) {
   const isHidden = !!s.hidden;
   let miniRows = "";
   if (Array.isArray(s.breakdown) && s.breakdown.length) {
-    miniRows = s.breakdown.map(f => `
+    const mw = scoreWeightsFor(s.algo_version);
+    miniRows = s.breakdown.map(f => {
+      const max = mw ? mw[f.factor] : null;
+      return `
       <div class="mini-row">
-        <span class="mini-factor">${esc(f.factor ? f.factor.replace(/_/g," ") : "factor")}</span>
+        <span class="mini-factor">${esc(scoreFactorLabel(f.factor))}</span>
         <span class="mini-detail">${esc(f.detail || "")}</span>
-        ${f.points != null ? `<span class="mini-points">+${esc(f.points)}</span>` : ""}
-      </div>`).join("");
+        ${f.points != null ? `<span class="mini-points">${esc(f.points)}${max ? `<span class="mini-max"> / ${esc(max)}</span>` : ""}</span>` : ""}
+      </div>`;
+    }).join("");
   } else {
     miniRows = `<div class="in-empty" style="padding:8px 0">No breakdown detail stored for this score yet.</div>`;
   }
@@ -1758,8 +1762,9 @@ function addEdu(existing) {
   openModal(`
     <h3>${isEdit ? "Edit education" : "Add education"}</h3>
     <label>Institution</label><input id="e-inst" value="${isEdit ? esc(existing.institution || "") : ""}">
-    <label>Degree</label><input id="e-deg" value="${isEdit ? esc(existing.degree || "") : ""}" placeholder="e.g. BS, MBA">
-    <label>Field</label><div class="job-ta-wrap"><input id="e-field" value="${isEdit ? esc(existing.field || "") : ""}" placeholder="e.g. Computer Science" autocomplete="off"></div>
+    <label>Degree type</label><input id="e-deg" value="${isEdit ? esc(existing.degree || "") : ""}" placeholder="e.g. BS, MBA, Associate's">
+    <label>Field of study</label><div class="job-ta-wrap"><input id="e-field" value="${isEdit ? esc(existing.field || "") : ""}" placeholder="e.g. Computer Science" autocomplete="off"></div>
+    <div class="in-field-hint">Field of study is used when scoring you against job titles — pick from the suggestions where you can.</div>
     <div class="row"><div><label>Start year</label><input id="e-start" type="number" min="1950" max="${maxYear}" step="1" placeholder="${nowYear - 4}" value="${isEdit && existing.start_year ? esc(String(existing.start_year)) : ""}"></div><div><label>End year</label><input id="e-end" type="number" min="1950" max="${maxYear}" step="1" placeholder="${nowYear}" value="${isEdit && existing.end_year ? esc(String(existing.end_year)) : ""}"></div></div>
     <div class="in-modal-actions"><button class="in-btn ghost" onclick="closeModal()">Cancel</button><button class="in-btn primary" id="save-edu">${isEdit ? "Save" : "Add"}</button></div>`);
   // Field-of-study typeahead: recommends catalog fields (which the score
@@ -2212,7 +2217,7 @@ function openExtrasFlow() {
     <div class="in-modal-actions"><button class="in-btn ghost" id="ex-skip">I have none of these</button><button class="in-btn primary" id="ex-save">Save &amp; complete</button></div>`);
   const eduWrap = $("ex-edu-rows");
   $("ex-edu-add").onclick = () => {
-    const row = el(`<div class="bulk-row"><button class="bulk-row-x">✕</button><input class="ee-inst" placeholder="Institution"><input class="ee-deg" placeholder="Degree"><div class="job-ta-wrap"><input class="ee-field" placeholder="Field of study" autocomplete="off"></div><div class="bulk-dates"><div class="bulk-date-field"><label>Start year</label><input class="ee-start" type="number" placeholder="2018"></div><div class="bulk-date-field"><label>End year</label><input class="ee-end" type="number" placeholder="2022"></div></div></div>`);
+    const row = el(`<div class="bulk-row"><button class="bulk-row-x">✕</button><input class="ee-inst" placeholder="Institution"><input class="ee-deg" placeholder="Degree type"><div class="job-ta-wrap"><input class="ee-field" placeholder="Field of study" autocomplete="off"></div><div class="bulk-dates"><div class="bulk-date-field"><label>Start year</label><input class="ee-start" type="number" placeholder="2018"></div><div class="bulk-date-field"><label>End year</label><input class="ee-end" type="number" placeholder="2022"></div></div></div>`);
     row.querySelector(".bulk-row-x").onclick = () => row.remove(); eduWrap.appendChild(row);
     if (typeof jobMountTypeahead === "function" && typeof eduCatalogSearch === "function") {
       jobMountTypeahead(row.querySelector(".ee-field"), { search: eduCatalogSearch, minChars: 2, limit: 8 });
@@ -2696,8 +2701,8 @@ function renderSetPrivacy(panel, st) {
       <h3>Privacy & preferences</h3>
       <div class="in-set-toggle">
         <div>
-          <div class="in-set-toggle-label">Allow following</div>
-          <div class="in-set-toggle-sub">When off, you won't be able to follow people or companies.</div>
+          <div class="in-set-toggle-label">Let me follow people and companies</div>
+          <div class="in-set-toggle-sub">Controls your own ability to follow others. When off, you won't be able to follow anyone — this does not stop other people from following you.</div>
         </div>
         <button class="in-toggle ${followingOn ? "on" : ""}" id="toggle-following" role="switch" aria-checked="${followingOn}"><span class="in-toggle-knob"></span></button>
       </div>
@@ -3067,6 +3072,57 @@ function renderSetDanger(panel) {
 // ===================================================================
 // VIEW: SCORE BREAKDOWN (full per-score detail — placeholder)
 // ===================================================================
+// ---- scoring transparency ---------------------------------------------
+// Breakdowns are frozen as JSON at scoring time and never recomputed, so a
+// score stored under an older algorithm still renders with the weights it
+// was actually scored under. Keyed by ScoreEngine::VERSION. An unknown
+// version falls back to no maxima — rows still show earned points, they
+// just omit the "of N" denominator rather than showing a wrong one.
+const SCORE_WEIGHTS = {
+  "cert-catalog-v2.3": {
+    relevant_experience: 32, general_experience: 8, skills_match: 20,
+    education: 15, certifications: 10, profile_strength: 15,
+  },
+};
+// Human labels — the raw keys are snake_case internals, not user copy.
+const SCORE_FACTOR_LABEL = {
+  relevant_experience: "Relevant experience",
+  general_experience:  "General work history",
+  skills_match:        "Skills match",
+  education:           "Education",
+  certifications:      "Certifications",
+  profile_strength:    "Profile completeness",
+};
+// What each factor rewards, in plain language.
+const SCORE_FACTOR_BLURB = {
+  relevant_experience: "Years worked in this job's category. Adjacent categories earn half credit.",
+  general_experience:  "Any work history at all, regardless of field.",
+  skills_match:        "Listed skills weighted by how closely they relate to this job.",
+  education:           "Having a degree, plus extra when the field of study relates to this job.",
+  certifications:      "Certifications you hold, weighted by relevance to this job.",
+  profile_strength:    "How complete your profile is overall.",
+};
+function scoreWeightsFor(algoVersion) {
+  return SCORE_WEIGHTS[algoVersion] || null;
+}
+function scoreFactorLabel(key) {
+  return SCORE_FACTOR_LABEL[key] || String(key || "factor").replace(/_/g, " ");
+}
+// Honest statement of what the score does and doesn't capture. Shown on
+// the breakdown page so the number isn't read as more than it is.
+function scoringLimitationsHtml() {
+  return `
+    <div class="bd-limits">
+      <div class="bd-limits-head">What this score can't see</div>
+      <ul class="bd-limits-list">
+        <li>It reads what's on your profile. Real experience you haven't added doesn't count.</li>
+        <li>It weighs relevance to one job title — a strong score for one role says little about another.</li>
+        <li>It can't judge the quality of your work, references, or interviews.</li>
+        <li>Free-text skills and fields of study match best when picked from the suggestions.</li>
+      </ul>
+    </div>`;
+}
+
 async function renderScoreBreakdown(scoreId) {
   const view = $("view");
   view.innerHTML = `<div class="in-loading">Loading breakdown…</div>`;
@@ -3081,7 +3137,24 @@ async function renderScoreBreakdown(scoreId) {
   const date = new Date(s.created_at).toLocaleString();
   let factors = "";
   if (Array.isArray(s.breakdown) && s.breakdown.length) {
-    factors = s.breakdown.map(f => `<div class="bd-factor"><div class="bd-factor-head"><span class="bd-factor-name">${esc(f.factor ? f.factor.replace(/_/g," ") : "factor")}</span>${f.points != null ? `<span class="bd-factor-points">+${esc(f.points)}</span>` : ""}</div><div class="bd-factor-detail">${esc(f.detail || "")}</div></div>`).join("");
+    const weights = scoreWeightsFor(s.algo_version);
+    factors = s.breakdown.map(f => {
+      const key = f.factor || "";
+      const max = weights ? weights[key] : null;
+      const pts = f.points != null ? Number(f.points) : null;
+      // Bar only renders when we know the denominator for this version.
+      const pct = (max && pts != null) ? Math.max(0, Math.min(100, (pts / max) * 100)) : null;
+      const blurb = SCORE_FACTOR_BLURB[key] || "";
+      return `<div class="bd-factor">
+        <div class="bd-factor-head">
+          <span class="bd-factor-name">${esc(scoreFactorLabel(key))}</span>
+          ${pts != null ? `<span class="bd-factor-points">${esc(pts)}${max ? ` <span class="bd-factor-max">of ${esc(max)}</span>` : ""}</span>` : ""}
+        </div>
+        ${pct != null ? `<div class="bd-factor-bar"><div class="bd-factor-fill" style="width:${pct}%"></div></div>` : ""}
+        ${blurb ? `<div class="bd-factor-blurb">${esc(blurb)}</div>` : ""}
+        <div class="bd-factor-detail">${esc(f.detail || "")}</div>
+      </div>`;
+    }).join("");
   } else {
     factors = `<div class="in-empty">No factor detail stored for this score.</div>`;
   }
@@ -3100,8 +3173,8 @@ async function renderScoreBreakdown(scoreId) {
       </div>
       <div class="in-card2">
         <h2>How this score was calculated</h2>
-        <div class="bd-placeholder-note">ⓘ This is a placeholder breakdown. The full scoring algorithm is still in development — this page will eventually explain in detail how each part of your profile contributes to your score for “${esc(s.target_value)}.”</div>
         <div class="bd-factors">${factors}</div>
+        ${scoringLimitationsHtml()}
         <div class="bd-algo">Algorithm version: ${esc(s.algo_version || "n/a")}</div>
         <div class="bd-actions">
           <button class="in-btn ghost" id="bd-history" style="flex:none;padding:9px 18px">View score history →</button>

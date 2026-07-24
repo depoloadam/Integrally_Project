@@ -476,6 +476,14 @@ html:hover { scrollbar-color:rgba(11,31,42,.24) transparent; }
 .in-ai-chip { background:#fff; border-color:rgba(13,148,136,.35); }
 .in-ai-edit { background:none; border:none; color:var(--in-muted); cursor:pointer; font-size:14px; margin-left:auto; }
 .in-ai-edit:hover { color:var(--in-accent); }
+/* Inline hint under a form field. Scoped to `.in-modal .in-field-hint`
+   (0,2,0) so it out-specifies the global `.in-modal label` / input rules
+   at equal specificity rather than resorting to !important. */
+.in-modal .in-field-hint,
+.in-field-hint {
+  font-size:12.5px; color:var(--in-muted); line-height:1.45;
+  margin:-2px 0 10px; display:block;
+}
 /* AI Skillset page.
    The page previously carried an inline max-width:760px, which made it
    noticeably narrower than every other route. Width now comes from
@@ -518,7 +526,19 @@ html:hover { scrollbar-color:rgba(11,31,42,.24) transparent; }
 .score-detail { margin-top:6px; padding:10px 0 4px; }
 .score-mini { display:flex; flex-direction:column; gap:6px; margin-bottom:12px; }
 .mini-row { display:flex; align-items:baseline; gap:8px; font-size:13px; padding:6px 10px; background:var(--in-bg); border-radius:8px; }
-.mini-factor { font-weight:600; text-transform:capitalize; flex:none; }
+/* Factor labels are now human-written strings ("Skills match"), not
+   snake_case keys — see .bd-factor-name below, where capitalize is
+   removed so they aren't wrongly title-cased. */
+.bd-factor-max { font-weight:600; color:var(--in-muted); font-size:12px; }
+.bd-factor-bar { height:6px; border-radius:4px; background:var(--in-bg); border:1px solid var(--in-line); margin:8px 0 8px; overflow:hidden; }
+.bd-factor-fill { height:100%; background:linear-gradient(90deg,var(--in-accent),var(--in-teal-bright)); border-radius:4px; }
+.bd-factor-blurb { font-size:13px; color:var(--in-ink-soft); line-height:1.45; }
+/* Limitations block — deliberately plain, not a warning banner. */
+.bd-limits { margin-top:18px; padding:14px 16px; background:var(--in-bg); border:1px solid var(--in-line); border-radius:10px; }
+.bd-limits-head { font-size:13px; font-weight:700; color:var(--in-ink); margin-bottom:8px; }
+.bd-limits-list { margin:0; padding-left:18px; color:var(--in-muted); font-size:13px; line-height:1.6; }
+.mini-max { font-weight:600; color:var(--in-muted); }
+.mini-factor { font-weight:600; flex:none; }
 .mini-detail { color:var(--in-muted); flex:1; }
 .mini-points { font-weight:700; color:var(--in-accent); flex:none; }
 /* --- Score comparison ("Top X%") --- */
@@ -591,7 +611,7 @@ html:hover { scrollbar-color:rgba(11,31,42,.24) transparent; }
 .bd-factors { display:flex; flex-direction:column; gap:10px; }
 .bd-factor { border:1px solid var(--in-line); border-radius:10px; padding:12px 14px; }
 .bd-factor-head { display:flex; align-items:center; }
-.bd-factor-name { font-weight:600; text-transform:capitalize; }
+.bd-factor-name { font-weight:600; }
 .bd-factor-points { margin-left:auto; font-weight:700; color:var(--in-accent); background:var(--in-bg); border-radius:6px; padding:2px 8px; font-size:13px; }
 .bd-factor-detail { color:var(--in-muted); font-size:13.5px; margin-top:4px; }
 .bd-algo { color:var(--in-muted); font-size:12px; margin-top:16px; }
