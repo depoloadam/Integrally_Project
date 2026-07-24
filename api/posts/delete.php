@@ -68,4 +68,13 @@ if (Auth::isAdmin()) {
 if ($stmt->rowCount() === 0) {
     Response::error('Post not found.', 404);
 }
+
+// Withdraw every notification that pointed at this post — likes,
+// comments and mentions alike. `notifications` has no FK on post_id
+// (it is nullable and refers to different things by type), so nothing
+// cascades and these would otherwise linger as bell items that navigate
+// to a dead post/<id> route. post_mentions and post_comments DO cascade
+// via their own foreign keys.
+$pdo->prepare('DELETE FROM notifications WHERE post_id = ?')->execute([$id]);
+
 Response::success(['deleted' => $id]);

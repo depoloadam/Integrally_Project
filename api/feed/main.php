@@ -68,6 +68,12 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $rows = $stmt->fetchAll();
 
+// Mention links are rendered server-side (post bodies are already
+// sanitized HTML that the client injects as trusted markup), so this is
+// the one place that reaches every feed surface.
+require_once __DIR__ . '/../../src/Mentions.php';
+$mentionMap = Mentions::forPosts(array_map(fn($x) => (int) $x['post_id'], $rows));
+
 // Resolve author display info per post (small N per page).
 $userStmt    = $pdo->prepare('SELECT uuid, username, profile_pic FROM users WHERE id = ? LIMIT 1');
 $companyStmt = $pdo->prepare('SELECT uuid, name, logo FROM companies WHERE id = ? LIMIT 1');
@@ -95,7 +101,7 @@ foreach ($rows as $r) {
     $feed[] = [
         'post_id'    => (int) $r['post_id'],
         'post_type'  => $r['post_type'],
-        'body'       => $r['body'],
+        'body'       => Mentions::linkHtml($r['body'], $mentionMap[(int) $r['post_id']] ?? []),
         'media_url'  => $r['media_url'],
         'meta'       => $r['meta'] ? json_decode($r['meta'], true) : null,
         'created_at' => $r['created_at'],

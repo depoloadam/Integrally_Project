@@ -41,6 +41,15 @@ $commentId = (int) $pdo->lastInsertId();
 // Notify the post author (skipped automatically if commenting on own post).
 Social::notify($author['type'], $author['id'], $actor['type'], $actor['id'], 'comment', $postId, $commentId);
 
+// --- @mentions --------------------------------------------------------
+// Anchored to the post as well as the comment, so the notification can
+// resolve a post snippet the same way like/comment notifications do.
+// A person mentioned in a comment on a post they authored gets ONE
+// notification for the comment and one for the mention — different
+// events, and the mention is the one that names them directly.
+require_once __DIR__ . '/../../src/Mentions.php';
+$mentioned = Mentions::sync($postId, $commentId, $body, $actor);
+
 $info = Social::actorInfo($actor['type'], $actor['id']);
 Response::success([
     'id'         => $commentId,
@@ -48,5 +57,6 @@ Response::success([
     'body'       => $body,
     'created_at' => date('Y-m-d H:i:s'),
     'author'     => $info,
+    'mentioned'  => $mentioned,
     'mine'       => true,
 ], 201);

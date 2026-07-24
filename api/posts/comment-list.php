@@ -26,13 +26,20 @@ $stmt = $pdo->prepare(
      FROM post_comments WHERE post_id = ? ORDER BY created_at ASC'
 );
 $stmt->execute([$postId]);
+$rows = $stmt->fetchAll();
+
+// Mention links are rendered server-side: comment bodies are plain text
+// and the client injects body_html directly, so escaping happens here.
+require_once __DIR__ . '/../../src/Mentions.php';
+$mentionMap = Mentions::forComments(array_map(fn($c) => (int) $c['id'], $rows));
 
 $out = [];
-foreach ($stmt->fetchAll() as $c) {
+foreach ($rows as $c) {
     $mine = $me !== null && $me['type'] === $c['actor_type'] && (int) $me['id'] === (int) $c['actor_id'];
     $out[] = [
         'id'         => (int) $c['id'],
         'body'       => $c['body'],
+        'body_html'  => Mentions::linkPlain($c['body'], $mentionMap[(int) $c['id']] ?? []),
         'created_at' => $c['created_at'],
         'author'     => Social::actorInfo($c['actor_type'], (int) $c['actor_id']),
         'mine'       => $mine,

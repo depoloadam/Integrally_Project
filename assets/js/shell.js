@@ -475,6 +475,12 @@ function mountRichEditor(mountId, opts = {}) {
   area.addEventListener("mouseup", syncToolbar);
   area.addEventListener("focus", syncToolbar);
 
+  // "@" mention picker. Attached here so every rich editor gets it —
+  // the post composer today, job descriptions and anything else later.
+  if (opts.mentions !== false && typeof attachMentionPicker === "function") {
+    attachMentionPicker(area);
+  }
+
   return {
     getHTML: () => area.innerHTML,
     getText: () => area.innerText.replace(/\u200B/g, "").trim(),
@@ -1329,3 +1335,227 @@ function onHoverScroll() {
 window.addEventListener("scroll", onHoverScroll, true);
 
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideHoverCard(); });
+
+// =====================================================================
+// mention typeahead — "@" picker for the composer and comment boxes
+// ---------------------------------------------------------------------
+// attachMentionPicker(el, opts) works on BOTH a contenteditable rich
+// editor area and a plain <input>/<textarea>, because posts use the
+// former and comments the latter. The two differ only in how you read
+// the text around the caret and how you splice a completion back in,
+// so those are the only branches.
+//
+// PLACEMENT. The dropdown is appended to document.body with
+// position:fixed, for the same reason the hover cards are: the comment
+// composer can sit inside `.in-modal { overflow-y:auto }` and the feed
+// rails are overflow:auto, both of which clip absolutely-positioned
+// children. Coordinates come from the caret rect where available,
+// falling back to the field's own rect.
+// =====================================================================
+
+const MENTION_TRIGGER = /(?:^|[\s(])@([A-Za-z0-9_.-]{0,50})$/;
+const MENTION_DEBOUNCE = 160;
+
+let mpBox = null;        // the single reused dropdown
+let mpItems = [];        // current results
+let mpIndex = 0;         // highlighted row
+let mpTarget = null;     // field the dropdown belongs to
+let mpTimer = null;
+let mpToken = 0;
+let mpQuery = "";
+
+function mentionBox() {
+  if (mpBox) return mpBox;
+  mpBox = document.createElement("div");
+  mpBox.className = "in-mention-menu";
+  mpBox.style.display = "none";
+  document.body.appendChild(mpBox);
+  return mpBox;
+}
+
+function hideMentionMenu() {
+  clearTimeout(mpTimer);
+  mpToken++;
+  mpItems = [];
+  mpIndex = 0;
+  mpTarget = null;
+  mpQuery = "";
+  if (mpBox) { mpBox.style.display = "none"; mpBox.innerHTML = ""; }
+}
+
+function mentionMenuOpen() {
+  return !!mpBox && mpBox.style.display === "block" && mpItems.length > 0;
+}
+
+// Caret rectangle, so the menu opens under the "@" rather than under the
+// whole field. contenteditable exposes this via the selection range;
+// inputs do not, so those fall back to the field box.
+function caretRect(field) {
+  const sel = window.getSelection();
+  if (field.isContentEditable && sel && sel.rangeCount) {
+    const r = sel.getRangeAt(0).cloneRange();
+    const rects = r.getClientRects();
+    if (rects.length) return rects[0];
+    // Collapsed range at a line start can report no rects; use a marker.
+    const span = document.createElement("span");
+    span.textContent = "\u200b";
+    r.insertNode(span);
+    const rect = span.getBoundingClientRect();
+    const parent = span.parentNode;
+    span.remove();
+    if (parent) parent.normalize();
+    if (rect && rect.width + rect.height > 0) return rect;
+  }
+  return field.getBoundingClientRect();
+}
+
+function placeMentionMenu(field) {
+  const box = mentionBox();
+  const r = caretRect(field);
+  const vw = document.documentElement.clientWidth;
+  const vh = document.documentElement.clientHeight;
+  box.style.left = "0px"; box.style.top = "0px";
+  const h = box.offsetHeight || 200;
+  const w = box.offsetWidth || 260;
+
+  let top = r.bottom + 6;
+  if (top + h > vh - 12 && r.top - 6 - h > 12) top = r.top - 6 - h;
+  top = Math.max(12, Math.min(top, vh - h - 12));
+
+  let left = r.left;
+  if (left + w > vw - 12) left = vw - w - 12;
+  left = Math.max(12, left);
+
+  box.style.left = Math.round(left) + "px";
+  box.style.top = Math.round(top) + "px";
+}
+
+function renderMentionMenu() {
+  const box = mentionBox();
+  if (!mpItems.length) { hideMentionMenu(); return; }
+  box.innerHTML = mpItems.map((u, i) => `
+    <div class="in-mention-item${i === mpIndex ? " active" : ""}" data-i="${i}">
+      <div class="in-mention-ava">${u.avatar
+        ? `<img src="${esc(u.avatar)}" alt="">`
+        : esc((u.name || u.username || "?").charAt(0).toUpperCase())}</div>
+      <div class="in-mention-meta">
+        <div class="in-mention-name">${esc(u.name || u.username)}</div>
+        <div class="in-mention-handle">@${esc(u.username)}</div>
+      </div>
+    </div>`).join("");
+  box.style.display = "block";
+  box.querySelectorAll(".in-mention-item").forEach(row => {
+    // mousedown, not click: click fires after blur, by which point the
+    // caret position we need for splicing is gone.
+    row.onmousedown = (e) => {
+      e.preventDefault();
+      applyMention(parseInt(row.dataset.i, 10));
+    };
+  });
+}
+
+// The text immediately before the caret, used to detect an in-progress
+// "@handle" token.
+function textBeforeCaret(field) {
+  if (!field.isContentEditable) {
+    return field.value.slice(0, field.selectionStart ?? field.value.length);
+  }
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return "";
+  const r = sel.getRangeAt(0).cloneRange();
+  r.selectNodeContents(field);
+  r.setEnd(sel.getRangeAt(0).endContainer, sel.getRangeAt(0).endOffset);
+  return r.toString();
+}
+
+// Replace the partial "@handle" before the caret with the chosen one.
+function applyMention(i) {
+  const u = mpItems[i];
+  const field = mpTarget;
+  if (!u || !field) return;
+  const insert = "@" + u.username + " ";
+
+  if (!field.isContentEditable) {
+    const pos = field.selectionStart ?? field.value.length;
+    const before = field.value.slice(0, pos);
+    const m = MENTION_TRIGGER.exec(before);
+    if (!m) { hideMentionMenu(); return; }
+    const start = before.length - m[1].length - 1;   // back over "@partial"
+    field.value = field.value.slice(0, start) + insert + field.value.slice(pos);
+    const caret = start + insert.length;
+    field.setSelectionRange(caret, caret);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  } else {
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) { hideMentionMenu(); return; }
+    const range = sel.getRangeAt(0);
+    const node = range.endContainer;
+    if (node.nodeType !== 3) { hideMentionMenu(); return; }
+    const offset = range.endOffset;
+    const before = node.nodeValue.slice(0, offset);
+    const m = MENTION_TRIGGER.exec(before);
+    if (!m) { hideMentionMenu(); return; }
+    const start = before.length - m[1].length - 1;
+    node.nodeValue = node.nodeValue.slice(0, start) + insert + node.nodeValue.slice(offset);
+    const caret = start + insert.length;
+    const nr = document.createRange();
+    nr.setStart(node, Math.min(caret, node.nodeValue.length));
+    nr.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(nr);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  hideMentionMenu();
+  field.focus();
+}
+
+async function queryMentions(field, q) {
+  const token = ++mpToken;
+  const r = await api("/mentions/search.php?q=" + encodeURIComponent(q) + "&limit=6");
+  if (token !== mpToken || mpTarget !== field) return;   // stale
+  mpItems = (r.ok && r.data?.success) ? (r.data.data.results || []) : [];
+  mpIndex = 0;
+  if (!mpItems.length) { hideMentionMenu(); return; }
+  renderMentionMenu();
+  placeMentionMenu(field);
+}
+
+function attachMentionPicker(field) {
+  if (!field || field.dataset.mentionsOn === "1") return;
+  field.dataset.mentionsOn = "1";
+
+  field.addEventListener("input", () => {
+    const before = textBeforeCaret(field);
+    const m = MENTION_TRIGGER.exec(before);
+    if (!m) { hideMentionMenu(); return; }
+    const q = m[1];
+    mpTarget = field;
+    mpQuery = q;
+    clearTimeout(mpTimer);
+    // A bare "@" with nothing typed yet shouldn't hit the server.
+    if (q === "") { hideMentionMenu(); mpTarget = field; return; }
+    mpTimer = setTimeout(() => queryMentions(field, q), MENTION_DEBOUNCE);
+  });
+
+  field.addEventListener("keydown", (e) => {
+    if (!mentionMenuOpen() || mpTarget !== field) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault(); mpIndex = (mpIndex + 1) % mpItems.length; renderMentionMenu();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault(); mpIndex = (mpIndex - 1 + mpItems.length) % mpItems.length; renderMentionMenu();
+    } else if (e.key === "Enter" || e.key === "Tab") {
+      // Enter picks the highlighted person rather than submitting the
+      // comment — the menu being open is an explicit mode.
+      e.preventDefault(); e.stopPropagation();
+      applyMention(mpIndex);
+    } else if (e.key === "Escape") {
+      e.preventDefault(); e.stopPropagation(); hideMentionMenu();
+    }
+  });
+
+  field.addEventListener("blur", () => setTimeout(hideMentionMenu, 120));
+}
+window.attachMentionPicker = attachMentionPicker;
+
+window.addEventListener("hashchange", hideMentionMenu);
+window.addEventListener("resize", hideMentionMenu);

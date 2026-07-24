@@ -1644,7 +1644,7 @@ async function loadComments(postId, box, commentBtn, canEngage, setOpen) {
         <div class="pc-ava ${who.type === "company" ? "company" : ""}" ${who.uuid ? `onclick="location.hash='${profHash}'" style="cursor:pointer"${hov}` : ""}>${av}</div>
         <div class="pc-body">
           <div class="pc-meta"><span class="pc-name" ${who.uuid ? `onclick="location.hash='${profHash}'" style="cursor:pointer"${hov}` : ""}>${esc(nm)}</span> <span class="pc-when">${esc(new Date(c.created_at).toLocaleString())}</span></div>
-          <div class="pc-text">${esc(c.body)}</div>
+          <div class="pc-text">${c.body_html || esc(c.body)}</div>
         </div>
         ${c.mine ? `<button class="pc-del" title="Delete">✕</button>` : ""}
       </div>`);
@@ -1681,6 +1681,7 @@ async function loadComments(postId, box, commentBtn, canEngage, setOpen) {
     box.appendChild(composer);
     const input = composer.querySelector(".pc-input");
     const send = composer.querySelector(".pc-send");
+    if (typeof attachMentionPicker === "function") attachMentionPicker(input);
     const submit = async () => {
       const body = input.value.trim();
       if (!body) return;

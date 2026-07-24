@@ -2320,3 +2320,44 @@ html.in-reduce-motion *::after {
 @media (hover:none), (pointer:coarse) {
   .in-hovercard { display:none !important; }
 }
+
+/* =====================================================================
+   @mentions — inline links + the "@" typeahead picker
+   ===================================================================== */
+.in-mention {
+  color:var(--in-accent); font-weight:600; text-decoration:none;
+  border-radius:3px; padding:0 1px;
+}
+.in-mention:hover { text-decoration:underline; background:var(--in-bg); }
+
+/* Picker. Body-appended and fixed, for the same reason the hover cards
+   are: the comment composer can sit inside .in-modal (overflow-y:auto)
+   and the feed rails are overflow:auto — both clip absolute children. */
+.in-mention-menu {
+  position:fixed; z-index:1250; width:260px; max-width:calc(100vw - 24px);
+  max-height:240px; overflow-y:auto;
+  background:var(--in-card); border:1px solid var(--in-line); border-radius:10px;
+  box-shadow:0 10px 28px rgba(11,31,42,.16), 0 2px 6px rgba(11,31,42,.08);
+  padding:4px; font-family:var(--in-font);
+  scrollbar-color: var(--in-line) transparent;
+}
+.in-mention-item {
+  display:flex; align-items:center; gap:9px; padding:7px 8px;
+  border-radius:7px; cursor:pointer;
+}
+.in-mention-item.active, .in-mention-item:hover { background:var(--in-bg); }
+.in-mention-ava {
+  flex:none; width:30px; height:30px; border-radius:50%; overflow:hidden;
+  display:grid; place-items:center; font-weight:700; font-size:12px; color:#fff;
+  line-height:1; background:linear-gradient(135deg,var(--in-accent),var(--in-teal-bright));
+}
+.in-mention-ava img { width:100%; height:100%; object-fit:cover; display:block; }
+.in-mention-meta { min-width:0; flex:1; }
+.in-mention-name {
+  font-size:13px; font-weight:600; line-height:1.5; color:var(--in-ink);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.in-mention-handle {
+  font-size:11.5px; line-height:1.5; color:var(--in-muted);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}

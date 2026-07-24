@@ -95,6 +95,9 @@ foreach ($stmt->fetchAll() as $n) {
     $out[] = [
         'id'         => (int) $n['id'],
         'type'       => $n['type'],
+        // Exposed so the client can distinguish "mentioned you in a post"
+        // from "...in a comment" without a second lookup.
+        'comment_id' => $n['comment_id'] !== null ? (int) $n['comment_id'] : null,
         'is_read'    => (int) $n['is_read'] === 1,
         'created_at' => $n['created_at'],
         'actor'      => Social::actorInfo($n['actor_type'], (int) $n['actor_id']),

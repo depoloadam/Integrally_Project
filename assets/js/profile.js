@@ -2971,9 +2971,9 @@ function renderNotificationPrefs(panel, opts) {
     { key: "comment", label: "Comments",  sub: "When someone comments on your post." },
     { key: "follow",  label: "New followers", sub: "When someone starts following you." },
     { key: "message_request", label: "Message requests", sub: "When someone sends you a message request." },
+    { key: "mention", label: "Mentions",  sub: "When someone @mentions you in a post or comment." },
   ];
   const futureTypes = [
-    { key: "mention", label: "Mentions",       sub: "When someone mentions you. (Coming soon)" },
     { key: "score",   label: "Score updates",  sub: "Updates about your scores and rankings. (Coming soon)" },
   ];
 

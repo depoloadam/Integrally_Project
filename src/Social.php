@@ -72,7 +72,7 @@ class Social
      */
     public static function wantsNotification(string $recipientType, int $recipientId, string $type): bool
     {
-        $gated = ['like', 'comment', 'follow', 'message_request'];
+        $gated = ['like', 'comment', 'follow', 'message_request', 'mention'];
         if (!in_array($type, $gated, true)) {
             return true; // ungated type -> always notify
         }

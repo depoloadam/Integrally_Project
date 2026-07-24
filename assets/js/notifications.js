@@ -8,7 +8,7 @@ let NOTIF_POLL = null;
 
 function notifTarget(n) {
   // Like/comment notifications open the post; follow opens the follower.
-  if ((n.type === "like" || n.type === "comment") && n.post && n.post.id) {
+  if ((n.type === "like" || n.type === "comment" || n.type === "mention") && n.post && n.post.id) {
     return "post/" + n.post.id;
   }
   if (n.type === "message_request") {
@@ -30,6 +30,11 @@ function notifText(n) {
   else if (n.type === "like")    verb = "liked your post";
   else if (n.type === "comment") verb = "commented on your post";
   else if (n.type === "message_request") verb = "sent you a message request";
+  // A mention carries comment_id when it happened in a comment, so the
+  // sentence can say where without a second lookup.
+  else if (n.type === "mention") verb = n.comment_id
+    ? "mentioned you in a comment"
+    : "mentioned you in a post";
   const snippet = (n.message && n.message.snippet)
     ? n.message.snippet
     : (n.post && n.post.snippet ? n.post.snippet : "");

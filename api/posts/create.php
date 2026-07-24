@@ -155,4 +155,14 @@ if ($recipients) {
     }
 }
 
-Response::success(['id' => $postId, 'author_type' => $authorType], 201);
+// --- @mentions --------------------------------------------------------
+// Record which handles in the body resolved to real accounts and notify
+// them. sync() is a diff, so it is also the correct call if post editing
+// is added later — it would notify only newly-added mentions.
+require_once __DIR__ . '/../../src/Mentions.php';
+$mentioned = Mentions::sync(
+    $postId, null, ($body === '' ? '' : $body),
+    ['type' => $authorType, 'id' => $authorId]
+);
+
+Response::success(['id' => $postId, 'author_type' => $authorType, 'mentioned' => $mentioned], 201);

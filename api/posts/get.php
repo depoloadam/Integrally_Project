@@ -68,10 +68,15 @@ $eng = Social::engagement([$postId], $actor);
 $e = $eng[$postId] ?? ['likes' => 0, 'comments' => 0, 'liked' => false];
 $saved = isset(PostActions::savedMap($actor, [$postId])[$postId]);
 
+// Mention links, rendered server-side so every consumer of a post body
+// gets them without threading a mentions array through each endpoint.
+require_once __DIR__ . '/../../src/Mentions.php';
+$mentionMap = Mentions::forPosts([(int) $p['id']]);
+
 Response::success([
     'post_id'    => (int) $p['id'],
     'post_type'  => $p['post_type'],
-    'body'       => $p['body'],
+    'body'       => Mentions::linkHtml($p['body'], $mentionMap[(int) $p['id']] ?? []),
     'media_url'  => $p['media_url'],
     'meta'       => $p['meta'] ? json_decode($p['meta'], true) : null,
     'created_at' => $p['created_at'],
