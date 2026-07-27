@@ -33,7 +33,7 @@ window.location.hash = "";
 // re-declarations aren't an issue (module scope), then eval into window.
 const src = readFileSync("assets/js/scores.js", "utf8");
 // Expose the builder fns + state on window by evaluating in global scope.
-const wrapped = src + "\n;window.__scores = { buildSummary, buildPersonalPanel, buildTargetStanding, buildAverages, buildTrending, SCORES_STATE };";
+const wrapped = src + "\n;window.__scores = { buildSummary, buildPersonalPanel, buildTargetStanding, buildAverages, buildTrending, SCORES_STATE };window.renderScores = renderScores;";
 window.eval(`var ME = window.ME, el = window.el, esc = window.esc, $ = window.$, scoreMe = window.scoreMe, location = window.location;\n${wrapped}`);
 const S = window.__scores;
 
@@ -172,6 +172,42 @@ ok(scoreMeCalls[0] && scoreMeCalls[0].target_type === "job_title" && scoreMeCall
 // all-empty trending
 const trendEmpty = S.buildTrending({ trending: { job_title: [], field: [], skill: [] } });
 ok(/Nothing trending/i.test(trendEmpty.textContent), "empty trending shows a helpful message");
+
+// ---- renderScores end-to-end through a mocked api() envelope --------
+// This is the layer the builder tests skip: renderScores calls api(),
+// which wraps payloads as { ok, status, data:{ success, data, error } }.
+// Reading that envelope wrong makes the page show "no scores" even when
+// the user has them — the exact bug reported. Assert the unwrap here.
+console.log("\nrenderScores unwraps the api() envelope");
+window.renderSignedOut = () => {};
+let apiReturn;
+window.api = async () => apiReturn;
+window.eval(`api = window.api; renderSignedOut = window.renderSignedOut;`);
+
+async function runRender(envelope) {
+  apiReturn = envelope;
+  window.document.getElementById("view").innerHTML = "";
+  S.SCORES_STATE.activeTarget = null;
+  await window.eval(`renderScores()`);
+  return window.document.getElementById("view");
+}
+
+// Correct envelope: user HAS scores. Page must NOT show the empty state.
+const view1 = await runRender({ ok: true, status: 200, data: { success: true, error: null, data: payload } });
+ok(!view1.textContent.includes("haven't scored"), "with scores present, no 'haven't scored' message");
+ok(view1.querySelectorAll(".in-scores-tab").length === 3, "renders a tab per real score through the envelope");
+// sanity: the raw payload (unwrapped) must NOT be treated as the result —
+// if someone reads api() as the payload, this fails.
+ok(view1.textContent.includes("Data Analyst"), "real target names reach the DOM");
+
+// Genuinely empty payload -> empty state.
+const view2 = await runRender({ ok: true, status: 200, data: { success: true, error: null, data: { personal: [], personal_mean: null, averages: { overall: { avg: null, samples: 0 }, by_type: {} }, trending: {} } } });
+ok(view2.textContent.includes("haven't scored"), "genuinely empty payload shows the empty state");
+
+// Failed request -> error card, not a misleading empty state.
+const view3 = await runRender({ ok: false, status: 500, data: null });
+ok(view3.textContent.includes("Couldn't load"), "failed load shows an error, not 'haven't scored'");
+ok(!view3.textContent.includes("haven't scored"), "failed load does NOT claim you have no scores");
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

@@ -39,10 +39,13 @@ async function renderScores() {
   // Loading shell — quiet, matches the app's other pages.
   wrap.appendChild(el(`<div class="in-empty" id="scores-loading" style="font-style:normal;padding:28px 0">Loading your scores…</div>`));
 
-  let data;
+  let res;
   try {
-    data = await api("/score/insights.php");
+    res = await api("/score/insights.php");
   } catch (e) {
+    res = { ok: false, data: null };
+  }
+  if (!res.ok || !res.data || !res.data.success) {
     wrap.innerHTML = "";
     wrap.appendChild(el(`
       <div class="in-card2">
@@ -50,6 +53,9 @@ async function renderScores() {
       </div>`));
     return;
   }
+  // api() returns { ok, status, data:{ success, data, error } } — the
+  // actual insights payload is one level in.
+  const data = res.data.data || {};
   SCORES_CACHE = data;
   wrap.innerHTML = "";
 
