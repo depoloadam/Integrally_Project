@@ -54,6 +54,103 @@ function notifText(n) {
   return { name, profHash, verb, snippet, avatar: who.avatar, isCompany: who.type === "company" };
 }
 
+// Collapse UNREAD like/comment notifications that share a post into one
+// row: five people liking the same post is one event to the reader, not
+// five. Deliberate constraints:
+//   - unread only. A read row is history; collapsing it would rewrite
+//     something the user already saw as separate items.
+//   - like/comment only, and never across types — "liked" and
+//     "commented" are different actions and must not merge.
+//   - same post only. Grouping needs a post id; anything without one
+//     (follow, endorsement, message_request) passes through untouched.
+//   - a group of one is left as a plain row, so nothing renders as
+//     "Dana and 0 others".
+// Order is preserved: the group lands at the position of its newest
+// member, so nothing jumps around relative to ungrouped rows.
+const NOTIF_GROUPABLE = new Set(["like", "comment"]);
+
+function groupNotifications(items) {
+  const out = [];
+  const groups = new Map();   // key -> group object already pushed to `out`
+  for (const n of items || []) {
+    const postId = n.post && n.post.id;
+    const canGroup = !n.is_read && NOTIF_GROUPABLE.has(n.type) && postId;
+    if (!canGroup) { out.push(n); continue; }
+    const key = `${n.type}:${postId}`;
+    const g = groups.get(key);
+    if (!g) {
+      // First of its kind: hold the real notification, upgrade in place
+      // only if a second one shows up.
+      const seed = { __group: true, type: n.type, post: n.post, items: [n],
+                     created_at: n.created_at, is_read: false };
+      groups.set(key, seed);
+      out.push(seed);
+    } else {
+      g.items.push(n);
+      // Newest member wins the timestamp (list arrives newest-first, so
+      // the seed is already newest; keep the max defensively).
+      if (new Date(n.created_at) > new Date(g.created_at)) g.created_at = n.created_at;
+    }
+  }
+  // Unwrap singletons back into ordinary notifications.
+  return out.map(x => (x.__group && x.items.length === 1) ? x.items[0] : x);
+}
+
+// Distinct actors in a group, in order, de-duplicated by uuid so one
+// person liking twice (or a re-notified action) isn't counted as two.
+function groupActors(g) {
+  const seen = new Set();
+  const list = [];
+  for (const n of g.items) {
+    const a = n.actor || {};
+    const key = a.uuid || a.full_name || a.name || Math.random();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    list.push(a);
+  }
+  return list;
+}
+
+// "Dana Reed", "Dana Reed and Sam Ito", "Dana Reed and 4 others".
+function groupNames(actors) {
+  const nameOf = a => a.full_name || a.name || "Someone";
+  if (actors.length === 1) return nameOf(actors[0]);
+  if (actors.length === 2) return `${nameOf(actors[0])} and ${nameOf(actors[1])}`;
+  const others = actors.length - 1;
+  return `${nameOf(actors[0])} and ${others} other${others === 1 ? "" : "s"}`;
+}
+
+function groupRowHTML(g) {
+  const actors = groupActors(g);
+  const names = groupNames(actors);
+  const verb = g.type === "like" ? "liked your post" : "commented on your post";
+  const snippet = g.post && g.post.snippet ? g.post.snippet : "";
+  const ids = g.items.map(n => n.id);
+  // Up to three stacked avatars; the rest are implied by the name line.
+  const avatars = actors.slice(0, 3).map(a => {
+    const inner = a.avatar
+      ? `<img src="${esc(a.avatar)}" alt="">`
+      : esc(((a.full_name || a.name || "?").charAt(0) || "?").toUpperCase());
+    return `<div class="in-notif-ava ${a.type === "company" ? "company" : ""}">${inner}</div>`;
+  }).join("");
+  return `
+    <div class="in-notif-item unread" data-ids="${esc(ids.join(","))}" data-prof="post/${esc(g.post.id)}">
+      <div class="in-notif-avastack">${avatars}</div>
+      <div class="in-notif-body">
+        <div class="in-notif-text"><strong>${esc(names)}</strong> ${esc(verb)}</div>
+        ${snippet ? `<div class="in-notif-snip">${esc(snippet)}</div>` : ""}
+        <div class="in-notif-when">${esc(timeAgo(g.created_at))}</div>
+      </div>
+      <span class="in-notif-dot"></span>
+    </div>`;
+}
+
+// Single entry point both surfaces use, so the dropdown and the full page
+// can never drift in how they render a row.
+function notifAnyRowHTML(n) {
+  return n.__group ? groupRowHTML(n) : notifRowHTML(n);
+}
+
 function notifRowHTML(n) {
   const t = notifText(n);
   const av = t.avatar ? `<img src="${esc(t.avatar)}" alt="">` : esc((t.name || "?").charAt(0).toUpperCase());
@@ -83,6 +180,26 @@ async function refreshNotifBadge() {
   else { badge.style.display = "none"; }
 }
 
+// Shared click wiring. A grouped row carries data-ids (several); a plain
+// row carries data-id (one). Both clear before navigating, so the badge
+// never keeps counting rows the user has visibly dealt with.
+function wireNotifRows(container, onDone) {
+  container.querySelectorAll(".in-notif-item").forEach(row => {
+    row.onclick = async () => {
+      const many = row.dataset.ids;
+      if (many) {
+        const ids = many.split(",").map(Number).filter(Boolean);
+        if (ids.length) await api("/notifications/mark-read.php", "POST", { ids });
+      } else if (row.dataset.id) {
+        await api("/notifications/mark-read.php", "POST", { id: Number(row.dataset.id) });
+      }
+      if (typeof onDone === "function") onDone();
+      if (row.dataset.prof) location.hash = row.dataset.prof;
+      refreshNotifBadge();
+    };
+  });
+}
+
 async function openNotifDropdown() {
   const list = $("notif-list");
   list.innerHTML = `<div class="in-loading" style="padding:20px 0">Loading…</div>`;
@@ -92,17 +209,8 @@ async function openNotifDropdown() {
     list.innerHTML = `<div class="in-empty" style="padding:20px 14px;text-align:center">No notifications yet.</div>`;
     return;
   }
-  list.innerHTML = items.map(notifRowHTML).join("");
-  list.querySelectorAll(".in-notif-item").forEach(row => {
-    row.onclick = async () => {
-      const id = row.dataset.id;
-      await api("/notifications/mark-read.php", "POST", { id: Number(id) });
-      const prof = row.dataset.prof;
-      $("notif-dropdown").classList.remove("show");
-      if (prof) location.hash = prof;
-      refreshNotifBadge();
-    };
-  });
+  list.innerHTML = groupNotifications(items).map(notifAnyRowHTML).join("");
+  wireNotifRows(list, () => { $("notif-dropdown").classList.remove("show"); });
 }
 
 function setupNotifications() {
@@ -165,14 +273,8 @@ async function renderNotificationsPage() {
     const items = (r.ok && r.data?.success) ? r.data.data.notifications : [];
     const list = $("np-list");
     if (!items.length) { list.innerHTML = `<div class="in-empty">No notifications yet.</div>`; return; }
-    list.innerHTML = items.map(notifRowHTML).join("");
-    list.querySelectorAll(".in-notif-item").forEach(row => {
-      row.onclick = async () => {
-        await api("/notifications/mark-read.php", "POST", { id: Number(row.dataset.id) });
-        if (row.dataset.prof) location.hash = row.dataset.prof;
-        refreshNotifBadge();
-      };
-    });
+    list.innerHTML = groupNotifications(items).map(notifAnyRowHTML).join("");
+    wireNotifRows(list);
   };
 
   $("np-readall").onclick = async () => {
