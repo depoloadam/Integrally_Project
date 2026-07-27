@@ -61,12 +61,15 @@ ok(!subnav.getAttribute("style"), "sub-nav has no inline style (class-driven vis
 
 const plusBtn = inner.querySelector('[data-subnav="plus"]');
 ok(!!plusBtn, "Try PLUS button exists");
-ok(plusBtn && plusBtn.textContent.trim() === "Try PLUS", "button label is exactly 'Try PLUS'");
+ok(plusBtn && plusBtn.textContent.trim() === "Try PLUS+", "button label is exactly 'Try PLUS+'");
 ok(plusBtn && plusBtn.classList.contains("in-subnav-btn"), "button carries shared geometry class");
-ok(plusBtn && plusBtn.classList.contains("accent"), "button carries the .accent look modifier");
+ok(plusBtn && plusBtn.classList.contains("gold"), "button carries the .gold look modifier");
+ok(plusBtn && !plusBtn.classList.contains("accent"),
+   "button does NOT use the teal .accent look (upsell must not read as a primary action)");
 // Guard the variant system: geometry and appearance must stay separable.
-ok(css.includes(".in-subnav-btn.accent") && css.includes(".in-subnav-btn.outline"),
-   "at least two look modifiers exist independent of .in-subnav-btn");
+for (const v of [".in-subnav-btn.accent", ".in-subnav-btn.outline", ".in-subnav-btn.gold"]) {
+  ok(css.includes(v), "look modifier " + v + " exists independent of .in-subnav-btn");
+}
 
 console.log("\nsetSubnav()");
 // Extract and run the REAL function rather than a re-implementation.
@@ -109,6 +112,7 @@ attach(inner, (msg) => toasted.push(msg));
 plusBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
 ok(toasted.length === 1, "clicking Try PLUS fires exactly one notice");
 ok(/coming soon/i.test(toasted[0] || ""), "notice says it's coming soon");
+ok(/PLUS\+/.test(toasted[0] || ""), "notice uses the PLUS+ name, matching the button");
 // It must not navigate — Plus has no route yet.
 ok(window.location.hash === "", "click does not change the route");
 
@@ -226,6 +230,39 @@ const zOf = (sel) => parseInt(declValue(sel, "z-index"), 10);
 const zNav = zOf(".in-nav"), zSub = zOf(".in-subnav"), zBar = zOf(".in-searchbar");
 ok(zNav > zSub, "nav paints above sub-nav (" + zNav + " > " + zSub + ")");
 ok(zSub > zBar, "sub-nav paints above search bar (" + zSub + " > " + zBar + ")");
+
+console.log("\ngold variant contrast (WCAG AA)");
+// The gold fill is a gradient, so the text must clear AA against BOTH
+// stops, in both themes. This is the assertion that would have caught
+// white-on-gold (~2:1).
+const srgb = (h) => {
+  const v = h.replace("#", "");
+  const f = v.length === 3 ? v.split("").map(c => c + c) : v.match(/../g);
+  return f.map(x => {
+    const c = parseInt(x, 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  });
+};
+const lum = (h) => { const [r, g, b] = srgb(h); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+const ratio = (a, b) => {
+  const [l1, l2] = [lum(a), lum(b)].sort((x, y) => y - x);
+  return (l1 + 0.05) / (l2 + 0.05);
+};
+// Sanity: the formula must reproduce known values before we trust it.
+ok(Math.abs(ratio("#ffffff", "#000000") - 21) < 0.01, "contrast formula: white/black is 21:1");
+ok(Math.abs(ratio("#ffffff", "#ffffff") - 1) < 0.01, "contrast formula: identical colours are 1:1");
+
+for (const [theme, sel] of [["light", ":root"], ["dark", '[data-theme="dark"]']]) {
+  const gold   = declValue(sel, "--in-gold");
+  const goldLt = declValue(sel, "--in-gold-lt");
+  const ink    = declValue(sel, "--in-gold-ink");
+  ok(!!gold && !!goldLt && !!ink, theme + ": gold palette vars defined");
+  const worst = Math.min(ratio(ink, gold), ratio(ink, goldLt));
+  ok(worst >= 4.5, theme + ": ink on gold clears AA (" + worst.toFixed(2) + ":1)");
+  // And prove the check has teeth: white would fail here.
+  ok(Math.min(ratio("#ffffff", gold), ratio("#ffffff", goldLt)) < 4.5,
+     theme + ": white-on-gold would fail, so the check is meaningful");
+}
 
 console.log("\ntheming");
 // Dark mode is pure var overrides, so the bar must not hardcode colours.

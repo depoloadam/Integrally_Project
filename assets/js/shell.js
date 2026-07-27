@@ -792,7 +792,7 @@ if (subnavInner) {
         // Plus payments aren't built yet; the CTA acknowledges rather than
         // routing to a dead page. Replace with the real route when the
         // Plus cluster ships.
-        toast("PLUS is coming soon — we'll let you know when it's ready.");
+        toast("PLUS+ is coming soon — we'll let you know when it's ready.");
         break;
       default:
         break;

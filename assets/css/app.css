@@ -7,6 +7,10 @@
   --in-line:#dde7eb; --in-bg:#f5f8f9; --in-card:#ffffff;
   --in-accent:#0d9488; --in-accent-d:#0b7a70; --in-teal-bright:#14b8a6;
   --in-error:#c0392b; --in-success:#0a8a5f;
+  /* Gold — reserved for the PLUS upsell so it reads as a distinct offer
+     rather than another primary (teal) action. Text on gold is dark ink,
+     not white: white on this yellow fails contrast badly. */
+  --in-gold:#eab308; --in-gold-lt:#f7d154; --in-gold-d:#ca8a04; --in-gold-ink:#3a2c04;
   --in-font:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   /* Shell bar heights. Anything that sticks below the nav must offset by
      these, never by a literal px value — the sub-nav is conditional, so the
@@ -55,8 +59,9 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
    geometry (padding, radius, font). Appearance is a separate modifier so
    items can look different from one another without fighting each other:
      (no modifier)  quiet text link, matches .in-nav-links
-     .accent        filled teal call-to-action  (Try PLUS)
+     .accent        filled teal call-to-action
      .outline       bordered, lighter weight than .accent
+     .gold          premium/upsell fill  (Try PLUS+)
    Add new looks as further modifiers rather than overriding .in-subnav-btn,
    so shared geometry stays in one place.
    .push-right on an item moves it (and everything after it) to the right. */
@@ -89,6 +94,17 @@ html.has-subnav .in-subnav { display:block; }
 /* bordered, quieter than .accent */
 .in-subnav-btn.outline { border-color:var(--in-line); color:var(--in-ink-soft); }
 .in-subnav-btn.outline:hover { border-color:var(--in-muted); background:var(--in-bg); color:var(--in-ink); }
+/* premium/upsell fill — deliberately NOT the teal used for primary
+   actions, so the offer doesn't read as just another nav control. Dark
+   ink on gold: white here would sit around 2:1 contrast. */
+.in-subnav-btn.gold {
+  background:linear-gradient(135deg, var(--in-gold), var(--in-gold-lt));
+  border-color:var(--in-gold-d); color:var(--in-gold-ink); font-weight:700;
+}
+.in-subnav-btn.gold:hover {
+  background:linear-gradient(135deg, var(--in-gold-d), var(--in-gold));
+  border-color:var(--in-gold-d); color:var(--in-gold-ink);
+}
 
 /* profile dropdown menu */
 .in-profile-menu { position:relative; }
@@ -1943,6 +1959,9 @@ html.in-reduce-motion *::after {
   --in-line:#283b45; --in-bg:#0f1a20; --in-card:#16242c;
   --in-accent:#2dd4bf; --in-accent-d:#14b8a6; --in-teal-bright:#5eead4;
   --in-error:#f0776b; --in-success:#3ecf8e;
+  /* Gold lifts on dark so it doesn't go muddy against the card surface;
+     the ink stays dark because the fill stays light. */
+  --in-gold:#fbbf24; --in-gold-lt:#fcd34d; --in-gold-d:#f59e0b; --in-gold-ink:#2c2102;
 }
 /* Inputs, selects, textareas — force dark surfaces (many set literal #fff). */
 [data-theme="dark"] input,
