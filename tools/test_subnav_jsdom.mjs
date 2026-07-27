@@ -174,7 +174,7 @@ const subInner = declValue(".in-subnav-inner", "height");
 
 ok(navH === "58px", "--in-nav-h is 58px (unchanged nav height)");
 ok(subH0 === "0px", "--in-subnav-h defaults to 0 (bar absent)");
-ok(subH1 === "38px", "--in-subnav-h is 38px under .has-subnav");
+ok(subH1 === "30px", "--in-subnav-h is 30px under .has-subnav");
 ok(navInner === "var(--in-nav-h)", "nav height reads the var, not a literal");
 ok(subInner === "var(--in-subnav-h)", "sub-nav height reads the var, not a literal");
 ok(barTop === "var(--in-header-h)", "search bar offsets by the composed header var");
@@ -190,7 +190,7 @@ const resolve = (expr, vars) => {
 const collapsed = resolve(headerHRaw, { "--in-nav-h": navH, "--in-subnav-h": subH0 });
 const expanded  = resolve(headerHRaw, { "--in-nav-h": navH, "--in-subnav-h": subH1 });
 ok(collapsed === 58, "no sub-nav -> search bar sticks at 58px (flush under nav)");
-ok(expanded === 96, "sub-nav shown -> search bar sticks at 96px (flush under both)");
+ok(expanded === 88, "sub-nav shown -> search bar sticks at 88px (flush under both)");
 // Sanity: the resolver must produce a different, wrong answer for bad input.
 ok(resolve(headerHRaw, { "--in-nav-h": "10px", "--in-subnav-h": "1px" }) === 11, "resolver is not hardcoded");
 
@@ -222,7 +222,7 @@ const resolveSticky = (subH) => {
   return resolve(stickyTop, { "--in-header-h": hdr + "px" });
 };
 ok(resolveSticky(subH0) === 78, "no sub-nav -> rails stick at 78px (unchanged from before)");
-ok(resolveSticky(subH1) === 116, "sub-nav shown -> rails stick at 116px (clear of the bar)");
+ok(resolveSticky(subH1) === 108, "sub-nav shown -> rails stick at 108px (clear of the bar)");
 ok(resolveSticky("5px") === 83, "sticky resolver is not hardcoded");
 
 console.log("\nstacking order");
@@ -264,11 +264,53 @@ for (const [theme, sel] of [["light", ":root"], ["dark", '[data-theme="dark"]']]
      theme + ": white-on-gold would fail, so the check is meaningful");
 }
 
+console.log("\nbar fits its content");
+// The bar is now 30px. If an item's box grows past that, the flex row
+// silently overflows and the text clips — assert the arithmetic.
+const px = (v) => parseFloat(v);
+const btnFont = declValue(".in-subnav-btn", "font-size");
+const btnPad  = declValue(".in-subnav-btn", "padding");
+const btnLh   = declValue(".in-subnav-btn", "line-height");
+const btnBorder = declValue(".in-subnav-btn", "border");
+ok(px(btnFont) <= 12, "item text is small (" + btnFont + ")");
+const padY = px(btnPad.split(/\s+/)[0]);
+const borderY = px(btnBorder) || 0;
+const btnBox = px(btnFont) * parseFloat(btnLh) + padY * 2 + borderY * 2;
+ok(btnBox <= px(subH1), "item box " + btnBox.toFixed(1) + "px fits the " + subH1 + " bar");
+// Teeth: a 20px font would not fit, so the check isn't vacuous.
+ok(20 * parseFloat(btnLh) + padY * 2 + borderY * 2 > px(subH1), "fit check rejects oversized text");
+
+console.log("\ngradient surface");
+const subBg = declValue(".in-subnav", "background");
+ok(/^linear-gradient\(/.test(subBg || ""), "sub-nav background is a gradient");
+ok(/var\(--in-subnav-g1\)/.test(subBg) && /var\(--in-subnav-g2\)/.test(subBg),
+   "gradient stops are themed vars, not literals");
+for (const [theme, sel] of [["light", ":root"], ["dark", '[data-theme="dark"]']]) {
+  const g1 = declValue(sel, "--in-subnav-g1"), g2 = declValue(sel, "--in-subnav-g2");
+  ok(!!g1 && !!g2, theme + ": gradient stops defined");
+}
+
+console.log("\nquiet item legibility on the gradient");
+// Small text on a tinted surface is where this gets lost. --in-muted is
+// only 3.90:1 on white, so quiet items use --in-ink-soft instead.
+const quietColor = declValue(".in-subnav-btn", "color");
+ok(quietColor === "var(--in-ink-soft)", "quiet items use --in-ink-soft, not --in-muted");
+for (const [theme, sel] of [["light", ":root"], ["dark", '[data-theme="dark"]']]) {
+  const soft = declValue(sel, "--in-ink-soft");
+  const g1 = declValue(sel, "--in-subnav-g1"), g2 = declValue(sel, "--in-subnav-g2");
+  const worst = Math.min(ratio(soft, g1), ratio(soft, g2));
+  ok(worst >= 4.5, theme + ": quiet text clears AA on both stops (" + worst.toFixed(2) + ":1)");
+  const mutedWorst = Math.min(ratio(declValue(sel, "--in-muted"), g1), ratio(declValue(sel, "--in-muted"), g2));
+  ok(mutedWorst < worst, theme + ": --in-muted would be worse (" + mutedWorst.toFixed(2) + ":1), so the choice matters");
+}
+
 console.log("\ntheming");
 // Dark mode is pure var overrides, so the bar must not hardcode colours.
 const subBlock = /\.in-subnav\s*\{([^}]*)\}/.exec(css)[1];
-ok(/var\(--in-card\)/.test(subBlock) && /var\(--in-line\)/.test(subBlock),
-   "sub-nav surface uses themed vars (inherits dark mode)");
+ok(/var\(--in-subnav-g1\)/.test(subBlock) && /var\(--in-subnav-g2\)/.test(subBlock)
+   && /border-bottom:1px solid var\(--in-line\)/.test(subBlock),
+   "sub-nav surface and border are var-driven (inherits dark mode)");
+ok(!/#[0-9a-fA-F]{3,6}/.test(subBlock), "no raw hex in the .in-subnav surface rule");
 const hexes = (css.match(/\.in-subnav[^{]*\{[^}]*\}/g) || []).join("")
   .match(/#[0-9a-fA-F]{3,6}/g) || [];
 ok(hexes.every(h => h.toLowerCase() === "#fff"),

@@ -11,6 +11,9 @@
      rather than another primary (teal) action. Text on gold is dark ink,
      not white: white on this yellow fails contrast badly. */
   --in-gold:#eab308; --in-gold-lt:#f7d154; --in-gold-d:#ca8a04; --in-gold-ink:#3a2c04;
+  /* Sub-nav surface gradient. Kept very close to the card colour — it's a
+     sheen, not a band. Anything darker drags quiet-item text under AA. */
+  --in-subnav-g1:#ffffff; --in-subnav-g2:#eef6f6;
   --in-font:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   /* Shell bar heights. Anything that sticks below the nav must offset by
      these, never by a literal px value — the sub-nav is conditional, so the
@@ -25,7 +28,7 @@
 }
 /* Sub-nav present (see setSubnav() in shell.js). Raising the header height
    here automatically pushes every sticky descendant down. */
-html.has-subnav { --in-subnav-h:38px; }
+html.has-subnav { --in-subnav-h:30px; }
 * { box-sizing:border-box; }
 html { height:100%; scrollbar-gutter:stable; overflow-y:scroll; }
 body { margin:0; min-height:100%; display:flex; flex-direction:column; font-family:var(--in-font); background:var(--in-bg); color:var(--in-ink); -webkit-font-smoothing:antialiased; }
@@ -67,7 +70,8 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
    .push-right on an item moves it (and everything after it) to the right. */
 .in-subnav {
   display:none;
-  background:var(--in-card); border-bottom:1px solid var(--in-line);
+  background:linear-gradient(90deg, var(--in-subnav-g1), var(--in-subnav-g2));
+  border-bottom:1px solid var(--in-line);
   position:sticky; top:var(--in-nav-h); z-index:49; flex:none;
 }
 html.has-subnav .in-subnav { display:block; }
@@ -79,10 +83,11 @@ html.has-subnav .in-subnav { display:block; }
 }
 .in-subnav-inner::-webkit-scrollbar { display:none; }
 .in-subnav-btn {
-  flex:none; font-family:inherit; font-size:13px; font-weight:600;
-  border:1px solid transparent; border-radius:7px;
-  padding:5px 11px; cursor:pointer; line-height:1.2; white-space:nowrap;
-  background:none; color:var(--in-muted);
+  flex:none; font-family:inherit; font-size:11.5px; font-weight:600;
+  letter-spacing:.2px;
+  border:1px solid transparent; border-radius:6px;
+  padding:3px 10px; cursor:pointer; line-height:1.2; white-space:nowrap;
+  background:none; color:var(--in-ink-soft);
 }
 .in-subnav-btn:hover { background:var(--in-bg); color:var(--in-ink); }
 .in-subnav-btn.push-right { margin-left:auto; }
@@ -1962,6 +1967,7 @@ html.in-reduce-motion *::after {
   /* Gold lifts on dark so it doesn't go muddy against the card surface;
      the ink stays dark because the fill stays light. */
   --in-gold:#fbbf24; --in-gold-lt:#fcd34d; --in-gold-d:#f59e0b; --in-gold-ink:#2c2102;
+  --in-subnav-g1:#16242c; --in-subnav-g2:#101d26;
 }
 /* Inputs, selects, textareas — force dark surfaces (many set literal #fff). */
 [data-theme="dark"] input,
