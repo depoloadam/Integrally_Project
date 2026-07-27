@@ -13,7 +13,7 @@
   --in-gold:#d99e06; --in-gold-lt:#f8db6b; --in-gold-d:#b8850a; --in-gold-ink:#2b2002;
   /* Sub-nav surface — flat teal. The gradient lives on the button, not
      the bar. Capped by quiet-item text (--in-ink-soft) clearing 4.5:1. */
-  --in-subnav-bg:#c7e3e0;
+  --in-subnav-bg:#dcefed;
   --in-font:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   /* Shell bar heights. Anything that sticks below the nav must offset by
      these, never by a literal px value — the sub-nav is conditional, so the
