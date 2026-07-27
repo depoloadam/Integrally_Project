@@ -122,19 +122,55 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 .in-scores-compare strong { color:var(--in-accent); }
 .in-scores-standing-actions { display:flex; flex-wrap:wrap; gap:8px; }
 
-/* Region 3 — averages */
-.in-scores-avgrows { display:flex; flex-direction:column; gap:14px; }
-.in-scores-avgrow-top { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:5px; }
-.in-scores-avgrow-lbl { font-size:14px; font-weight:600; color:var(--in-ink); }
-.in-scores-avgrow-val { font-size:12.5px; color:var(--in-muted); }
-.in-scores-avgbar { position:relative; height:10px; border-radius:6px; background:var(--in-bg); border:1px solid var(--in-line); overflow:visible; }
-.in-scores-avgbar-fill { height:100%; border-radius:5px; background:linear-gradient(90deg,var(--in-accent),var(--in-teal-bright)); }
-.in-scores-avgbar-you {
-  position:absolute; top:-3px; width:2px; height:16px; background:var(--in-ink);
-  transform:translateX(-50%); border-radius:1px;
+/* Region 3 — where you stand (per-target standing + gap + distribution) */
+/* Biggest-gap callout */
+.in-scores-gap {
+  border:1px solid var(--in-line); border-left:3px solid var(--in-accent);
+  border-radius:10px; background:var(--in-bg); padding:13px 15px; margin-bottom:16px;
 }
-.in-scores-overall { margin-top:14px; font-size:13.5px; color:var(--in-ink-soft); }
-.in-scores-overall strong { color:var(--in-ink); }
+.in-scores-gap-positive { border-left-color:var(--in-success); }
+.in-scores-gap-tag {
+  font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px;
+  color:var(--in-accent); margin-bottom:5px;
+}
+.in-scores-gap-positive .in-scores-gap-tag { color:var(--in-success); }
+.in-scores-gap-body { font-size:14px; color:var(--in-ink-soft); line-height:1.5; }
+.in-scores-gap-body strong { color:var(--in-ink); }
+.in-scores-gap-btn { margin-top:10px; }
+
+/* Per-target standing rows */
+.in-scores-stand-rows { display:flex; flex-direction:column; gap:16px; }
+.in-scores-stand { padding-top:14px; border-top:1px solid var(--in-line); }
+.in-scores-stand-rows > .in-scores-stand:first-child { padding-top:0; border-top:none; }
+.in-scores-stand-top { display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin-bottom:7px; }
+.in-scores-stand-name { font-size:15px; font-weight:700; color:var(--in-ink); min-width:0; }
+.in-scores-stand-type { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.4px; color:var(--in-muted); margin-left:8px; }
+.in-scores-stand-rank { font-size:20px; font-weight:800; color:var(--in-ink); flex:none; letter-spacing:-.5px; }
+.in-scores-stand-rank span { font-size:12px; font-weight:600; color:var(--in-muted); margin-left:3px; letter-spacing:0; }
+.in-scores-stand-nums { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:9px; }
+.in-scores-stand-you { font-size:13px; font-weight:700; color:var(--in-ink); }
+.in-scores-stand-avg, .in-scores-stand-range { font-size:12.5px; color:var(--in-muted); }
+.in-scores-gap-pill {
+  font-size:11.5px; font-weight:700; padding:2px 8px; border-radius:11px;
+  background:var(--in-bg); border:1px solid var(--in-line);
+}
+.in-scores-gap-pill.up { color:var(--in-success); border-color:#9fd9c0; }
+.in-scores-gap-pill.down { color:var(--in-error); border-color:#e6b0aa; }
+.in-scores-gap-pill.even { color:var(--in-muted); }
+
+/* Distribution histogram */
+.in-scores-hist {
+  display:flex; align-items:flex-end; gap:3px; height:40px;
+  padding:6px 4px; background:var(--in-bg); border:1px solid var(--in-line); border-radius:8px;
+}
+.in-scores-hbar { flex:1; min-height:2px; border-radius:2px 2px 0 0; background:var(--in-line); transition:background .15s; }
+.in-scores-hbar.mine { background:linear-gradient(180deg,var(--in-teal-bright),var(--in-accent)); }
+
+/* Platform footnote — quiet, small, clearly secondary */
+.in-scores-footnote {
+  margin-top:16px; padding-top:12px; border-top:1px solid var(--in-line);
+  font-size:11.5px; color:var(--in-muted); line-height:1.5;
+}
 
 /* Region 4 — trending */
 .in-scores-trend-cols { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }

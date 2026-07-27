@@ -48,11 +48,14 @@ const payload = {
   generated_at: "2026-07-27T00:00:00+00:00",
   personal: [
     { target_type: "job_title", target_value: "Data Analyst", score_value: 60, created_at: "2026-07-20T10:00:00Z",
-      hidden: false, community_avg: 55, pool_size: 5, percentile: 75, top_percent: 25 },
+      hidden: false, community_avg: 55, pool_size: 5, percentile: 75, top_percent: 25,
+      rank: 2, gap_to_avg: 5, pool_min: 40, pool_max: 80, histogram: [0,0,0,0,1,1,1,1,1,0] },
     { target_type: "field", target_value: "Healthcare", score_value: 90, created_at: "2026-07-25T10:00:00Z",
-      hidden: false, community_avg: 60, pool_size: 3, percentile: 100, top_percent: 0 },
+      hidden: false, community_avg: 60, pool_size: 3, percentile: 100, top_percent: 0,
+      rank: 1, gap_to_avg: 30, pool_min: 30, pool_max: 90, histogram: [0,0,0,1,0,0,1,0,0,1] },
     { target_type: "skill", target_value: "Python", score_value: 48, created_at: "2026-07-26T10:00:00Z",
-      hidden: true, community_avg: null, pool_size: 1, percentile: null, top_percent: null },
+      hidden: true, community_avg: null, pool_size: 1, percentile: null, top_percent: null,
+      rank: null, gap_to_avg: null, pool_min: null, pool_max: null, histogram: null },
   ],
   personal_mean: 66,
   averages: {
@@ -144,21 +147,51 @@ daStanding.querySelector(".in-scores-hist").dispatchEvent(new window.MouseEvent(
 ok(window.location.hash.includes("score-history/"), "history button routes to score-history");
 ok(decodeURIComponent(window.location.hash).includes("job_title|Data Analyst"), "history route carries the target");
 
-// ---- Region 3: averages --------------------------------------------
-console.log("\naverages");
-const avg = S.buildAverages(payload, payload.personal);
-const avgRows = avg.querySelectorAll(".in-scores-avgrow");
-ok(avgRows.length === 3, "an average row per type with samples");
-ok(avg.textContent.includes("55 avg") && avg.textContent.includes("5 scored"), "job title row shows avg + count");
-const youMark = avg.querySelector(".in-scores-avgbar-you");
-ok(youMark && youMark.getAttribute("style").includes("left:66%"), "your-mean marker at 66%");
-ok(avg.textContent.includes("58"), "overall average shown");
-// sanity: a type with 0 samples must not render a row
-const avgNoSkill = S.buildAverages({
+// ---- Region 3: where you stand -------------------------------------
+console.log("\nwhere you stand");
+const stand = S.buildAverages(payload, payload.personal);
+// Section header changed from platform averages to per-target standing.
+ok(/Where you stand/i.test(stand.textContent), "section is titled 'Where you stand'");
+// Only pooled targets (pool_size > 1) get a standing row; Python (pool 1) is excluded.
+const standRows = stand.querySelectorAll(".in-scores-stand");
+ok(standRows.length === 2, "one standing row per pooled target (Python pool-of-1 excluded)");
+ok(!stand.textContent.includes("Python"), "solo-pool target not shown as a standing");
+// Rank + range shown.
+ok(/#1\b/.test(stand.textContent) || /#2\b/.test(stand.textContent), "rank is displayed");
+ok(/Range 40–80/.test(stand.textContent), "pool range shown for Data Analyst");
+// Histogram bars render, with the viewer's bucket marked.
+const hists = stand.querySelectorAll(".in-scores-hist");
+ok(hists.length === 2, "a distribution histogram per pooled target");
+ok(stand.querySelector(".in-scores-hbar.mine"), "the viewer's own bucket is highlighted in the histogram");
+// Both targets are above average here -> positive standing callout.
+ok(/Your standing/i.test(stand.textContent) && !/Biggest gap/i.test(stand.textContent),
+   "all-above-average shows the positive standing callout, not a gap");
+
+// Now force a below-average target -> the "biggest gap" callout appears.
+const withGap = {
   ...payload,
-  averages: { overall: { avg: 55, samples: 8 }, by_type: { ...payload.averages.by_type, skill: { avg: null, samples: 0 } } },
-}, payload.personal);
-ok(avgNoSkill.querySelectorAll(".in-scores-avgrow").length === 2, "type with 0 samples is omitted");
+  personal: [
+    payload.personal[0],
+    { ...payload.personal[1], score_value: 35, community_avg: 60, gap_to_avg: -25, rank: 3, top_percent: 20, percentile: 80 },
+  ],
+};
+const gapCard = S.buildAverages(withGap, withGap.personal);
+ok(/Biggest gap to close/i.test(gapCard.textContent), "a below-average target surfaces the biggest-gap callout");
+ok(/25 below/.test(gapCard.textContent), "gap callout states the size of the gap");
+ok(!!gapCard.querySelector(".in-scores-gap-btn"), "gap callout has an improve-score action");
+// teeth: the positive payload must NOT produce a gap callout
+ok(!/Biggest gap to close/i.test(stand.textContent), "no false gap callout when everything is above average");
+
+// Platform averages survive as a small footnote only.
+ok(!!stand.querySelector(".in-scores-footnote"), "platform averages demoted to a footnote");
+ok(/Platform-wide averages/i.test(stand.textContent), "footnote labels the broad averages");
+ok(/broad context only/i.test(stand.textContent), "footnote flags the averages as broad context");
+
+// No pooled targets at all -> honest empty state, footnote still present.
+const soloOnly = { ...payload, personal: [payload.personal[2]] };
+const soloCard = S.buildAverages(soloOnly, soloOnly.personal);
+ok(/No one else has scored/i.test(soloCard.textContent), "no-pool state explains why there's nothing to compare");
+ok(!soloCard.querySelector(".in-scores-stand"), "no standing rows when no target has a pool");
 
 // ---- Region 4: trending --------------------------------------------
 console.log("\ntrending");

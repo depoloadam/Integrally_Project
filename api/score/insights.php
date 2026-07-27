@@ -31,7 +31,12 @@
 //     personal: [
 //       { target_type, target_value, score_value, created_at,
 //         hidden, community_avg (float|null), pool_size (int),
-//         percentile (int|null), top_percent (int|null) }
+//         percentile (int|null), top_percent (int|null),
+//         rank (int|null),          // 1-based, 1 = highest in the pool
+//         gap_to_avg (float|null),  // your score minus community average
+//         pool_min (float|null), pool_max (float|null),
+//         histogram (int[10]|null)  // counts in 0-9,10-19,…,90-100
+//       }
 //     ],
 //     personal_mean: float|null,      // mean of the viewer's latest scores
 //     averages: {
@@ -135,13 +140,39 @@ foreach ($mineRows as $r) {
     $poolSize = 0;
     $percentile = null;
     $topPercent = null;
+    $rank = null;              // 1-based position, 1 = highest
+    $gapToAvg = null;          // my score minus community average (signed)
+    $poolMin = null;
+    $poolMax = null;
+    $histogram = null;         // 10 buckets of 0-9,10-19,…,90-100
     if (isset($community[$k])) {
+        $allScores = $community[$k]['scores'];   // includes the viewer
         $poolSize = $community[$k]['n'];
         $avg = $poolSize > 0 ? round($community[$k]['sum'] / $poolSize, 1) : null;
+        if ($avg !== null) $gapToAvg = round($myVal - $avg, 1);
+        $poolMin = round(min($allScores), 1);
+        $poolMax = round(max($allScores), 1);
+
+        // Rank: 1 + how many DISTINCT-position scores are strictly above
+        // mine. Ties share the better rank (standard competition ranking).
+        $above = 0;
+        foreach ($allScores as $v) if ($v > $myVal) $above++;
+        $rank = $above + 1;
+
+        // Distribution histogram — 10 buckets across 0-100. The score of
+        // 100 lands in the top bucket. Lets the UI draw where the pack
+        // sits and where the viewer falls within it.
+        $histogram = array_fill(0, 10, 0);
+        foreach ($allScores as $v) {
+            $b = (int) floor(max(0, min(100, $v)) / 10);
+            if ($b > 9) $b = 9;
+            $histogram[$b]++;
+        }
+
         // Percentile against OTHERS (exclude one instance of the viewer's
         // own score from the pool). Mirrors compare.php's definition:
         // "% of other people you meet or beat".
-        $others = $community[$k]['scores'];
+        $others = $allScores;
         $selfIdx = array_search($myVal, $others, true);
         if ($selfIdx !== false) array_splice($others, $selfIdx, 1);
         $otherCount = count($others);
@@ -163,6 +194,11 @@ foreach ($mineRows as $r) {
         'pool_size'    => $poolSize,
         'percentile'   => $percentile,
         'top_percent'  => $topPercent,
+        'rank'         => $rank,
+        'gap_to_avg'   => $gapToAvg,
+        'pool_min'     => $poolMin,
+        'pool_max'     => $poolMax,
+        'histogram'    => $histogram,
     ];
 }
 $personalMean = $personalN > 0 ? round($personalSum / $personalN, 1) : null;

@@ -246,44 +246,120 @@ function buildTargetStanding(p) {
 function buildAverages(data, personal) {
   const bt = (data.averages && data.averages.by_type) || {};
   const overall = (data.averages && data.averages.overall) || { avg: null, samples: 0 };
-  const yourMean = data.personal_mean;
-
   const TYPE_LABEL = { job_title: "Job titles", skill: "Skills", field: "Fields" };
 
   const card = el(`
     <div class="in-card2">
-      <h2 style="text-transform:none;font-size:16px;letter-spacing:-0.2px">How the platform scores</h2>
-      <div class="in-empty" style="font-style:normal;margin:-8px 0 12px">Average scores across everyone${yourMean != null ? ", with your average marked" : ""}.</div>
+      <h2 style="text-transform:none;font-size:16px;letter-spacing:-0.2px">Where you stand</h2>
+      <div class="in-empty" style="font-style:normal;margin:-8px 0 14px">How each of your scores compares to everyone scored against the same thing — not the platform as a whole.</div>
     </div>`);
 
-  const rows = el(`<div class="in-scores-avgrows"></div>`);
-  ["job_title", "skill", "field"].forEach(t => {
-    const a = bt[t] || { avg: null, samples: 0 };
-    if (!a.samples) return;
-    const avgPct = a.avg != null ? Math.max(0, Math.min(100, a.avg)) : 0;
-    const youPct = yourMean != null ? Math.max(0, Math.min(100, yourMean)) : null;
-    rows.appendChild(el(`
-      <div class="in-scores-avgrow">
-        <div class="in-scores-avgrow-top">
-          <span class="in-scores-avgrow-lbl">${TYPE_LABEL[t]}</span>
-          <span class="in-scores-avgrow-val">${Math.round(a.avg)} avg · ${a.samples} scored</span>
+  // Only targets with a real comparison pool (more than just you) can show
+  // a standing. Separate them from solo ones so we don't imply a ranking
+  // that doesn't exist.
+  const ranked = personal.filter(p => (p.pool_size || 0) > 1 && p.rank != null);
+
+  if (!ranked.length) {
+    card.appendChild(el(`
+      <div class="in-empty" style="font-style:normal">
+        No one else has scored against your targets yet, so there's nothing to compare against.
+        As others score against the same titles and fields, your standing shows up here.
+      </div>`));
+    appendPlatformFootnote(card, bt, overall, TYPE_LABEL);
+    return card;
+  }
+
+  // --- "Biggest gap to close": the target where you're furthest BELOW the
+  // pool average. Only surfaces if you're actually behind on something. ---
+  const behind = ranked.filter(p => p.gap_to_avg != null && p.gap_to_avg < 0);
+  if (behind.length) {
+    const worst = behind.reduce((w, p) => (p.gap_to_avg < w.gap_to_avg ? p : w), behind[0]);
+    const gap = Math.abs(Math.round(worst.gap_to_avg));
+    card.appendChild(el(`
+      <div class="in-scores-gap">
+        <div class="in-scores-gap-tag">Biggest gap to close</div>
+        <div class="in-scores-gap-body">
+          Your <strong>${esc(worst.target_value)}</strong> score is <strong>${gap}</strong> below the average of the ${worst.pool_size} people scored against it.
+          Closing this gap is where you'll move the most.
         </div>
-        <div class="in-scores-avgbar">
-          <div class="in-scores-avgbar-fill" style="width:${avgPct}%"></div>
-          ${youPct != null ? `<div class="in-scores-avgbar-you" style="left:${youPct}%" title="Your average: ${Math.round(yourMean)}"></div>` : ""}
+        <button class="in-btn ghost in-scores-gap-btn" style="flex:none;padding:7px 13px">Improve this score →</button>
+      </div>`));
+    card.querySelector(".in-scores-gap-btn").onclick = () => { location.hash = "profile"; };
+  } else {
+    // Nothing below average — lead with the strongest standing instead.
+    const best = ranked.reduce((b, p) => (p.rank < b.rank ? p : b), ranked[0]);
+    card.appendChild(el(`
+      <div class="in-scores-gap in-scores-gap-positive">
+        <div class="in-scores-gap-tag">Your standing</div>
+        <div class="in-scores-gap-body">
+          You're at or above average on every target with a pool. Strongest: <strong>${esc(best.target_value)}</strong>, ranked <strong>#${best.rank}</strong> of ${best.pool_size}.
         </div>
       </div>`));
-  });
-
-  if (!rows.children.length) {
-    card.appendChild(el(`<div class="in-empty" style="font-style:normal">Not enough scores across the platform yet to show averages.</div>`));
-  } else {
-    card.appendChild(rows);
-    if (overall.avg != null) {
-      card.appendChild(el(`<div class="in-scores-overall">Overall average across all ${overall.samples} scores: <strong>${Math.round(overall.avg)}</strong></div>`));
-    }
   }
+
+  // --- Per-target standing: one row per pooled target, richest-first by
+  // how far above/below average you are (biggest gaps surface). ---
+  const rows = el(`<div class="in-scores-stand-rows"></div>`);
+  const ordered = ranked.slice().sort((a, b) => (a.gap_to_avg ?? 0) - (b.gap_to_avg ?? 0));
+  ordered.forEach(p => rows.appendChild(buildStandingRow(p)));
+  card.appendChild(rows);
+
+  appendPlatformFootnote(card, bt, overall, TYPE_LABEL);
   return card;
+}
+
+// One target's standing: rank, your score vs average, and a distribution
+// histogram with your bucket highlighted.
+function buildStandingRow(p) {
+  const val = Math.round(p.score_value);
+  const avg = p.community_avg != null ? Math.round(p.community_avg) : null;
+  const gap = p.gap_to_avg != null ? Math.round(p.gap_to_avg) : null;
+  const gapClass = gap == null ? "" : (gap > 0 ? "up" : (gap < 0 ? "down" : "even"));
+  const gapText = gap == null ? "" : (gap > 0 ? `+${gap} vs avg` : (gap < 0 ? `${gap} vs avg` : "at average"));
+  const typeLabel = esc(p.target_type.replace("_", " "));
+
+  // Distribution histogram. Scale bar heights to the fullest bucket; mark
+  // the bucket the viewer's own score falls in.
+  const hist = Array.isArray(p.histogram) ? p.histogram : [];
+  const maxBucket = hist.length ? Math.max(...hist, 1) : 1;
+  const myBucket = Math.min(9, Math.floor(Math.max(0, Math.min(100, val)) / 10));
+  const bars = hist.map((count, i) => {
+    const h = Math.round((count / maxBucket) * 100);
+    const mine = i === myBucket ? " mine" : "";
+    return `<span class="in-scores-hbar${mine}" style="height:${Math.max(count > 0 ? 8 : 2, h)}%" title="${count} in ${i * 10}-${i * 10 + 9}"></span>`;
+  }).join("");
+
+  const row = el(`
+    <div class="in-scores-stand">
+      <div class="in-scores-stand-top">
+        <div class="in-scores-stand-name">${esc(p.target_value)}<span class="in-scores-stand-type">${typeLabel}</span></div>
+        <div class="in-scores-stand-rank">#${p.rank}<span>of ${p.pool_size}</span></div>
+      </div>
+      <div class="in-scores-stand-nums">
+        <span class="in-scores-stand-you">You ${val}</span>
+        ${avg != null ? `<span class="in-scores-stand-avg">Avg ${avg}</span>` : ""}
+        ${gapText ? `<span class="in-scores-gap-pill ${gapClass}">${gapText}</span>` : ""}
+        ${(p.pool_min != null && p.pool_max != null) ? `<span class="in-scores-stand-range">Range ${Math.round(p.pool_min)}–${Math.round(p.pool_max)}</span>` : ""}
+      </div>
+      <div class="in-scores-hist" aria-hidden="true">${bars}</div>
+    </div>`);
+  return row;
+}
+
+// Platform-wide averages, demoted to a small footnote — broad context,
+// not the headline.
+function appendPlatformFootnote(card, bt, overall, TYPE_LABEL) {
+  const parts = ["job_title", "skill", "field"]
+    .filter(t => bt[t] && bt[t].samples)
+    .map(t => `${TYPE_LABEL[t].toLowerCase()} ${Math.round(bt[t].avg)}`);
+  if (!parts.length && overall.avg == null) return;
+  const foot = el(`<div class="in-scores-footnote"></div>`);
+  let text = "Platform-wide averages: ";
+  text += parts.length ? parts.join(", ") : "—";
+  if (overall.avg != null) text += ` · all scores ${Math.round(overall.avg)} (${overall.samples})`;
+  text += ". These blend every different target together, so they're broad context only.";
+  foot.textContent = text;
+  card.appendChild(foot);
 }
 
 // ---------------------------------------------------------------------

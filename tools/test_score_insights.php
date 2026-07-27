@@ -78,9 +78,25 @@ ok($daP && abs($daP['community_avg'] - 60.0) < 0.01, "Data Analyst community avg
 ok($daP && $daP['pool_size'] === 5, "Data Analyst pool_size is 5 (one per user, not 6)");
 // user3=60 vs others 40,50,70,80 -> meets/beats 40,50 = 2 of 4 = 50th pct
 ok($daP && $daP['percentile'] === 50, "user3 Data Analyst percentile 50 (got ".($daP['percentile']??'null').")");
+
+// Enriched per-target fields. Data Analyst pool = 40,50,60,70,80; user3=60.
+ok($daP && $daP['rank'] === 3, "user3 Data Analyst rank is 3 (two scores above 60)");
+ok($daP && abs($daP['gap_to_avg'] - 0.0) < 0.01, "user3 Data Analyst gap_to_avg is 0 (60 vs avg 60)");
+ok($daP && (int)$daP['pool_min'] === 40 && (int)$daP['pool_max'] === 80, "Data Analyst pool min/max are 40/80");
+ok($daP && is_array($daP['histogram']) && count($daP['histogram']) === 10, "histogram has 10 buckets");
+// 40->bucket4, 50->5, 60->6, 70->7, 80->8, one each
+if ($daP && is_array($daP['histogram'])) {
+    $h = $daP['histogram'];
+    ok($h[4]===1 && $h[5]===1 && $h[6]===1 && $h[7]===1 && $h[8]===1, "histogram places each score in the right bucket");
+    ok(array_sum($h) === 5, "histogram counts sum to the pool size (5)");
+}
+// Healthcare: user3=90, pool 30,60,90 -> rank 1, gap +30 (checked below
+// after $hcP is defined)
 $hcP = $byTarget['field|Healthcare'] ?? null;
 ok($hcP && abs($hcP['community_avg'] - 60.0) < 0.01, "Healthcare community avg is 60");
 ok($hcP && $hcP['percentile'] === 100, "user3 Healthcare (90) is top: percentile 100");
+ok($hcP && $hcP['rank'] === 1, "user3 Healthcare rank is 1 (top)");
+ok($hcP && abs($hcP['gap_to_avg'] - 30.0) < 0.01, "user3 Healthcare gap_to_avg is +30 (90 vs avg 60)");
 
 // --- personal_mean: (60+90)/2 = 75 ---
 ok(abs($d['personal_mean'] - 75.0) < 0.01, "personal_mean is 75");
