@@ -146,6 +146,17 @@ window.location.hash = "";
 daStanding.querySelector(".in-scores-hist").dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
 ok(window.location.hash.includes("score-history/"), "history button routes to score-history");
 ok(decodeURIComponent(window.location.hash).includes("job_title|Data Analyst"), "history route carries the target");
+// GUARD: the Region 2 "View history" button owns .in-scores-hist. The Region 3
+// distribution chart must NOT reuse that class, or the histogram's CSS
+// (56px flex box) lands on the button and wrecks it. jsdom can't see CSS,
+// so assert the class separation structurally instead.
+ok(daStanding.querySelector(".in-scores-hist").tagName === "BUTTON",
+   ".in-scores-hist is the history BUTTON in Region 2");
+const collisionProbe = S.buildStandingDetail(payload.personal[0]);
+ok(!collisionProbe.querySelector(".in-scores-hist"),
+   "Region 3 distribution chart does NOT reuse the button's .in-scores-hist class");
+ok(!!collisionProbe.querySelector(".in-scores-dist"),
+   "Region 3 distribution chart uses its own .in-scores-dist class");
 
 // ---- Region 3: where you stand (all-scores switcher) ---------------
 console.log("\nwhere you stand");
@@ -182,7 +193,7 @@ pythonChip.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
 const afterSwitch = stand.querySelector(".in-scores-stand-panel");
 ok(afterSwitch.textContent.includes("Python"), "clicking a chip swaps the detailed target");
 ok(/first to score/i.test(afterSwitch.textContent), "solo target shows an honest 'no pool yet' body, not a fake rank");
-ok(!afterSwitch.querySelector(".in-scores-hist"), "solo target renders no histogram (no pool to distribute)");
+ok(!afterSwitch.querySelector(".in-scores-dist"), "solo target renders no histogram (no pool to distribute)");
 // sanity: the active state actually moved
 ok(stand.querySelector(".in-scores-switch-btn.active").querySelector(".in-scores-switch-name").textContent === "Python",
    "active chip tracks the clicked target");
@@ -197,7 +208,7 @@ ok(bars.length === 10, "histogram renders 10 buckets");
 ok(daPanel.querySelector(".in-scores-hbar.mine"), "the viewer's own bucket is highlighted");
 ok(bars[0].tagName === "BUTTON", "bars are focusable buttons, not inert spans");
 // details strip seeds with the viewer's own bucket at rest.
-const strip = daPanel.querySelector(".in-scores-hist-detail");
+const strip = daPanel.querySelector(".in-scores-dist-detail");
 ok(!!strip, "a details strip sits under the chart");
 ok(/Your score/i.test(strip.textContent), "at rest the strip describes the viewer's own bucket");
 // Data Analyst histogram [0,0,0,0,1,1,1,1,1,0], pool 5. Hover bucket 4 (40–49): 1 person, 20%.
@@ -209,7 +220,7 @@ ok(/20% of pool/.test(strip.textContent), "strip shows the bucket share of the p
 bars[7].dispatchEvent(new window.MouseEvent("mouseenter", { bubbles: true }));
 ok(/70–79/.test(strip.textContent) && !/40–49/.test(strip.textContent), "strip tracks the hovered bucket");
 // leaving the chart resets to the viewer's own bucket.
-daPanel.querySelector(".in-scores-hist").dispatchEvent(new window.MouseEvent("mouseleave", { bubbles: true }));
+daPanel.querySelector(".in-scores-dist").dispatchEvent(new window.MouseEvent("mouseleave", { bubbles: true }));
 ok(/Your score/i.test(strip.textContent), "leaving the chart resets the strip to the viewer's bucket");
 
 // --- Cross-target gap banner drives the switcher --------------------
@@ -249,7 +260,7 @@ const soloOnly = { ...payload, personal: [payload.personal[2]] };
 const soloCard = S.buildAverages(soloOnly, soloOnly.personal);
 ok(soloCard.querySelectorAll(".in-scores-switch-btn").length === 1, "solo-only user still gets a switcher chip");
 ok(/first to score/i.test(soloCard.textContent), "solo-only target explains there's no pool yet");
-ok(!soloCard.querySelector(".in-scores-hist"), "no histogram when there's no pool");
+ok(!soloCard.querySelector(".in-scores-dist"), "no histogram when there's no pool");
 ok(!soloCard.querySelector(".in-scores-gap"), "no gap banner when nothing is pooled");
 
 // ---- Region 4: trending --------------------------------------------

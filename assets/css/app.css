@@ -120,7 +120,8 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
   padding:12px 14px; background:var(--in-bg); border-radius:10px; margin-bottom:14px;
 }
 .in-scores-compare strong { color:var(--in-accent); }
-.in-scores-standing-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.in-scores-standing-actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.in-scores-standing-actions .in-btn { flex:none; padding:8px 14px; height:auto; border-radius:8px; }
 
 /* Region 3 — where you stand (per-target standing + gap + distribution) */
 /* Biggest-gap callout */
@@ -186,7 +187,7 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 
 .in-scores-stand-panel { min-height:80px; }
 
-.in-scores-hist {
+.in-scores-dist {
   display:flex; align-items:flex-end; gap:3px; height:56px;
   padding:6px 4px; background:var(--in-bg); border:1px solid var(--in-line); border-radius:8px;
 }
@@ -202,11 +203,11 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 .in-scores-hbar.mine:hover, .in-scores-hbar.mine.hover, .in-scores-hbar.mine:focus-visible {
   background:linear-gradient(180deg,var(--in-accent),var(--in-accent-d));
 }
-.in-scores-hist-axis {
+.in-scores-dist-axis {
   display:flex; justify-content:space-between; margin-top:4px;
   font-size:10.5px; color:var(--in-muted); font-variant-numeric:tabular-nums;
 }
-.in-scores-hist-detail {
+.in-scores-dist-detail {
   display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-top:8px;
   font-size:12.5px; color:var(--in-ink-soft); min-height:18px;
 }

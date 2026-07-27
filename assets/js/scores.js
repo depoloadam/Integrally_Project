@@ -408,14 +408,14 @@ function buildStandingDetail(p) {
         ${gapText ? `<span class="in-scores-gap-pill ${gapClass}">${gapText}</span>` : ""}
         ${(p.pool_min != null && p.pool_max != null) ? `<span class="in-scores-stand-range">Range ${Math.round(p.pool_min)}–${Math.round(p.pool_max)}</span>` : ""}
       </div>
-      <div class="in-scores-hist">${bars}</div>
-      <div class="in-scores-hist-axis"><span>0</span><span>50</span><span>100</span></div>
-      <div class="in-scores-hist-detail" role="status" aria-live="polite"></div>
+      <div class="in-scores-dist">${bars}</div>
+      <div class="in-scores-dist-axis"><span>0</span><span>50</span><span>100</span></div>
+      <div class="in-scores-dist-detail" role="status" aria-live="polite"></div>
     </div>`);
 
   // --- Details strip. Reads the bucket under the pointer/focus; falls back
   // to the viewer's own bucket at rest so the strip is never blank. ---
-  const detail = row.querySelector(".in-scores-hist-detail");
+  const detail = row.querySelector(".in-scores-dist-detail");
   const barEls = Array.from(row.querySelectorAll(".in-scores-hbar"));
 
   const describe = (i) => {
@@ -443,7 +443,7 @@ function buildStandingDetail(p) {
     b.addEventListener("focus", () => show(i));
     b.addEventListener("click", () => show(i));   // tap on touch
   });
-  row.querySelector(".in-scores-hist").addEventListener("mouseleave", reset);
+  row.querySelector(".in-scores-dist").addEventListener("mouseleave", reset);
   reset();   // seed with your own bucket
 
   return row;
