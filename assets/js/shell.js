@@ -517,6 +517,9 @@ async function boot() {
     $("profile-menu").style.display = "";
     $("auth-menu").style.display = "none";
     if ($("search-trigger")) $("search-trigger").style.display = "inline-flex";
+    // Shown to members. When Plus ships, this is where a plan check would
+    // hide the upsell from existing subscribers.
+    setSubnav(true);
     document.querySelectorAll("[data-nav]").forEach(b => b.style.display = "");
     // The company-only Feed button stays hidden for users (they have their own).
     const coFeedBtn = document.querySelector('[data-nav="company-feed"]');
@@ -538,6 +541,7 @@ async function boot() {
     $("profile-menu").style.display = "none";
     $("auth-menu").style.display = "none";   // hide user sign in/up to avoid confusion
     if ($("search-trigger")) $("search-trigger").style.display = "inline-flex";
+    setSubnav(false);                        // Plus is a member offer, not a company one
     setupCompanyIdentityNav();               // company avatar + sign-out menu
     // Company sees: Feed, Jobs, Connect (to follow people/companies for
     // its Following feed), and its Company dashboard.
@@ -566,6 +570,7 @@ async function boot() {
     $("profile-menu").style.display = "none";
     $("auth-menu").style.display = "";
     if ($("search-trigger")) $("search-trigger").style.display = "none";
+    setSubnav(true);                         // upsell is visible to visitors too
     if (typeof hideNotifications === "function") hideNotifications();
     if (typeof hideMessaging === "function") hideMessaging();
     renderSignedOut();
@@ -766,6 +771,34 @@ document.querySelectorAll("[data-nav]").forEach(b => {
     else showTab(b.dataset.nav);
   };
 });
+
+// ---- secondary nav ---------------------------------------------------
+// Toggling the class (not an inline display) is deliberate: app.css keys
+// both the bar's visibility and --in-subnav-h off html.has-subnav, so the
+// sticky search bar below re-offsets itself in the same step. Setting
+// display directly here would show the bar but leave the offset stale.
+function setSubnav(show) {
+  document.documentElement.classList.toggle("has-subnav", !!show);
+}
+
+// Delegated so items added to the bar later work without new wiring.
+const subnavInner = $("subnav-inner");
+if (subnavInner) {
+  subnavInner.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-subnav]");
+    if (!btn || !subnavInner.contains(btn)) return;
+    switch (btn.dataset.subnav) {
+      case "plus":
+        // Plus payments aren't built yet; the CTA acknowledges rather than
+        // routing to a dead page. Replace with the real route when the
+        // Plus cluster ships.
+        toast("PLUS is coming soon — we'll let you know when it's ready.");
+        break;
+      default:
+        break;
+    }
+  });
+}
 
 // ---- clickable logo -> home (feed) -----------------------------------
 const brandHome = $("brand-home");

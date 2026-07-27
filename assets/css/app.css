@@ -8,14 +8,27 @@
   --in-accent:#0d9488; --in-accent-d:#0b7a70; --in-teal-bright:#14b8a6;
   --in-error:#c0392b; --in-success:#0a8a5f;
   --in-font:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  /* Shell bar heights. Anything that sticks below the nav must offset by
+     these, never by a literal px value — the sub-nav is conditional, so the
+     total header height changes at runtime. --in-subnav-h is 0 by default
+     and only becomes non-zero when html carries .has-subnav (set in
+     shell.js). That keeps the searchbar flush in both states. */
+  --in-nav-h:58px; --in-subnav-h:0px;
+  /* Total sticky header. Sticky page furniture (profile rail, feed rail,
+     settings nav) offsets by this + a 20px gutter. */
+  --in-header-h:calc(var(--in-nav-h) + var(--in-subnav-h));
+  --in-sticky-top:calc(var(--in-header-h) + 20px);
 }
+/* Sub-nav present (see setSubnav() in shell.js). Raising the header height
+   here automatically pushes every sticky descendant down. */
+html.has-subnav { --in-subnav-h:38px; }
 * { box-sizing:border-box; }
 html { height:100%; scrollbar-gutter:stable; overflow-y:scroll; }
 body { margin:0; min-height:100%; display:flex; flex-direction:column; font-family:var(--in-font); background:var(--in-bg); color:var(--in-ink); -webkit-font-smoothing:antialiased; }
 
 /* ---------- top nav (shell) ---------- */
 .in-nav { background:var(--in-card); border-bottom:1px solid var(--in-line); position:sticky; top:0; z-index:50; flex:none; }
-.in-nav-inner { max-width:980px; margin:0 auto; padding:0 20px; height:58px; display:flex; align-items:center; gap:24px; }
+.in-nav-inner { max-width:980px; margin:0 auto; padding:0 20px; height:var(--in-nav-h); display:flex; align-items:center; gap:24px; }
 .in-brand { display:flex; align-items:center; gap:10px; font-weight:700; font-size:18px; letter-spacing:-0.3px; cursor:pointer; user-select:none; }
 .in-brand:hover { opacity:.85; }
 .in-mark {
@@ -32,6 +45,50 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 .in-nav-links button.active { color:var(--in-accent); }
 .in-nav-right { margin-left:auto; display:flex; align-items:center; gap:12px; }
 .in-nav-user { font-size:13px; color:var(--in-muted); }
+
+/* ---------- secondary nav (shell) ----------
+   A shorter bar sitting directly beneath the main nav, for links that
+   aren't primary routes. Hidden by default; shell.js reveals it via
+   html.has-subnav so the height var and the bar flip together.
+
+   Items are <button data-subnav="key"> and share .in-subnav-btn for
+   geometry (padding, radius, font). Appearance is a separate modifier so
+   items can look different from one another without fighting each other:
+     (no modifier)  quiet text link, matches .in-nav-links
+     .accent        filled teal call-to-action  (Try PLUS)
+     .outline       bordered, lighter weight than .accent
+   Add new looks as further modifiers rather than overriding .in-subnav-btn,
+   so shared geometry stays in one place.
+   .push-right on an item moves it (and everything after it) to the right. */
+.in-subnav {
+  display:none;
+  background:var(--in-card); border-bottom:1px solid var(--in-line);
+  position:sticky; top:var(--in-nav-h); z-index:49; flex:none;
+}
+html.has-subnav .in-subnav { display:block; }
+.in-subnav-inner {
+  max-width:980px; margin:0 auto; padding:0 20px; height:var(--in-subnav-h);
+  display:flex; align-items:center; gap:8px;
+  overflow-x:auto; overflow-y:hidden;
+  scrollbar-width:none;                 /* narrow screens scroll, no rail */
+}
+.in-subnav-inner::-webkit-scrollbar { display:none; }
+.in-subnav-btn {
+  flex:none; font-family:inherit; font-size:13px; font-weight:600;
+  border:1px solid transparent; border-radius:7px;
+  padding:5px 11px; cursor:pointer; line-height:1.2; white-space:nowrap;
+  background:none; color:var(--in-muted);
+}
+.in-subnav-btn:hover { background:var(--in-bg); color:var(--in-ink); }
+.in-subnav-btn.push-right { margin-left:auto; }
+/* filled call-to-action */
+.in-subnav-btn.accent {
+  background:var(--in-accent); border-color:var(--in-accent); color:#fff;
+}
+.in-subnav-btn.accent:hover { background:var(--in-accent-d); border-color:var(--in-accent-d); color:#fff; }
+/* bordered, quieter than .accent */
+.in-subnav-btn.outline { border-color:var(--in-line); color:var(--in-ink-soft); }
+.in-subnav-btn.outline:hover { border-color:var(--in-muted); background:var(--in-bg); color:var(--in-ink); }
 
 /* profile dropdown menu */
 .in-profile-menu { position:relative; }
@@ -242,8 +299,8 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 /* profile two-column layout */
 .in-profile-grid { display:grid; grid-template-columns:240px 1fr; gap:18px; align-items:start; }
 .in-col-left {
-  position:sticky; top:78px;
-  max-height:calc(100vh - 78px - 16px);
+  position:sticky; top:var(--in-sticky-top);
+  max-height:calc(100vh - var(--in-sticky-top) - 16px);
   overflow-y:auto; overscroll-behavior:contain;
   scrollbar-width:thin;
   padding-right:2px;
@@ -656,7 +713,7 @@ html:hover { scrollbar-color:rgba(11,31,42,.24) transparent; }
 
 /* ---------- settings page ---------- */
 .in-settings { display:grid; grid-template-columns:200px 1fr; gap:20px; align-items:start; }
-.in-set-nav { display:flex; flex-direction:column; gap:4px; position:sticky; top:78px; }
+.in-set-nav { display:flex; flex-direction:column; gap:4px; position:sticky; top:var(--in-sticky-top); }
 .in-set-nav button {
   text-align:left; background:none; border:none; font-family:inherit; font-size:14px; font-weight:600;
   color:var(--in-ink-soft); padding:10px 14px; border-radius:8px; cursor:pointer;
@@ -1381,7 +1438,9 @@ textarea.jf-input { resize:vertical; }
 
 /* ---------- search drop-down bar (compact) ---------- */
 .in-searchbar {
-  position:sticky; top:58px; z-index:49;
+  /* Offsets by the full header, not the nav alone: --in-subnav-h is 0 when
+     the sub-nav is absent, so this stays flush in both states. */
+  position:sticky; top:var(--in-header-h); z-index:48;
   background:var(--in-card); border-bottom:1px solid var(--in-line);
   max-height:0; overflow:hidden; opacity:0;
   transition:max-height .2s ease, opacity .16s ease;
@@ -1959,8 +2018,8 @@ html.in-reduce-motion *::after {
    stops the page lurching when the rail hits its end, and the gutter
    reserves scrollbar space so content doesn't shift when it appears. */
 .feed-rail-right {
-  position:sticky; top:78px;
-  max-height:calc(100vh - 78px - 16px);
+  position:sticky; top:var(--in-sticky-top);
+  max-height:calc(100vh - var(--in-sticky-top) - 16px);
   overflow-y:auto; overscroll-behavior:contain;
   scrollbar-width:thin;
   padding-right:2px;

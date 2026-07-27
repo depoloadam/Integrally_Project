@@ -30,8 +30,8 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="assets/css/app.css?v=31">
-  <link rel="stylesheet" href="assets/css/pro.css?v=7">
+  <link rel="stylesheet" href="assets/css/app.css?v=32">
+  <link rel="stylesheet" href="assets/css/pro.css?v=8">
 </head>
 <body>
 
@@ -110,6 +110,18 @@
   </div>
 </nav>
 
+<!-- ===================== SHELL: SUB-NAV =====================
+     Secondary bar under the main nav. Visibility is controlled by
+     setSubnav() in shell.js (html.has-subnav), not by an inline style,
+     because the CSS height var must flip with it. Items carry
+     data-subnav="key" and are dispatched by the delegated handler in
+     shell.js; see .in-subnav-btn in app.css for the style modifiers. -->
+<div class="in-subnav" id="subnav">
+  <div class="in-subnav-inner" id="subnav-inner">
+    <button class="in-subnav-btn accent" data-subnav="plus">Try PLUS</button>
+  </div>
+</div>
+
 <!-- search drop-down bar (revealed by the nav search icon) -->
 <div class="in-searchbar" id="searchbar" aria-hidden="true">
   <div class="in-searchbar-inner">
@@ -151,7 +163,7 @@
 <script src="assets/js/jobs-catalog.js?v=3"></script>
 <script src="assets/js/education-catalog.js"></script>
 <script src="assets/js/certs-catalog.js?v=1"></script>
-<script src="assets/js/shell.js?v=11"></script>
+<script src="assets/js/shell.js?v=12"></script>
 <script src="assets/js/profile.js?v=26"></script>
 <script src="assets/js/feed.js?v=20"></script>
 <script src="assets/js/admin.js?v=5"></script>
