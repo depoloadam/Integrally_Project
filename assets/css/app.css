@@ -138,10 +138,7 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 .in-scores-gap-body strong { color:var(--in-ink); }
 .in-scores-gap-btn { margin-top:10px; }
 
-/* Per-target standing rows */
-.in-scores-stand-rows { display:flex; flex-direction:column; gap:16px; }
-.in-scores-stand { padding-top:14px; border-top:1px solid var(--in-line); }
-.in-scores-stand-rows > .in-scores-stand:first-child { padding-top:0; border-top:none; }
+/* One target's standing, shown one at a time inside .in-scores-stand-panel */
 .in-scores-stand-top { display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin-bottom:7px; }
 .in-scores-stand-name { font-size:15px; font-weight:700; color:var(--in-ink); min-width:0; }
 .in-scores-stand-type { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.4px; color:var(--in-muted); margin-left:8px; }
@@ -159,12 +156,67 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 .in-scores-gap-pill.even { color:var(--in-muted); }
 
 /* Distribution histogram */
+/* Switcher across all scored targets — pooled first, solo after. Mirrors
+   the Region 2 tab strip but carries rank/solo context on each chip. */
+.in-scores-switch {
+  display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; margin-bottom:16px;
+  scrollbar-width:none;
+}
+.in-scores-switch::-webkit-scrollbar { display:none; }
+.in-scores-switch-btn {
+  display:inline-flex; align-items:center; gap:7px; flex:none;
+  border:1px solid var(--in-line); border-radius:999px; background:var(--in-bg);
+  padding:6px 12px 6px 7px; cursor:pointer; font-family:inherit; color:var(--in-ink-soft);
+  transition:border-color .12s, background .12s, color .12s;
+}
+.in-scores-switch-btn:hover { border-color:var(--in-muted); }
+.in-scores-switch-btn.active { border-color:var(--in-accent); background:var(--in-card); color:var(--in-ink); }
+.in-scores-switch-badge {
+  width:26px; height:26px; border-radius:7px; flex:none; display:grid; place-items:center;
+  font-size:12px; font-weight:800; color:#fff;
+  background:linear-gradient(135deg,var(--in-accent),var(--in-teal-bright));
+}
+.in-scores-switch-name { font-size:13px; font-weight:600; white-space:nowrap; }
+.in-scores-switch-rank { font-size:11px; font-weight:700; color:var(--in-muted); letter-spacing:.2px; }
+.in-scores-switch-solo {
+  font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.5px;
+  color:var(--in-muted); border:1px solid var(--in-line); border-radius:4px; padding:1px 5px;
+}
+.in-scores-switch-btn.active .in-scores-switch-rank { color:var(--in-ink-soft); }
+
+.in-scores-stand-panel { min-height:80px; }
+
 .in-scores-hist {
-  display:flex; align-items:flex-end; gap:3px; height:40px;
+  display:flex; align-items:flex-end; gap:3px; height:56px;
   padding:6px 4px; background:var(--in-bg); border:1px solid var(--in-line); border-radius:8px;
 }
-.in-scores-hbar { flex:1; min-height:2px; border-radius:2px 2px 0 0; background:var(--in-line); transition:background .15s; }
+.in-scores-hbar {
+  flex:1; min-height:2px; border:none; border-radius:2px 2px 0 0; padding:0;
+  background:var(--in-line); cursor:pointer; font:inherit;
+  transition:background .15s, opacity .15s, transform .1s;
+}
+.in-scores-hbar:hover, .in-scores-hbar.hover, .in-scores-hbar:focus-visible {
+  background:var(--in-muted); outline:none; transform:scaleY(1.02); transform-origin:bottom;
+}
 .in-scores-hbar.mine { background:linear-gradient(180deg,var(--in-teal-bright),var(--in-accent)); }
+.in-scores-hbar.mine:hover, .in-scores-hbar.mine.hover, .in-scores-hbar.mine:focus-visible {
+  background:linear-gradient(180deg,var(--in-accent),var(--in-accent-d));
+}
+.in-scores-hist-axis {
+  display:flex; justify-content:space-between; margin-top:4px;
+  font-size:10.5px; color:var(--in-muted); font-variant-numeric:tabular-nums;
+}
+.in-scores-hist-detail {
+  display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-top:8px;
+  font-size:12.5px; color:var(--in-ink-soft); min-height:18px;
+}
+.in-scores-hd-range { font-weight:800; color:var(--in-ink); font-variant-numeric:tabular-nums; }
+.in-scores-hd-count { font-weight:600; }
+.in-scores-hd-pct { color:var(--in-muted); }
+.in-scores-hd-mine {
+  font-weight:700; color:var(--in-accent);
+  border:1px solid #9fd9c0; border-radius:999px; padding:1px 9px; font-size:11.5px;
+}
 
 /* Platform footnote — quiet, small, clearly secondary */
 .in-scores-footnote {

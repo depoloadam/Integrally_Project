@@ -24,6 +24,8 @@
 // =====================================================================
 
 let SCORES_STATE = { activeTarget: null };   // "type|value" of open tab
+let STAND_STATE = { target: null };          // "type|value" open in "Where you stand"
+let paintStanding = () => {};                // rebound per render; lets the gap banner drive the switcher
 let SCORES_CACHE = null;                     // last insights payload
 
 async function renderScores() {
@@ -254,79 +256,144 @@ function buildAverages(data, personal) {
       <div class="in-empty" style="font-style:normal;margin:-8px 0 14px">How each of your scores compares to everyone scored against the same thing — not the platform as a whole.</div>
     </div>`);
 
-  // Only targets with a real comparison pool (more than just you) can show
-  // a standing. Separate them from solo ones so we don't imply a ranking
-  // that doesn't exist.
-  const ranked = personal.filter(p => (p.pool_size || 0) > 1 && p.rank != null);
-
-  if (!ranked.length) {
+  if (!personal.length) {
     card.appendChild(el(`
       <div class="in-empty" style="font-style:normal">
-        No one else has scored against your targets yet, so there's nothing to compare against.
-        As others score against the same titles and fields, your standing shows up here.
+        Nothing scored yet — score yourself against a title, skill, or field to see where you stand.
       </div>`));
     appendPlatformFootnote(card, bt, overall, TYPE_LABEL);
     return card;
   }
 
-  // --- "Biggest gap to close": the target where you're furthest BELOW the
-  // pool average. Only surfaces if you're actually behind on something. ---
-  const behind = ranked.filter(p => p.gap_to_avg != null && p.gap_to_avg < 0);
-  if (behind.length) {
-    const worst = behind.reduce((w, p) => (p.gap_to_avg < w.gap_to_avg ? p : w), behind[0]);
-    const gap = Math.abs(Math.round(worst.gap_to_avg));
-    card.appendChild(el(`
-      <div class="in-scores-gap">
-        <div class="in-scores-gap-tag">Biggest gap to close</div>
-        <div class="in-scores-gap-body">
-          Your <strong>${esc(worst.target_value)}</strong> score is <strong>${gap}</strong> below the average of the ${worst.pool_size} people scored against it.
-          Closing this gap is where you'll move the most.
-        </div>
-        <button class="in-btn ghost in-scores-gap-btn" style="flex:none;padding:7px 13px">Improve this score →</button>
-      </div>`));
-    card.querySelector(".in-scores-gap-btn").onclick = () => { location.hash = "profile"; };
-  } else {
-    // Nothing below average — lead with the strongest standing instead.
-    const best = ranked.reduce((b, p) => (p.rank < b.rank ? p : b), ranked[0]);
-    card.appendChild(el(`
-      <div class="in-scores-gap in-scores-gap-positive">
-        <div class="in-scores-gap-tag">Your standing</div>
-        <div class="in-scores-gap-body">
-          You're at or above average on every target with a pool. Strongest: <strong>${esc(best.target_value)}</strong>, ranked <strong>#${best.rank}</strong> of ${best.pool_size}.
-        </div>
-      </div>`));
+  // Targets WITH a real comparison pool (more than just you) can show a
+  // ranked standing. Solo targets still appear in the switcher, but render
+  // an honest "no pool yet" body rather than implying a ranking.
+  const ranked = personal.filter(p => (p.pool_size || 0) > 1 && p.rank != null);
+
+  // --- Cross-target "Biggest gap to close" banner. Scans ALL pooled
+  // targets (independent of which tab is open) so the one most worth acting
+  // on is always surfaced; clicking jumps the switcher to that target. ---
+  if (ranked.length) {
+    const behind = ranked.filter(p => p.gap_to_avg != null && p.gap_to_avg < 0);
+    if (behind.length) {
+      const worst = behind.reduce((w, p) => (p.gap_to_avg < w.gap_to_avg ? p : w), behind[0]);
+      const gap = Math.abs(Math.round(worst.gap_to_avg));
+      const banner = el(`
+        <div class="in-scores-gap">
+          <div class="in-scores-gap-tag">Biggest gap to close</div>
+          <div class="in-scores-gap-body">
+            Your <strong>${esc(worst.target_value)}</strong> score is <strong>${gap}</strong> below the average of the ${worst.pool_size} people scored against it.
+            Closing this gap is where you'll move the most.
+          </div>
+          <button class="in-btn ghost in-scores-gap-btn" style="flex:none;padding:7px 13px">See where you stand →</button>
+        </div>`);
+      // Jump the switcher to that target rather than bouncing to profile.
+      banner.querySelector(".in-scores-gap-btn").onclick = () => {
+        STAND_STATE.target = worst.target_type + "|" + worst.target_value;
+        paintStanding();
+      };
+      card.appendChild(banner);
+    } else {
+      const best = ranked.reduce((b, p) => (p.rank < b.rank ? p : b), ranked[0]);
+      card.appendChild(el(`
+        <div class="in-scores-gap in-scores-gap-positive">
+          <div class="in-scores-gap-tag">Your standing</div>
+          <div class="in-scores-gap-body">
+            You're at or above average on every target with a pool. Strongest: <strong>${esc(best.target_value)}</strong>, ranked <strong>#${best.rank}</strong> of ${best.pool_size}.
+          </div>
+        </div>`));
+    }
   }
 
-  // --- Per-target standing: one row per pooled target, richest-first by
-  // how far above/below average you are (biggest gaps surface). ---
-  const rows = el(`<div class="in-scores-stand-rows"></div>`);
-  const ordered = ranked.slice().sort((a, b) => (a.gap_to_avg ?? 0) - (b.gap_to_avg ?? 0));
-  ordered.forEach(p => rows.appendChild(buildStandingRow(p)));
-  card.appendChild(rows);
+  // --- Switcher across ALL scored targets. Pooled targets sort first
+  // (biggest gap first, the most actionable), solo targets after. ---
+  const keyOf = p => p.target_type + "|" + p.target_value;
+  const ordered = personal.slice().sort((a, b) => {
+    const ap = (a.pool_size || 0) > 1, bp = (b.pool_size || 0) > 1;
+    if (ap !== bp) return ap ? -1 : 1;          // pooled before solo
+    if (ap && bp) return (a.gap_to_avg ?? 0) - (b.gap_to_avg ?? 0);
+    return b.score_value - a.score_value;        // solo: strongest first
+  });
+
+  if (!STAND_STATE.target || !personal.some(p => keyOf(p) === STAND_STATE.target)) {
+    STAND_STATE.target = keyOf(ordered[0]);
+  }
+
+  const switcher = el(`<div class="in-scores-switch" role="tablist"></div>`);
+  ordered.forEach(p => {
+    const pooled = (p.pool_size || 0) > 1 && p.rank != null;
+    const b = el(`
+      <button class="in-scores-switch-btn" role="tab" data-target="${esc(keyOf(p))}">
+        <span class="in-scores-switch-badge">${Math.round(p.score_value)}</span>
+        <span class="in-scores-switch-name">${esc(p.target_value)}</span>
+        ${pooled ? `<span class="in-scores-switch-rank">#${p.rank}/${p.pool_size}</span>` : `<span class="in-scores-switch-solo">solo</span>`}
+      </button>`);
+    switcher.appendChild(b);
+  });
+  card.appendChild(switcher);
+
+  const panel = el(`<div class="in-scores-stand-panel"></div>`);
+  card.appendChild(panel);
+
+  // paintStanding is hoisted onto the outer scope so the gap banner (and any
+  // future entry point) can drive the switcher. Rebound each render.
+  paintStanding = () => {
+    switcher.querySelectorAll(".in-scores-switch-btn").forEach(b =>
+      b.classList.toggle("active", b.dataset.target === STAND_STATE.target));
+    const p = personal.find(x => keyOf(x) === STAND_STATE.target) || ordered[0];
+    panel.innerHTML = "";
+    panel.appendChild(buildStandingDetail(p));
+    // Keep the active chip in view when jumped programmatically.
+    const active = switcher.querySelector(".in-scores-switch-btn.active");
+    if (active && active.scrollIntoView) active.scrollIntoView({ block: "nearest", inline: "nearest" });
+  };
+  switcher.querySelectorAll(".in-scores-switch-btn").forEach(b => {
+    b.onclick = () => { STAND_STATE.target = b.dataset.target; paintStanding(); };
+  });
+  paintStanding();
 
   appendPlatformFootnote(card, bt, overall, TYPE_LABEL);
   return card;
 }
 
-// One target's standing: rank, your score vs average, and a distribution
-// histogram with your bucket highlighted.
-function buildStandingRow(p) {
+// One target's standing, shown one at a time via the switcher: rank, your
+// score vs average, and an INTERACTIVE distribution histogram — hover or tap
+// a bar to read that bucket's detail in a strip beneath the chart.
+function buildStandingDetail(p) {
   const val = Math.round(p.score_value);
+  const typeLabel = esc(p.target_type.replace("_", " "));
+  const pooled = (p.pool_size || 0) > 1 && p.rank != null;
+
+  // --- Solo target: no comparison pool yet. Honest empty state instead of
+  // a fabricated ranking. Still names the target so the switch reads right.
+  if (!pooled) {
+    return el(`
+      <div class="in-scores-stand">
+        <div class="in-scores-stand-top">
+          <div class="in-scores-stand-name">${esc(p.target_value)}<span class="in-scores-stand-type">${typeLabel}</span></div>
+          <div class="in-scores-stand-you" style="font-size:20px">${val}</div>
+        </div>
+        <div class="in-empty" style="font-style:normal;margin-top:6px">
+          You're the first to score against this. As others do, your rank, the pool average, and the distribution will appear here.
+        </div>
+      </div>`);
+  }
+
   const avg = p.community_avg != null ? Math.round(p.community_avg) : null;
   const gap = p.gap_to_avg != null ? Math.round(p.gap_to_avg) : null;
   const gapClass = gap == null ? "" : (gap > 0 ? "up" : (gap < 0 ? "down" : "even"));
   const gapText = gap == null ? "" : (gap > 0 ? `+${gap} vs avg` : (gap < 0 ? `${gap} vs avg` : "at average"));
-  const typeLabel = esc(p.target_type.replace("_", " "));
 
   // Distribution histogram. Scale bar heights to the fullest bucket; mark
   // the bucket the viewer's own score falls in.
   const hist = Array.isArray(p.histogram) ? p.histogram : [];
   const maxBucket = hist.length ? Math.max(...hist, 1) : 1;
+  const poolTotal = hist.reduce((a, b) => a + b, 0);
   const myBucket = Math.min(9, Math.floor(Math.max(0, Math.min(100, val)) / 10));
   const bars = hist.map((count, i) => {
     const h = Math.round((count / maxBucket) * 100);
     const mine = i === myBucket ? " mine" : "";
-    return `<span class="in-scores-hbar${mine}" style="height:${Math.max(count > 0 ? 8 : 2, h)}%" title="${count} in ${i * 10}-${i * 10 + 9}"></span>`;
+    return `<button type="button" class="in-scores-hbar${mine}" data-bucket="${i}" style="height:${Math.max(count > 0 ? 8 : 2, h)}%" aria-label="Scores ${i * 10}–${i * 10 + 9}: ${count}"></button>`;
   }).join("");
 
   const row = el(`
@@ -341,8 +408,44 @@ function buildStandingRow(p) {
         ${gapText ? `<span class="in-scores-gap-pill ${gapClass}">${gapText}</span>` : ""}
         ${(p.pool_min != null && p.pool_max != null) ? `<span class="in-scores-stand-range">Range ${Math.round(p.pool_min)}–${Math.round(p.pool_max)}</span>` : ""}
       </div>
-      <div class="in-scores-hist" aria-hidden="true">${bars}</div>
+      <div class="in-scores-hist">${bars}</div>
+      <div class="in-scores-hist-axis"><span>0</span><span>50</span><span>100</span></div>
+      <div class="in-scores-hist-detail" role="status" aria-live="polite"></div>
     </div>`);
+
+  // --- Details strip. Reads the bucket under the pointer/focus; falls back
+  // to the viewer's own bucket at rest so the strip is never blank. ---
+  const detail = row.querySelector(".in-scores-hist-detail");
+  const barEls = Array.from(row.querySelectorAll(".in-scores-hbar"));
+
+  const describe = (i) => {
+    const count = hist[i] || 0;
+    const lo = i * 10, hi = i === 9 ? 100 : i * 10 + 9;
+    const pct = poolTotal ? Math.round((count / poolTotal) * 100) : 0;
+    const mine = i === myBucket;
+    const who = count === 1 ? "person" : "people";
+    return `
+      <span class="in-scores-hd-range">${lo}–${hi}</span>
+      <span class="in-scores-hd-count">${count} ${who}</span>
+      <span class="in-scores-hd-pct">${pct}% of pool</span>
+      ${mine ? `<span class="in-scores-hd-mine">Your score (${val})</span>` : ""}`;
+  };
+  const show = (i) => {
+    detail.innerHTML = describe(i);
+    barEls.forEach((b, j) => b.classList.toggle("hover", j === i));
+  };
+  const reset = () => {
+    detail.innerHTML = describe(myBucket);
+    barEls.forEach(b => b.classList.remove("hover"));
+  };
+  barEls.forEach((b, i) => {
+    b.addEventListener("mouseenter", () => show(i));
+    b.addEventListener("focus", () => show(i));
+    b.addEventListener("click", () => show(i));   // tap on touch
+  });
+  row.querySelector(".in-scores-hist").addEventListener("mouseleave", reset);
+  reset();   // seed with your own bucket
+
   return row;
 }
 
