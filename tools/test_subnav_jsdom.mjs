@@ -309,9 +309,13 @@ ok(20 * parseFloat(btnLh) + padY * 2 + borderY * 2 > px(subH1), "fit check rejec
 console.log("\nbar surface is flat, gradient is on the button");
 // The gradient belongs to the CTA, not the bar. A gradient on both makes
 // the button disappear into the surface.
-const subBg = declValue(".in-subnav", "background");
-ok(subBg === "var(--in-subnav-bg)", "sub-nav background is a single themed var");
-ok(!/gradient/.test(subBg || ""), "sub-nav background is NOT a gradient");
+// The rule has two background lines: a literal fallback then the var
+// form. Assert the var form is present (declValue only sees the first),
+// and that neither is a gradient.
+const subFullBlock = /\.in-subnav\s*\{([^}]*)\}/.exec(css)[1];
+ok(/background:\s*var\(--in-subnav-bg(,\s*#[0-9a-fA-F]{3,6})?\)/.test(subFullBlock),
+   "sub-nav background is the themed var (with optional literal fallback)");
+ok(!/gradient/.test(subFullBlock), "sub-nav background is NOT a gradient");
 
 const goldBg = declValue(".in-subnav-btn.gold", "background");
 ok(/^linear-gradient\(/.test(goldBg || ""), "gold button background IS a gradient");
@@ -368,14 +372,22 @@ for (const [theme, sel] of [["light", ":root"], ["dark", '[data-theme="dark"]']]
 console.log("\ntheming");
 // Dark mode is pure var overrides, so the bar must not hardcode colours.
 const subBlock = /\.in-subnav\s*\{([^}]*)\}/.exec(css)[1];
-ok(/background:var\(--in-subnav-bg\)/.test(subBlock)
+ok(/background:var\(--in-subnav-bg(,\s*#[0-9a-fA-F]{3,6})?\)/.test(subBlock)
    && /border-bottom:1px solid var\(--in-line\)/.test(subBlock),
    "sub-nav surface and border are var-driven (inherits dark mode)");
-ok(!/#[0-9a-fA-F]{3,6}/.test(subBlock), "no raw hex in the .in-subnav surface rule");
-const hexes = (css.match(/\.in-subnav[^{]*\{[^}]*\}/g) || []).join("")
-  .match(/#[0-9a-fA-F]{3,6}/g) || [];
+// The only permitted hex in the surface rule is the fallback literal(s)
+// inside var(..., #hex) — a stale-deploy safety net. Strip those, then
+// assert nothing else hardcodes a colour.
+const subBlockNoFallback = subBlock.replace(/var\([^)]*#[0-9a-fA-F]{3,6}\)/g, "var()").replace(/^\s*background:#[0-9a-fA-F]{3,6};\s*$/gm, "");
+ok(!/#[0-9a-fA-F]{3,6}/.test(subBlockNoFallback), "no raw hex in the .in-subnav surface rule beyond the var fallback");
+const subRules = (css.match(/\.in-subnav[^{]*\{[^}]*\}/g) || []).join("")
+  // strip intentional fallback literals: var(..., #hex) and the paired
+  // `background:#hex;` safety line that precedes the var form.
+  .replace(/var\([^)]*#[0-9a-fA-F]{3,6}\)/g, "var()")
+  .replace(/background:#[0-9a-fA-F]{3,6};/g, "");
+const hexes = subRules.match(/#[0-9a-fA-F]{3,6}/g) || [];
 ok(hexes.every(h => h.toLowerCase() === "#fff"),
-   "no unthemed hex colours besides #fff on the accent label");
+   "no unthemed hex colours besides #fff on the accent label (fallbacks exempt)");
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

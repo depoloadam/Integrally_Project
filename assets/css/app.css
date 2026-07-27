@@ -179,7 +179,11 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
    .push-right on an item moves it (and everything after it) to the right. */
 .in-subnav {
   display:none;
-  background:var(--in-subnav-bg);
+  /* Fallback literal matches --in-subnav-bg. Belt-and-suspenders: if a
+     stale deploy is missing the variable, the bar still shows its teal
+     instead of going transparent. */
+  background:#dcefed;
+  background:var(--in-subnav-bg, #dcefed);
   border-bottom:1px solid var(--in-line);
   position:sticky; top:var(--in-nav-h); z-index:49; flex:none;
 }
@@ -198,7 +202,7 @@ html.has-subnav .in-subnav { display:block; }
   padding:3px 10px; cursor:pointer; line-height:1.2; white-space:nowrap;
   background:none; color:var(--in-ink-soft);
 }
-.in-subnav-btn:hover { background:var(--in-subnav-hover); color:var(--in-ink); }
+.in-subnav-btn:hover { background:var(--in-subnav-hover, #c2e1dd); color:var(--in-ink); }
 /* Pushes an item (and everything after it) to the right. Not tied to
    .in-subnav-btn, so the search pill can use it too. */
 .in-subnav .push-right { margin-left:auto; }
