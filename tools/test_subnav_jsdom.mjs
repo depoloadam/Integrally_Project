@@ -317,6 +317,24 @@ ok(/background:\s*var\(--in-subnav-bg(,\s*#[0-9a-fA-F]{3,6})?\)/.test(subFullBlo
    "sub-nav background is the themed var (with optional literal fallback)");
 ok(!/gradient/.test(subFullBlock), "sub-nav background is NOT a gradient");
 
+// STRUCTURAL: the .in-subnav rule must live at the top level, not nested
+// inside an @media block. A broken comment once swallowed the whole
+// secondary-nav section into a max-width media query, so the bar only
+// rendered on narrow screens. This asserts the rule applies unconditionally.
+{
+  const noComments = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  ok(css.split("/*").length === css.split("*/").length, "CSS comment markers are balanced (no orphaned /* or */)");
+  const idx = noComments.indexOf(".in-subnav {");
+  ok(idx > -1, "found .in-subnav rule after stripping comments");
+  const before = noComments.slice(0, idx);
+  const depth = (before.match(/\{/g) || []).length - (before.match(/\}/g) || []).length;
+  ok(depth === 0, "the .in-subnav rule is top-level, not trapped inside an @media block (depth " + depth + ")");
+  // teeth: prove the depth check would catch nesting.
+  const faux = "@media(max-width:1px){ .x{} " + noComments.slice(idx);
+  const fbefore = faux.slice(0, faux.indexOf(".in-subnav {"));
+  ok(((fbefore.match(/\{/g) || []).length - (fbefore.match(/\}/g) || []).length) > 0, "depth check rejects a nested rule");
+}
+
 const goldBg = declValue(".in-subnav-btn.gold", "background");
 ok(/^linear-gradient\(/.test(goldBg || ""), "gold button background IS a gradient");
 ok(/var\(--in-gold\)/.test(goldBg) && /var\(--in-gold-lt\)/.test(goldBg),
