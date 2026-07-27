@@ -288,6 +288,13 @@ ok(/var\(--in-subnav-g1\)/.test(subBg) && /var\(--in-subnav-g2\)/.test(subBg),
 for (const [theme, sel] of [["light", ":root"], ["dark", '[data-theme="dark"]']]) {
   const g1 = declValue(sel, "--in-subnav-g1"), g2 = declValue(sel, "--in-subnav-g2");
   ok(!!g1 && !!g2, theme + ": gradient stops defined");
+  // Amplitude: the stops must actually differ enough to read as a
+  // gradient. Contrast ratio rather than raw luminance delta, so the
+  // threshold means the same thing on light and dark surfaces.
+  const amp = ratio(g1, g2);
+  ok(amp >= 1.25, theme + ": stops are visibly distinct (" + amp.toFixed(3) + ":1)");
+  // Teeth: the near-flat pair this replaced would fail the same check.
+  ok(ratio("#ffffff", "#fbfdfd") < 1.25, theme + ": amplitude check rejects a near-flat pair");
 }
 
 console.log("\nquiet item legibility on the gradient");

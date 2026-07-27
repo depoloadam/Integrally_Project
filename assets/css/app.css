@@ -11,9 +11,10 @@
      rather than another primary (teal) action. Text on gold is dark ink,
      not white: white on this yellow fails contrast badly. */
   --in-gold:#eab308; --in-gold-lt:#f7d154; --in-gold-d:#ca8a04; --in-gold-ink:#3a2c04;
-  /* Sub-nav surface gradient. Kept very close to the card colour — it's a
-     sheen, not a band. Anything darker drags quiet-item text under AA. */
-  --in-subnav-g1:#ffffff; --in-subnav-g2:#eef6f6;
+  /* Sub-nav surface gradient. The teal wash is the visible one — the
+     floor is quiet-item text (--in-ink-soft) clearing 4.5:1 on BOTH
+     stops, which is what caps how dark g2 can go. */
+  --in-subnav-g1:#ffffff; --in-subnav-g2:#c7e3e0;
   --in-font:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   /* Shell bar heights. Anything that sticks below the nav must offset by
      these, never by a literal px value — the sub-nav is conditional, so the
@@ -1967,7 +1968,7 @@ html.in-reduce-motion *::after {
   /* Gold lifts on dark so it doesn't go muddy against the card surface;
      the ink stays dark because the fill stays light. */
   --in-gold:#fbbf24; --in-gold-lt:#fcd34d; --in-gold-d:#f59e0b; --in-gold-ink:#2c2102;
-  --in-subnav-g1:#16242c; --in-subnav-g2:#101d26;
+  --in-subnav-g1:#1e3a42; --in-subnav-g2:#0b171f;
 }
 /* Inputs, selects, textareas — force dark surfaces (many set literal #fff). */
 [data-theme="dark"] input,
