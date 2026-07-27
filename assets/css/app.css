@@ -10,11 +10,10 @@
   /* Gold — reserved for the PLUS upsell so it reads as a distinct offer
      rather than another primary (teal) action. Text on gold is dark ink,
      not white: white on this yellow fails contrast badly. */
-  --in-gold:#eab308; --in-gold-lt:#f7d154; --in-gold-d:#ca8a04; --in-gold-ink:#3a2c04;
-  /* Sub-nav surface gradient. The teal wash is the visible one — the
-     floor is quiet-item text (--in-ink-soft) clearing 4.5:1 on BOTH
-     stops, which is what caps how dark g2 can go. */
-  --in-subnav-g1:#ffffff; --in-subnav-g2:#c7e3e0;
+  --in-gold:#d99e06; --in-gold-lt:#f8db6b; --in-gold-d:#b8850a; --in-gold-ink:#2b2002;
+  /* Sub-nav surface — flat teal. The gradient lives on the button, not
+     the bar. Capped by quiet-item text (--in-ink-soft) clearing 4.5:1. */
+  --in-subnav-bg:#c7e3e0;
   --in-font:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   /* Shell bar heights. Anything that sticks below the nav must offset by
      these, never by a literal px value — the sub-nav is conditional, so the
@@ -71,7 +70,7 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
    .push-right on an item moves it (and everything after it) to the right. */
 .in-subnav {
   display:none;
-  background:linear-gradient(90deg, var(--in-subnav-g1), var(--in-subnav-g2));
+  background:var(--in-subnav-bg);
   border-bottom:1px solid var(--in-line);
   position:sticky; top:var(--in-nav-h); z-index:49; flex:none;
 }
@@ -1967,8 +1966,8 @@ html.in-reduce-motion *::after {
   --in-error:#f0776b; --in-success:#3ecf8e;
   /* Gold lifts on dark so it doesn't go muddy against the card surface;
      the ink stays dark because the fill stays light. */
-  --in-gold:#fbbf24; --in-gold-lt:#fcd34d; --in-gold-d:#f59e0b; --in-gold-ink:#2c2102;
-  --in-subnav-g1:#1e3a42; --in-subnav-g2:#0b171f;
+  --in-gold:#e59b0f; --in-gold-lt:#fee08a; --in-gold-d:#c9860a; --in-gold-ink:#2c2102;
+  --in-subnav-bg:#16303a;
 }
 /* Inputs, selects, textareas — force dark surfaces (many set literal #fff). */
 [data-theme="dark"] input,

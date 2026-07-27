@@ -280,41 +280,53 @@ ok(btnBox <= px(subH1), "item box " + btnBox.toFixed(1) + "px fits the " + subH1
 // Teeth: a 20px font would not fit, so the check isn't vacuous.
 ok(20 * parseFloat(btnLh) + padY * 2 + borderY * 2 > px(subH1), "fit check rejects oversized text");
 
-console.log("\ngradient surface");
+console.log("\nbar surface is flat, gradient is on the button");
+// The gradient belongs to the CTA, not the bar. A gradient on both makes
+// the button disappear into the surface.
 const subBg = declValue(".in-subnav", "background");
-ok(/^linear-gradient\(/.test(subBg || ""), "sub-nav background is a gradient");
-ok(/var\(--in-subnav-g1\)/.test(subBg) && /var\(--in-subnav-g2\)/.test(subBg),
-   "gradient stops are themed vars, not literals");
+ok(subBg === "var(--in-subnav-bg)", "sub-nav background is a single themed var");
+ok(!/gradient/.test(subBg || ""), "sub-nav background is NOT a gradient");
+
+const goldBg = declValue(".in-subnav-btn.gold", "background");
+ok(/^linear-gradient\(/.test(goldBg || ""), "gold button background IS a gradient");
+ok(/var\(--in-gold\)/.test(goldBg) && /var\(--in-gold-lt\)/.test(goldBg),
+   "gold gradient stops are themed vars, not literals");
+
 for (const [theme, sel] of [["light", ":root"], ["dark", '[data-theme="dark"]']]) {
-  const g1 = declValue(sel, "--in-subnav-g1"), g2 = declValue(sel, "--in-subnav-g2");
-  ok(!!g1 && !!g2, theme + ": gradient stops defined");
-  // Amplitude: the stops must actually differ enough to read as a
-  // gradient. Contrast ratio rather than raw luminance delta, so the
-  // threshold means the same thing on light and dark surfaces.
-  const amp = ratio(g1, g2);
-  ok(amp >= 1.25, theme + ": stops are visibly distinct (" + amp.toFixed(3) + ":1)");
-  // Teeth: the near-flat pair this replaced would fail the same check.
-  ok(ratio("#ffffff", "#fbfdfd") < 1.25, theme + ": amplitude check rejects a near-flat pair");
+  const bg = declValue(sel, "--in-subnav-bg");
+  ok(!!bg, theme + ": flat bar colour defined");
+  // The button gradient must be strong enough to read at 30px.
+  const g = declValue(sel, "--in-gold"), gl = declValue(sel, "--in-gold-lt");
+  const amp = ratio(g, gl);
+  ok(amp >= 1.4, theme + ": button gradient is visible (" + amp.toFixed(3) + ":1)");
+  ok(ratio("#eab308", "#f7d154") < 1.4, theme + ": amplitude check rejects the old faint pair");
+  // The CTA must also separate from the bar it sits on.
+  ok(ratio(g, bg) >= 1.3, theme + ": gold reads against the bar (" + ratio(g, bg).toFixed(2) + ":1)");
 }
 
-console.log("\nquiet item legibility on the gradient");
+console.log("\nquiet item legibility on the bar");
 // Small text on a tinted surface is where this gets lost. --in-muted is
-// only 3.90:1 on white, so quiet items use --in-ink-soft instead.
+// far too faint on this teal, so quiet items use --in-ink-soft.
 const quietColor = declValue(".in-subnav-btn", "color");
 ok(quietColor === "var(--in-ink-soft)", "quiet items use --in-ink-soft, not --in-muted");
 for (const [theme, sel] of [["light", ":root"], ["dark", '[data-theme="dark"]']]) {
-  const soft = declValue(sel, "--in-ink-soft");
-  const g1 = declValue(sel, "--in-subnav-g1"), g2 = declValue(sel, "--in-subnav-g2");
-  const worst = Math.min(ratio(soft, g1), ratio(soft, g2));
-  ok(worst >= 4.5, theme + ": quiet text clears AA on both stops (" + worst.toFixed(2) + ":1)");
-  const mutedWorst = Math.min(ratio(declValue(sel, "--in-muted"), g1), ratio(declValue(sel, "--in-muted"), g2));
-  ok(mutedWorst < worst, theme + ": --in-muted would be worse (" + mutedWorst.toFixed(2) + ":1), so the choice matters");
+  const bg = declValue(sel, "--in-subnav-bg");
+  const soft = ratio(declValue(sel, "--in-ink-soft"), bg);
+  ok(soft >= 4.5, theme + ": quiet text clears AA on the bar (" + soft.toFixed(2) + ":1)");
+  const muted = ratio(declValue(sel, "--in-muted"), bg);
+  ok(muted < soft, theme + ": --in-muted would be worse (" + muted.toFixed(2) + ":1), so the choice matters");
+}
+
+// Hover uses --in-gold-d, so the label must stay readable there too.
+for (const [theme, sel] of [["light", ":root"], ["dark", '[data-theme="dark"]']]) {
+  const hov = ratio(declValue(sel, "--in-gold-ink"), declValue(sel, "--in-gold-d"));
+  ok(hov >= 4.5, theme + ": gold label clears AA on hover fill (" + hov.toFixed(2) + ":1)");
 }
 
 console.log("\ntheming");
 // Dark mode is pure var overrides, so the bar must not hardcode colours.
 const subBlock = /\.in-subnav\s*\{([^}]*)\}/.exec(css)[1];
-ok(/var\(--in-subnav-g1\)/.test(subBlock) && /var\(--in-subnav-g2\)/.test(subBlock)
+ok(/background:var\(--in-subnav-bg\)/.test(subBlock)
    && /border-bottom:1px solid var\(--in-line\)/.test(subBlock),
    "sub-nav surface and border are var-driven (inherits dark mode)");
 ok(!/#[0-9a-fA-F]{3,6}/.test(subBlock), "no raw hex in the .in-subnav surface rule");
