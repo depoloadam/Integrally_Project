@@ -1937,7 +1937,7 @@ function addSkill() {
   };
 }
 
-function scoreMe() {
+function scoreMe(prefill) {
   openModal(`
     <h3>Score Me!</h3>
     <label>Score against</label>
@@ -1950,6 +1950,13 @@ function scoreMe() {
   const input = $("sm-value");
   const typeSel = $("sm-type");
   const hint = $("sm-hint");
+
+  // Optional prefill (e.g. from the Scores hub's trending list): set the
+  // type + value so the user lands on a ready-to-run dialog.
+  if (prefill && prefill.target_value) {
+    if (["job_title", "skill", "field"].includes(prefill.target_type)) typeSel.value = prefill.target_type;
+    input.value = prefill.target_value;
+  }
 
   // Attach the job-title typeahead only for the job_title type. The
   // catalog is a recommendation source; any free-text value is allowed.

@@ -758,6 +758,7 @@ function showTab(name) {
   document.querySelector(".in-main")?.classList.toggle("feed-wide", name === "feed");
   if (name === "feed") renderFeed();
   else if (name === "admin") renderAdmin();
+  else if (name === "scores") renderScores();
   else if (name === "jobs") renderJobs();
   else if (name === "connect") renderConnect();
   else if (name === "company-dashboard") renderCompanyDashboard();
@@ -980,6 +981,10 @@ function routeFromHash() {
   }
   if (raw === "connect") {
     showTab("connect");
+    return;
+  }
+  if (raw === "scores") {
+    showTab("scores");
     return;
   }
   if (raw === "notifications") {
