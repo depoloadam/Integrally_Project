@@ -30,7 +30,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="assets/css/app.css?v=37">
+  <link rel="stylesheet" href="assets/css/app.css?v=38">
   <link rel="stylesheet" href="assets/css/pro.css?v=8">
 </head>
 <body>
@@ -46,11 +46,6 @@
       <button data-nav="jobs">Jobs</button>
       <button class="active" data-nav="profile">Profile</button>
       <button data-nav="admin" style="display:none">Admin</button>
-      <!-- search (signed-in): grouped with nav items, styled distinctly -->
-      <button id="search-trigger" class="in-navsearch" title="Search" aria-label="Search" aria-expanded="false" style="display:none">
-        <span class="in-navsearch-ico" aria-hidden="true">🔍</span>
-        <span class="in-navsearch-label">Search</span>
-      </button>
     </div>
     <div class="in-nav-right">
       <!-- messages envelope (signed-in users) -->
@@ -119,6 +114,14 @@
 <div class="in-subnav" id="subnav">
   <div class="in-subnav-inner" id="subnav-inner">
     <button class="in-subnav-btn gold" data-subnav="plus">Try PLUS+</button>
+    <!-- Search lives here now, pushed to the right. Same id as before, so
+         the search.js wiring (toggle, pin, click-away) is unchanged; only
+         its container moved. Not a data-subnav item — it has its own
+         handler, so the delegated sub-nav click ignores it. -->
+    <button id="search-trigger" class="in-navsearch push-right" title="Search" aria-label="Search" aria-expanded="false" style="display:none">
+      <span class="in-navsearch-ico" aria-hidden="true">🔍</span>
+      <span class="in-navsearch-label">Search</span>
+    </button>
   </div>
 </div>
 

@@ -60,7 +60,7 @@ ok(pos(subnav, searchbar), "search bar comes after the sub-nav");
 ok(!subnav.getAttribute("style"), "sub-nav has no inline style (class-driven visibility)");
 
 const plusBtn = inner.querySelector('[data-subnav="plus"]');
-ok(!!plusBtn, "Try PLUS button exists");
+ok(!!plusBtn, "Try PLUS+ button exists");
 ok(plusBtn && plusBtn.textContent.trim() === "Try PLUS+", "button label is exactly 'Try PLUS+'");
 ok(plusBtn && plusBtn.classList.contains("in-subnav-btn"), "button carries shared geometry class");
 ok(plusBtn && plusBtn.classList.contains("gold"), "button carries the .gold look modifier");
@@ -70,6 +70,26 @@ ok(plusBtn && !plusBtn.classList.contains("accent"),
 for (const v of [".in-subnav-btn.accent", ".in-subnav-btn.outline", ".in-subnav-btn.gold"]) {
   ok(css.includes(v), "look modifier " + v + " exists independent of .in-subnav-btn");
 }
+
+console.log("\nsearch moved into the sub-nav, right-aligned");
+const searchTrigger = document.getElementById("search-trigger");
+ok(!!searchTrigger, "#search-trigger still exists (id unchanged, so search.js wiring holds)");
+ok(!!searchTrigger && inner.contains(searchTrigger), "search trigger lives inside the sub-nav now");
+const navLinks = document.querySelector(".in-nav-links");
+ok(navLinks && !navLinks.contains(searchTrigger), "search trigger no longer in .in-nav-links");
+// Right-alignment: the sub-nav scope gives it margin-left:auto.
+const navsearchRule = /\.in-subnav \.in-navsearch \{([^}]*)\}/.exec(css);
+ok(!!navsearchRule && /margin-left:auto/.test(navsearchRule[1]),
+   "search is pushed right (margin-left:auto in sub-nav scope)");
+// It keeps its own handler, so the delegated data-subnav dispatch must
+// ignore it — it carries no data-subnav attribute.
+ok(searchTrigger && !searchTrigger.hasAttribute("data-subnav"),
+   "search is not a data-subnav item (its own handler owns it)");
+ok(plusBtn.compareDocumentPosition(searchTrigger) & window.Node.DOCUMENT_POSITION_FOLLOWING,
+   "search comes after Try PLUS+ in the bar");
+// Sub-nav search styling must not carry over to the base .in-navsearch
+// used elsewhere — the override is scoped.
+ok(/\.in-subnav \.in-navsearch/.test(css), "search overrides are scoped to .in-subnav");
 
 console.log("\nsetSubnav()");
 // Extract and run the REAL function rather than a re-implementation.
@@ -110,7 +130,7 @@ const attach = new Function("subnavInner", "toast",
 attach(inner, (msg) => toasted.push(msg));
 
 plusBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-ok(toasted.length === 1, "clicking Try PLUS fires exactly one notice");
+ok(toasted.length === 1, "clicking Try PLUS+ fires exactly one notice");
 ok(/coming soon/i.test(toasted[0] || ""), "notice says it's coming soon");
 ok(/PLUS\+/.test(toasted[0] || ""), "notice uses the PLUS+ name, matching the button");
 // It must not navigate — Plus has no route yet.
@@ -120,6 +140,12 @@ ok(window.location.hash === "", "click does not change the route");
 toasted = [];
 inner.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
 ok(toasted.length === 0, "clicking bar background fires nothing");
+
+// Clicking search must not trigger the PLUS notice — it's not a
+// data-subnav item, so the delegated handler ignores it.
+toasted = [];
+searchTrigger.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+ok(toasted.length === 0, "clicking search fires no sub-nav notice (own handler owns it)");
 
 // ---------------------------------------------------------------- layer 2
 console.log("\nCSS contract — sticky offset arithmetic");
@@ -321,6 +347,22 @@ for (const [theme, sel] of [["light", ":root"], ["dark", '[data-theme="dark"]']]
 for (const [theme, sel] of [["light", ":root"], ["dark", '[data-theme="dark"]']]) {
   const hov = ratio(declValue(sel, "--in-gold-ink"), declValue(sel, "--in-gold-d"));
   ok(hov >= 4.5, theme + ": gold label clears AA on hover fill (" + hov.toFixed(2) + ":1)");
+}
+
+console.log("\nsearch item legibility");
+// Search is borderless ink-soft text on the bar at rest, and on the
+// hover wash on hover — both must clear AA in both themes.
+for (const [theme, sel] of [["light", ":root"], ["dark", '[data-theme="dark"]']]) {
+  const soft  = declValue(sel, "--in-ink-soft");
+  const bar   = declValue(sel, "--in-subnav-bg");
+  const hover = declValue(sel, "--in-subnav-hover");
+  ok(!!hover, theme + ": --in-subnav-hover defined");
+  ok(ratio(soft, bar) >= 4.5, theme + ": search label clears AA at rest (" + ratio(soft, bar).toFixed(2) + ":1)");
+  ok(ratio(declValue(sel, "--in-ink"), hover) >= 4.5,
+     theme + ": search label clears AA on hover wash (" + ratio(declValue(sel, "--in-ink"), hover).toFixed(2) + ":1)");
+  // The hover wash must actually differ from the bar, or hover is invisible.
+  ok(ratio(bar, hover) >= 1.08 && ratio(bar, hover) < 1.5,
+     theme + ": hover wash is a subtle step off the bar (" + ratio(bar, hover).toFixed(3) + ":1)");
 }
 
 console.log("\ntheming");

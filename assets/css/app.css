@@ -14,6 +14,10 @@
   /* Sub-nav surface — flat teal. The gradient lives on the button, not
      the bar. Capped by quiet-item text (--in-ink-soft) clearing 4.5:1. */
   --in-subnav-bg:#dcefed;
+  /* Hover/press wash for borderless sub-nav items — a step darker than the
+     bar so it reads as a press without flashing near-white (--in-bg would,
+     against this teal). */
+  --in-subnav-hover:#c2e1dd;
   --in-font:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   /* Shell bar heights. Anything that sticks below the nav must offset by
      these, never by a literal px value — the sub-nav is conditional, so the
@@ -89,8 +93,25 @@ html.has-subnav .in-subnav { display:block; }
   padding:3px 10px; cursor:pointer; line-height:1.2; white-space:nowrap;
   background:none; color:var(--in-ink-soft);
 }
-.in-subnav-btn:hover { background:var(--in-bg); color:var(--in-ink); }
-.in-subnav-btn.push-right { margin-left:auto; }
+.in-subnav-btn:hover { background:var(--in-subnav-hover); color:var(--in-ink); }
+/* Pushes an item (and everything after it) to the right. Not tied to
+   .in-subnav-btn, so the search pill can use it too. */
+.in-subnav .push-right { margin-left:auto; }
+/* The search control is shared with the (old) main-nav pill styling. In
+   the sub-nav it drops the pill entirely and matches its borderless
+   siblings: quiet ink-soft text, transparent at rest, soft fill on hover.
+   A floating near-white pill would vanish against the teal bar (1.2:1)
+   and its muted label failed AA. Scope the overrides so .in-navsearch
+   elsewhere is untouched. */
+.in-subnav .in-navsearch {
+  margin-left:auto;                     /* right-aligned even without .push-right */
+  font-size:11.5px; font-weight:600; letter-spacing:.2px; gap:5px;
+  padding:3px 10px; border-radius:6px;
+  background:none; border:1px solid transparent; color:var(--in-ink-soft);
+}
+.in-subnav .in-navsearch:hover { background:var(--in-subnav-hover); border-color:transparent; color:var(--in-ink); }
+.in-subnav .in-navsearch.open { background:var(--in-subnav-hover); border-color:transparent; color:var(--in-accent); }
+.in-subnav .in-navsearch-ico { font-size:11.5px; }
 /* filled call-to-action */
 .in-subnav-btn.accent {
   background:var(--in-accent); border-color:var(--in-accent); color:#fff;
@@ -98,7 +119,7 @@ html.has-subnav .in-subnav { display:block; }
 .in-subnav-btn.accent:hover { background:var(--in-accent-d); border-color:var(--in-accent-d); color:#fff; }
 /* bordered, quieter than .accent */
 .in-subnav-btn.outline { border-color:var(--in-line); color:var(--in-ink-soft); }
-.in-subnav-btn.outline:hover { border-color:var(--in-muted); background:var(--in-bg); color:var(--in-ink); }
+.in-subnav-btn.outline:hover { border-color:var(--in-muted); background:var(--in-subnav-hover); color:var(--in-ink); }
 /* premium/upsell fill — deliberately NOT the teal used for primary
    actions, so the offer doesn't read as just another nav control. Dark
    ink on gold: white here would sit around 2:1 contrast. */
@@ -1968,6 +1989,7 @@ html.in-reduce-motion *::after {
      the ink stays dark because the fill stays light. */
   --in-gold:#e59b0f; --in-gold-lt:#fee08a; --in-gold-d:#c9860a; --in-gold-ink:#2c2102;
   --in-subnav-bg:#16303a;
+  --in-subnav-hover:#204049;
 }
 /* Inputs, selects, textareas — force dark surfaces (many set literal #fff). */
 [data-theme="dark"] input,
