@@ -3156,7 +3156,7 @@ async function renderScoreBreakdown(scoreId) {
   const all = res.data?.data || [];
   const s = all.find(x => String(x.id) === String(scoreId));
   if (!s) {
-    view.innerHTML = `<div class="in-card2"><div class="in-empty" style="text-align:center">Score not found.</div><div style="text-align:center;margin-top:14px"><button class="in-btn ghost" style="flex:none;padding:9px 18px" onclick="location.hash='profile'">← Back to profile</button></div></div>`;
+    view.innerHTML = `<div class="in-card2"><div class="in-empty" style="text-align:center">Score not found.</div><div style="text-align:center;margin-top:14px"><button class="in-btn ghost" style="flex:none;padding:9px 18px" onclick="location.hash='scores'">← Back to scores</button></div></div>`;
     return;
   }
   const val = Math.max(0, Math.min(100, Math.round(s.score_value)));
@@ -3186,7 +3186,7 @@ async function renderScoreBreakdown(scoreId) {
   view.innerHTML = "";
   view.appendChild(el(`
     <div style="margin:0 auto">
-      <div class="in-back"><button class="in-back-btn" onclick="location.hash='profile'">← Back to profile</button></div>
+      <div class="in-back"><button class="in-back-btn" onclick="location.hash='scores'">← Back to scores</button></div>
       <div class="in-card2 bd-hero">
         <div class="in-score-badge" style="width:64px;height:64px;font-size:24px;border-radius:14px">${val}</div>
         <div><div class="bd-target">${esc(s.target_value)}</div><div class="bd-sub">${esc(s.target_type.replace("_"," "))} · scored ${esc(date)}</div></div>
@@ -3240,7 +3240,7 @@ async function renderScoreHistory(encoded) {
   const targetValue = sep >= 0 ? decoded.slice(sep + 1) : "";
 
   if (!targetType || !targetValue) {
-    view.innerHTML = `<div class="in-card2"><div class="in-empty" style="text-align:center">Couldn't read that score target.</div><div style="text-align:center;margin-top:14px"><button class="in-btn ghost" style="flex:none;padding:9px 18px" onclick="location.hash='profile'">← Back to profile</button></div></div>`;
+    view.innerHTML = `<div class="in-card2"><div class="in-empty" style="text-align:center">Couldn't read that score target.</div><div style="text-align:center;margin-top:14px"><button class="in-btn ghost" style="flex:none;padding:9px 18px" onclick="location.hash='scores'">← Back to scores</button></div></div>`;
     return;
   }
 
@@ -3250,7 +3250,7 @@ async function renderScoreHistory(encoded) {
   const rows = (res.data?.data || []).slice().reverse();
 
   const typeLabel = esc(targetType.replace("_", " "));
-  const back = `<div class="in-back"><button class="in-back-btn" onclick="location.hash='profile'">← Back to profile</button></div>`;
+  const back = `<div class="in-back"><button class="in-back-btn" onclick="location.hash='scores'">← Back to scores</button></div>`;
 
   if (!rows.length) {
     view.innerHTML = "";

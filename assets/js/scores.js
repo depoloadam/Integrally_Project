@@ -128,9 +128,12 @@ function buildSummary(data, personal) {
 function buildPersonalPanel(personal) {
   const card = el(`
     <div class="in-card2">
-      <h2 style="text-transform:none;font-size:16px;letter-spacing:-0.2px">Your scores</h2>
+      <h2 style="text-transform:none;font-size:16px;letter-spacing:-0.2px">Your scores<button class="add" id="scores-settings-btn" title="Score settings" aria-label="Score settings">⚙</button></h2>
       <div class="in-empty" style="font-style:normal;margin:-8px 0 12px">Each tab is one thing you've scored against. See where you stand and how you compare.</div>
     </div>`);
+  // Same gear + destination as the profile Scores card, so the control is
+  // consistent wherever scores appear.
+  card.querySelector("#scores-settings-btn").onclick = () => { location.hash = "settings/scores"; };
 
   if (personal.length === 0) {
     card.appendChild(el(`<div class="in-empty" style="font-style:normal">Nothing scored yet — your targets will appear here as tabs.</div>`));

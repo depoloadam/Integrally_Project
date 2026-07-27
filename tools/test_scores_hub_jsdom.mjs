@@ -90,6 +90,14 @@ S.SCORES_STATE.activeTarget = null;   // reset
 const panel = S.buildPersonalPanel(payload.personal);
 const tabs = panel.querySelectorAll(".in-scores-tab");
 ok(tabs.length === 3, "one tab per scored target (3)");
+
+// settings gear routes to the scores settings tab
+const gear = panel.querySelector("#scores-settings-btn");
+ok(!!gear, "panel header has a settings gear");
+window.location.hash = "";
+gear && gear.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+ok(window.location.hash.replace(/^#/, "") === "settings/scores", "gear routes to settings/scores");
+ok(gear && gear.getAttribute("aria-label") === "Score settings", "gear is labelled for a11y");
 ok([...tabs].map(t => t.querySelector(".in-scores-tab-name").textContent).join(",") === "Data Analyst,Healthcare,Python",
    "tabs labelled by target, in order");
 ok(tabs[0].querySelector(".in-scores-tab-badge").textContent === "60", "tab badge shows the score");

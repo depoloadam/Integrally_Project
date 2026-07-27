@@ -139,7 +139,7 @@ console.log("\nfooter on a short (uncapped) list");
   const { mount, fn, window } = build([mk("Only Role", 60)]);
   await fn(mount);
   mount.querySelector(".rail-more").onclick();
-  ok(window.location.hash === "#profile", "footer routes to the profile");
+  ok(window.location.hash === "#scores", "footer routes to the scores hub");
 }
 
 console.log("\nrail ordering is not a fetch race");

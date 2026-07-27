@@ -359,7 +359,7 @@ async function buildScoreRail(mount) {
   // so the button doubles as the "there's more" signal.
   const hiddenCount = ranked.length - shown.length;
   const more = el(`<button class="rail-more">Explore my scores${hiddenCount > 0 ? ` (${ranked.length})` : ""}</button>`);
-  more.onclick = () => { location.hash = "profile"; };
+  more.onclick = () => { location.hash = "scores"; };
   card.appendChild(more);
 
   mount.appendChild(card);
