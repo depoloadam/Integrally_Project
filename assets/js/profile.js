@@ -446,16 +446,12 @@ function renderScoreRow(s, showOwnerControls) {
   const isHidden = !!s.hidden;
   let miniRows = "";
   if (Array.isArray(s.breakdown) && s.breakdown.length) {
-    const mw = scoreWeightsFor(s.algo_version);
-    miniRows = s.breakdown.map(f => {
-      const max = mw ? mw[f.factor] : null;
-      return `
+    miniRows = s.breakdown.map(f => `
       <div class="mini-row">
         <span class="mini-factor">${esc(scoreFactorLabel(f.factor))}</span>
         <span class="mini-detail">${esc(f.detail || "")}</span>
-        ${f.points != null ? `<span class="mini-points">${esc(f.points)}${max ? `<span class="mini-max"> / ${esc(max)}</span>` : ""}</span>` : ""}
-      </div>`;
-    }).join("");
+        ${f.points != null ? `<span class="mini-points">${esc(f.points)}</span>` : ""}
+      </div>`).join("");
   } else {
     miniRows = `<div class="in-empty" style="padding:8px 0">No breakdown detail stored for this score yet.</div>`;
   }
@@ -475,6 +471,7 @@ function renderScoreRow(s, showOwnerControls) {
         <div class="score-compare-slot"></div>
         <div class="score-mini">${miniRows}</div>
         <div class="score-detail-actions">
+          ${showOwnerControls ? `<button class="in-btn primary score-rescorebtn" style="flex:none;padding:8px 14px">Re-score</button>` : ""}
           <button class="in-btn ghost score-fullbtn" style="flex:none;padding:8px 14px">View full breakdown →</button>
           <button class="in-btn ghost score-histbtn" style="flex:none;padding:8px 14px">View history →</button>
           ${showOwnerControls ? `<button class="in-btn danger-ghost score-delbtn" style="flex:none;padding:8px 14px">Remove score</button>` : ""}
@@ -500,6 +497,37 @@ function renderScoreRow(s, showOwnerControls) {
     location.hash = "score-history/" + encodeURIComponent(s.target_type + "|" + s.target_value);
   };
   if (showOwnerControls) {
+    // Re-score runs the SAME target again — no retyping, and it can't trip
+    // the entry cap because it reuses an existing target rather than
+    // adding one. Confirmed first: it writes a new history entry, and the
+    // score can move down as well as up.
+    const rescoreBtn = row.querySelector(".score-rescorebtn");
+    if (rescoreBtn) {
+      rescoreBtn.onclick = async (e) => {
+        e.stopPropagation();
+        const proceed = await confirmDialog(
+          `Score yourself against "${s.target_value}" again using your current profile? This adds a new entry to your score history, and your score may go down as well as up.`,
+          { title: "Re-score", confirmText: "Re-score" }
+        );
+        if (!proceed) return;
+        rescoreBtn.disabled = true;
+        rescoreBtn.textContent = "Scoring…";
+        const r = await api("/score/score-me.php", "POST", {
+          target_type: s.target_type, target_value: s.target_value,
+        });
+        if (r.ok && r.data?.success) {
+          toast("Score updated.");
+          refreshAfterProfileChange();
+        } else if (r.data?.code === "entry_cap") {
+          rescoreBtn.disabled = false; rescoreBtn.textContent = "Re-score";
+          showEntryCapModal();
+        } else {
+          rescoreBtn.disabled = false; rescoreBtn.textContent = "Re-score";
+          toast(r.data?.error || "Could not re-score right now.", "err");
+        }
+      };
+    }
+
     const hideBtn = row.querySelector(".score-hide-toggle");
     hideBtn.onclick = async (e) => {
       e.stopPropagation();
@@ -3070,20 +3098,14 @@ function renderSetDanger(panel) {
 }
 
 // ===================================================================
-// VIEW: SCORE BREAKDOWN (full per-score detail — placeholder)
+// VIEW: SCORE BREAKDOWN (full per-score detail)
 // ===================================================================
 // ---- scoring transparency ---------------------------------------------
-// Breakdowns are frozen as JSON at scoring time and never recomputed, so a
-// score stored under an older algorithm still renders with the weights it
-// was actually scored under. Keyed by ScoreEngine::VERSION. An unknown
-// version falls back to no maxima — rows still show earned points, they
-// just omit the "of N" denominator rather than showing a wrong one.
-const SCORE_WEIGHTS = {
-  "cert-catalog-v2.3": {
-    relevant_experience: 32, general_experience: 8, skills_match: 20,
-    education: 15, certifications: 10, profile_strength: 15,
-  },
-};
+// The breakdown answers "which of my data earned these points" — the
+// engine's `detail` string names the specific degree, skill, or cert that
+// counted. Per-factor maxima are deliberately NOT shown: a denominator
+// invites reading the score as a percentage of a ceiling, which tells a
+// user nothing actionable about their own profile.
 // Human labels — the raw keys are snake_case internals, not user copy.
 const SCORE_FACTOR_LABEL = {
   relevant_experience: "Relevant experience",
@@ -3102,9 +3124,6 @@ const SCORE_FACTOR_BLURB = {
   certifications:      "Certifications you hold, weighted by relevance to this job.",
   profile_strength:    "How complete your profile is overall.",
 };
-function scoreWeightsFor(algoVersion) {
-  return SCORE_WEIGHTS[algoVersion] || null;
-}
 function scoreFactorLabel(key) {
   return SCORE_FACTOR_LABEL[key] || String(key || "factor").replace(/_/g, " ");
 }
@@ -3137,22 +3156,21 @@ async function renderScoreBreakdown(scoreId) {
   const date = new Date(s.created_at).toLocaleString();
   let factors = "";
   if (Array.isArray(s.breakdown) && s.breakdown.length) {
-    const weights = scoreWeightsFor(s.algo_version);
+    // Deliberately no "x of y" denominators or proportion bars: the useful
+    // answer is WHICH of your data earned points ("Computer Science"
+    // relates to the role), not what fraction of a hidden ceiling you hit.
+    // The engine's `detail` string already names that data, so it leads.
     factors = s.breakdown.map(f => {
       const key = f.factor || "";
-      const max = weights ? weights[key] : null;
       const pts = f.points != null ? Number(f.points) : null;
-      // Bar only renders when we know the denominator for this version.
-      const pct = (max && pts != null) ? Math.max(0, Math.min(100, (pts / max) * 100)) : null;
       const blurb = SCORE_FACTOR_BLURB[key] || "";
       return `<div class="bd-factor">
         <div class="bd-factor-head">
           <span class="bd-factor-name">${esc(scoreFactorLabel(key))}</span>
-          ${pts != null ? `<span class="bd-factor-points">${esc(pts)}${max ? ` <span class="bd-factor-max">of ${esc(max)}</span>` : ""}</span>` : ""}
+          ${pts != null ? `<span class="bd-factor-points">${esc(pts)} ${pts === 1 ? "point" : "points"}</span>` : ""}
         </div>
-        ${pct != null ? `<div class="bd-factor-bar"><div class="bd-factor-fill" style="width:${pct}%"></div></div>` : ""}
-        ${blurb ? `<div class="bd-factor-blurb">${esc(blurb)}</div>` : ""}
         <div class="bd-factor-detail">${esc(f.detail || "")}</div>
+        ${blurb ? `<div class="bd-factor-blurb">${esc(blurb)}</div>` : ""}
       </div>`;
     }).join("");
   } else {

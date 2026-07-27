@@ -21,6 +21,12 @@ function notifTarget(n) {
 }
 
 // Build a human sentence + target hash for a notification.
+// Every branch MUST leave `verb` non-empty: a row with an empty verb
+// renders as a bare bold name with no indication of what happened, which
+// is what 'endorsement' did before it was handled here. The final
+// fallback derives readable text from the type itself, so a new server
+// type added without a client update degrades to something legible
+// rather than silently producing a nameless notification.
 function notifText(n) {
   const who = n.actor || {};
   const name = who.full_name || who.name || "Someone";
@@ -30,11 +36,18 @@ function notifText(n) {
   else if (n.type === "like")    verb = "liked your post";
   else if (n.type === "comment") verb = "commented on your post";
   else if (n.type === "message_request") verb = "sent you a message request";
+  // Endorsements carry no post/comment id and the notifications table has
+  // no column for the endorsed skill, so the sentence stays general until
+  // there's a migration to name it.
+  else if (n.type === "endorsement") verb = "endorsed one of your skills";
   // A mention carries comment_id when it happened in a comment, so the
   // sentence can say where without a second lookup.
   else if (n.type === "mention") verb = n.comment_id
     ? "mentioned you in a comment"
     : "mentioned you in a post";
+  else verb = n.type
+    ? `sent you a ${String(n.type).replace(/_/g, " ")} notification`
+    : "sent you a notification";
   const snippet = (n.message && n.message.snippet)
     ? n.message.snippet
     : (n.post && n.post.snippet ? n.post.snippet : "");
