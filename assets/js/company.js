@@ -422,34 +422,68 @@ async function loadCompanyJobs() {
   });
 }
 
-// ---- applicants PAGE (ranked by score) ------------------------------
+// ---- applicants PAGE (server-sorted; score rank fixed) --------------
+const JA_SORTS = [
+  ["score", "Score (highest)"],
+  ["newest", "Newest first"],
+  ["oldest", "Oldest first"],
+  ["name", "Name (A–Z)"],
+  ["resume", "Has résumé first"],
+  ["status", "Status (active first)"],
+];
+let JA_STATE = { jobUuid: null, sort: "score" };
+
 async function renderJobApplicants(jobUuid) {
+  // New job = reset the sort; re-entering the same list keeps it.
+  if (JA_STATE.jobUuid !== jobUuid) JA_STATE = { jobUuid, sort: "score" };
+
   const view = $("view");
   view.innerHTML = `<div class="in-loading">Loading applicants…</div>`;
 
-  const r = await api("/applications/for-job.php?job_uuid=" + encodeURIComponent(jobUuid));
+  const r = await api("/applications/for-job.php?job_uuid=" + encodeURIComponent(jobUuid) + "&sort=" + encodeURIComponent(JA_STATE.sort));
   if (!r.ok || !r.data?.success) {
     view.innerHTML = `<div class="in-admin"><div class="in-back"><button class="in-back-btn" onclick="location.hash='company-dashboard'">‹ Back to dashboard</button></div><div class="in-empty">${esc(r.data?.error || "Could not load applicants.")}</div></div>`;
     return;
   }
   const d = r.data.data;
   const c = d.counts || {};
+  // Trust the server's echoed sort (it validates/whitelists) so the control
+  // reflects what actually happened, not just what we asked for.
+  JA_STATE.sort = d.sort || JA_STATE.sort;
 
   view.innerHTML = "";
   const wrap = el(`<div class="in-admin"></div>`);
   wrap.appendChild(el(`<div class="in-back"><button class="in-back-btn" id="ja-back">‹ Back to dashboard</button></div>`));
 
+  const sortOpts = JA_SORTS.map(([v, label]) =>
+    `<option value="${v}"${JA_STATE.sort === v ? " selected" : ""}>${label}</option>`).join("");
+
   const card = el(`
     <div class="in-card2">
-      <h2 style="text-transform:none;font-size:18px;letter-spacing:-0.2px;margin-bottom:4px">Applicants — ${esc(d.job.title)}</h2>
-      <div class="s" style="color:var(--in-muted);font-size:13px;margin-bottom:16px">
-        ${c.submitted || 0} active · ${c.withdrawn || 0} withdrawn${c.expired ? ` · ${c.expired} expired` : ""}
+      <div class="ja-head">
+        <div class="ja-head-titles">
+          <h2 style="text-transform:none;font-size:18px;letter-spacing:-0.2px;margin-bottom:4px">Applicants — ${esc(d.job.title)}</h2>
+          <div class="s" style="color:var(--in-muted);font-size:13px">
+            ${c.submitted || 0} active · ${c.withdrawn || 0} withdrawn${c.expired ? ` · ${c.expired} expired` : ""}
+          </div>
+        </div>
+        <label class="ja-sort">
+          <span class="ja-sort-lbl">Sort</span>
+          <select id="ja-sort-sel" class="ja-sort-sel">${sortOpts}</select>
+        </label>
       </div>
       <div id="ja-list"></div>
     </div>`);
   wrap.appendChild(card);
   view.appendChild(wrap);
   $("ja-back").onclick = () => renderCompanyDashboard();
+
+  // Changing the sort re-fetches from the server (authoritative order +
+  // pagination-ready), not a client re-sort of a partial list.
+  card.querySelector("#ja-sort-sel").onchange = (e) => {
+    JA_STATE.sort = e.target.value;
+    renderJobApplicants(jobUuid);
+  };
 
   const list = card.querySelector("#ja-list");
   const apps = d.applicants || [];
@@ -458,18 +492,23 @@ async function renderJobApplicants(jobUuid) {
     return;
   }
 
-  apps.forEach((a, idx) => {
+  apps.forEach((a) => {
     const cand = a.candidate || {};
     const name = cand.full_name || cand.username || "Candidate";
     const av = cand.avatar ? `<img src="${esc(cand.avatar)}" alt="">` : esc(name.charAt(0).toUpperCase());
     const score = a.score_value != null
       ? `<div class="ja-score" title="Score at apply time">${Math.round(a.score_value)}</div>`
       : `<div class="ja-score none" title="No score">—</div>`;
+    // Rank is the FIXED score rank from the server — it stays put no matter
+    // how the list is sorted for display. Scoreless applicants show no rank.
+    const rankCell = a.score_rank != null
+      ? `<div class="ja-rank" title="Score rank">${a.score_rank}</div>`
+      : `<div class="ja-rank none" title="Unranked (no score)">·</div>`;
     const dim = a.status !== "submitted" ? ' style="opacity:.55"' : "";
     const hov = cand.uuid ? ` data-hover-card="user" data-hover-uuid="${esc(cand.uuid)}"` : "";
     const row = el(`
       <div class="ja-row"${dim}>
-        <div class="ja-rank">${idx + 1}</div>
+        ${rankCell}
         ${score}
         <div class="connect-ava" style="width:40px;height:40px"${hov}>${av}</div>
         <div class="ja-main">

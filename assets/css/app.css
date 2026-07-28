@@ -2058,6 +2058,19 @@ a.ap-title:hover { color:var(--in-accent); }
 .ja-main { flex:1; min-width:0; }
 .ja-name { font-weight:600; font-size:14.5px; color:var(--in-ink); }
 .ja-sub { font-size:12.5px; color:var(--in-muted); margin-top:2px; }
+.ja-rank.none { color:var(--in-line); font-weight:600; }
+
+/* Applicants header: title block + sort control on one row */
+.ja-head { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:16px; }
+.ja-head-titles { min-width:0; }
+.ja-sort { display:inline-flex; align-items:center; gap:8px; flex:none; }
+.ja-sort-lbl { font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; color:var(--in-muted); }
+.ja-sort-sel {
+  font-family:inherit; font-size:13px; color:var(--in-ink); background:var(--in-card);
+  border:1px solid var(--in-line); border-radius:8px; padding:7px 10px; cursor:pointer;
+}
+.ja-sort-sel:hover { border-color:var(--in-muted); }
+.ja-sort-sel:focus-visible { outline:none; border-color:var(--in-accent); }
 
 /* Company: applicant detail score block */
 .ja-detail-score { display:flex; gap:16px; align-items:flex-start; padding:12px; background:var(--in-bg); border-radius:12px; margin-bottom:6px; }
