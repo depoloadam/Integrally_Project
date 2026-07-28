@@ -349,164 +349,113 @@ window.mountAvatarPicker = mountAvatarPicker;
 const RT_COLORS = ["#0b1f2a", "#0d9488", "#c0392b", "#2563eb", "#7c3aed", "#d97706", "#16a34a", "#6b8590"];
 const RT_SIZES  = [["Small", "12px"], ["Normal", "16px"], ["Large", "24px"], ["Huge", "32px"]];
 
+// ---- rich text editor (Quill 2.0.3, vendored) -------------------------
+// Backed by Quill rather than execCommand: Quill keeps its own document
+// model and applies edits deterministically, which removes the whole class
+// of contentEditable bugs that forced the old selection-only model.
+//
+// The enabled formats are deliberately the EXACT set src/RichText.php
+// whitelists. If Quill could produce a format the sanitizer strips, the
+// user would watch their formatting vanish on save.
+const RT_FORMATS = [
+  "bold", "italic", "underline",
+  "list", "blockquote", "code-block", "code",
+  "header", "align", "color", "size", "link",
+];
+
+let RT_REGISTERED = false;
+function registerQuillFormats() {
+  if (RT_REGISTERED || typeof Quill === "undefined") return;
+  RT_REGISTERED = true;
+  // Emit inline styles for size/colour instead of Quill's default classes,
+  // because the sanitizer reads `style="font-size:..."` / `style="color:..."`.
+  const SizeStyle = Quill.import("attributors/style/size");
+  SizeStyle.whitelist = RT_SIZES.map(s => s[1]);
+  Quill.register(SizeStyle, true);
+  Quill.register(Quill.import("attributors/style/color"), true);
+  // Alignment stays on Quill's ql-align-* classes — the sanitizer already
+  // normalises those to its own rt-align-* enum.
+}
+
 function mountRichEditor(mountId, opts = {}) {
   const host = $(mountId);
   if (!host) return null;
   const placeholder = opts.placeholder || "Write something…";
   const initialHTML = opts.html || "";
 
-  host.innerHTML = `
-    <div class="rt-editor">
-      <div class="rt-toolbar">
-        <button type="button" class="rt-btn" data-cmd="bold" title="Bold"><b>B</b></button>
-        <button type="button" class="rt-btn" data-cmd="italic" title="Italic"><i>I</i></button>
-        <button type="button" class="rt-btn" data-cmd="underline" title="Underline"><u>U</u></button>
-        <span class="rt-sep"></span>
-        <span class="rt-color-wrap">
-          <button type="button" class="rt-btn" id="${mountId}-colorbtn" title="Text color">A<span class="rt-color-bar"></span></button>
-          <div class="rt-color-menu" id="${mountId}-colormenu">
-            ${RT_COLORS.map(c => `<button type="button" class="rt-swatch" data-color="${c}" style="background:${c}"></button>`).join("")}
-          </div>
-        </span>
-        <select class="rt-size" id="${mountId}-size" title="Text size">
-          ${RT_SIZES.map(([lbl, px]) => `<option value="${px}"${px === "16px" ? " selected" : ""}>${lbl}</option>`).join("")}
-        </select>
-      </div>
-      <div class="rt-area" id="${mountId}-area" contenteditable="true" data-placeholder="${esc(placeholder)}">${initialHTML}</div>
-    </div>`;
-
-  const area = $(`${mountId}-area`);
-
-  // Selection-only formatting: a command applies to highlighted text. With
-  // no selection we do nothing and briefly hint, which avoids the whole
-  // class of contentEditable "pending format" bugs.
-  const hasSelection = () => {
-    const sel = window.getSelection();
-    return sel && sel.rangeCount && !sel.isCollapsed && area.contains(sel.anchorNode);
-  };
-  let hintTimer = null;
-  function flashHint() {
-    const tb = host.querySelector(".rt-toolbar");
-    if (!tb) return;
-    tb.classList.add("rt-hint");
-    clearTimeout(hintTimer);
-    hintTimer = setTimeout(() => tb.classList.remove("rt-hint"), 900);
+  if (typeof Quill === "undefined") {
+    // Fail loudly rather than handing the user a dead box.
+    host.innerHTML = `<div class="in-empty">The editor failed to load. Please refresh the page.</div>`;
+    return null;
   }
+  registerQuillFormats();
 
-  const exec = (cmd, val = null) => {
-    if (!hasSelection()) { flashHint(); return; }
-    area.focus();
-    document.execCommand(cmd, false, val);
-    syncToolbar();
-  };
+  host.innerHTML = `<div class="rt-editor"><div id="${mountId}-area"></div></div>`;
 
-  host.querySelectorAll(".rt-btn[data-cmd]").forEach(b => {
-    b.onmousedown = (e) => { e.preventDefault(); };   // keep selection
-    b.onclick = () => exec(b.dataset.cmd);
+  const quill = new Quill($(`${mountId}-area`), {
+    theme: "snow",
+    placeholder,
+    formats: RT_FORMATS,
+    modules: {
+      toolbar: [
+        [{ header: [2, 3, false] }],
+        ["bold", "italic", "underline"],
+        [{ list: "bullet" }, { list: "ordered" }],
+        ["blockquote", "code-block", "code"],
+        [{ align: [] }],
+        [{ color: RT_COLORS }],
+        [{ size: RT_SIZES.map(s => s[1]) }],
+        ["link"],
+        ["clean"],
+      ],
+    },
   });
 
-  // Color menu
-  const colorBtn = $(`${mountId}-colorbtn`);
-  const colorMenu = $(`${mountId}-colormenu`);
-  colorBtn.onmousedown = (e) => e.preventDefault();
-  colorBtn.onclick = (e) => { e.preventDefault(); colorMenu.classList.toggle("show"); };
-  colorMenu.querySelectorAll(".rt-swatch").forEach(s => {
-    s.onmousedown = (e) => e.preventDefault();
-    s.onclick = () => {
-      if (!hasSelection()) { flashHint(); colorMenu.classList.remove("show"); return; }
-      const color = s.dataset.color;
-      area.focus();
-      document.execCommand("foreColor", false, color);
-      area.querySelectorAll("font[color]").forEach(f => {
-        const span = document.createElement("span");
-        span.style.color = f.getAttribute("color");
-        span.innerHTML = f.innerHTML;
-        f.parentNode.replaceChild(span, f);
-      });
-      colorMenu.classList.remove("show");
-    };
-  });
-  document.addEventListener("click", (e) => {
-    if (!colorBtn.contains(e.target) && !colorMenu.contains(e.target)) colorMenu.classList.remove("show");
-  });
-
-  // Apply a font size to the current selection (wrap in a styled span).
-  const sizeSelect = $(`${mountId}-size`);
-  const applySize = (px) => {
-    if (!px) return;
-    area.focus();
-    const sel = window.getSelection();
-    // Selection-only model: formatting applies to highlighted text. If
-    // nothing is selected, do nothing (and nudge the user once).
-    if (!sel || !sel.rangeCount || sel.isCollapsed || !area.contains(sel.anchorNode)) {
-      flashHint();
-      syncToolbar();   // revert the dropdown to reflect the real caret state
-      return;
-    }
-    document.execCommand("fontSize", false, "7");   // tag selection as font[size=7]
-    area.querySelectorAll('font[size="7"]').forEach(f => {
-      const span = document.createElement("span");
-      span.style.fontSize = px;
-      span.innerHTML = f.innerHTML;
-      f.parentNode.replaceChild(span, f);
+  // Quill 2.0.3 BUG: getSemanticHTML() emits an empty <pre> for code blocks —
+  // the text lives in the DOM (.ql-code-block) and the Delta, but the
+  // exporter drops it. Everything else exports correctly, so we use the
+  // semantic export and repair just the code blocks, in document order.
+  const semanticHTML = () => {
+    let html = quill.getSemanticHTML();
+    const blocks = Array.from(quill.root.querySelectorAll(".ql-code-block-container"));
+    if (!blocks.length) return html;
+    let i = 0;
+    return html.replace(/<pre\b[^>]*>[\s\S]*?<\/pre>/g, () => {
+      const c = blocks[i++];
+      if (!c) return "";
+      const text = Array.from(c.querySelectorAll(".ql-code-block"))
+        .map(d => d.textContent).join("\n");
+      return "<pre>" + esc(text) + "</pre>";
     });
-    syncToolbar();
-  };
-  sizeSelect.addEventListener("change", (e) => applySize(e.target.value));
-
-  // --- selection tracking: reflect the current selection's formatting in
-  // the toolbar (bold/italic/underline active states + the size dropdown),
-  // like a normal word processor. ---
-  const sizeFromNode = (node) => {
-    let el2 = (node && node.nodeType === 3) ? node.parentElement : node;
-    while (el2 && el2 !== area) {
-      if (el2.style && el2.style.fontSize) return el2.style.fontSize;
-      el2 = el2.parentElement;
-    }
-    return "16px"; // default
   };
 
-  let syncing = false;
-  function syncToolbar() {
-    if (syncing) return;
-    syncing = true;
-    try {
-      const sel = window.getSelection();
-      const inside = sel && sel.rangeCount && area.contains(sel.anchorNode);
-      if (inside) {
-        host.querySelector('[data-cmd="bold"]').classList.toggle("active", document.queryCommandState("bold"));
-        host.querySelector('[data-cmd="italic"]').classList.toggle("active", document.queryCommandState("italic"));
-        host.querySelector('[data-cmd="underline"]').classList.toggle("active", document.queryCommandState("underline"));
-        // Reflect the size of wherever the caret/selection is.
-        const px = sizeFromNode(sel.anchorNode);
-        // Snap to the closest option we offer.
-        const opts = Array.from(sizeSelect.options).map(o => o.value);
-        if (opts.includes(px)) sizeSelect.value = px;
-      }
-    } finally { syncing = false; }
-  }
+  // Replace all content with HTML. Goes through Quill's clipboard so its
+  // document model stays in sync — writing quill.root.innerHTML directly
+  // would desync the model from the DOM. Input is either our own saved
+  // draft or server-sanitized stored HTML, and Quill drops anything outside
+  // RT_FORMATS on the way in; the server re-sanitizes on save regardless.
+  const setHTML = (html) => {
+    quill.setContents([]);
+    if (html) quill.clipboard.dangerouslyPasteHTML(html, "silent");
+  };
 
-  // Update the toolbar as the selection moves within this editor.
-  document.addEventListener("selectionchange", () => {
-    const sel = window.getSelection();
-    if (sel && sel.rangeCount && area.contains(sel.anchorNode)) syncToolbar();
-  });
-  area.addEventListener("keyup", syncToolbar);
-  area.addEventListener("mouseup", syncToolbar);
-  area.addEventListener("focus", syncToolbar);
-
-  // "@" mention picker. Attached here so every rich editor gets it —
-  // the post composer today, job descriptions and anything else later.
-  if (opts.mentions !== false && typeof attachMentionPicker === "function") {
-    attachMentionPicker(area);
-  }
+  if (initialHTML) setHTML(initialHTML);
 
   return {
-    getHTML: () => area.innerHTML,
-    getText: () => area.innerText.replace(/\u200B/g, "").trim(),
-    clear:   () => { area.innerHTML = ""; },
-    focus:   () => area.focus(),
-    el: area,
+    getHTML: semanticHTML,
+    getText: () => quill.getText().replace(/\u200B/g, "").trim(),
+    setHTML,
+    // Insert at the caret (or at the end if the caret isn't in the editor).
+    insertText: (t) => {
+      const sel = quill.getSelection(true);
+      const idx = sel ? sel.index : quill.getLength();
+      quill.insertText(idx, t, "user");
+      quill.setSelection(idx + t.length, 0);
+    },
+    clear: () => quill.setContents([]),
+    focus: () => quill.focus(),
+    el: quill.root,
+    quill,
   };
 }
 window.mountRichEditor = mountRichEditor;

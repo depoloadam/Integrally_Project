@@ -1606,6 +1606,44 @@ textarea.jf-input { resize:vertical; }
 /* rendered rich text in posts/jobs */
 .rich-content { line-height:1.5; word-break:break-word; }
 
+/* ---- Quill editor chrome (vendored quill.snow.css themed to app tokens)
+   The old hand-rolled .rt-toolbar/.rt-btn/.rt-area rules above are now dead
+   (Quill emits .ql-toolbar/.ql-editor); left in place so nothing that still
+   references them breaks. */
+.rt-editor { border:1px solid var(--in-line); border-radius:10px; overflow:hidden; background:var(--in-card); }
+.rt-editor .ql-toolbar.ql-snow {
+  border:none; border-bottom:1px solid var(--in-line);
+  background:var(--in-bg); padding:6px 8px; font-family:inherit;
+}
+.rt-editor .ql-container.ql-snow { border:none; font-family:inherit; font-size:15px; }
+.rt-editor .ql-editor {
+  min-height:80px; max-height:340px; overflow-y:auto;
+  padding:11px 14px; line-height:1.55; color:var(--in-ink);
+}
+.rt-editor .ql-editor.ql-blank::before {
+  color:var(--in-muted); font-style:normal; left:14px; right:14px;
+}
+/* icons + pickers follow the theme so dark mode works */
+.rt-editor .ql-snow .ql-stroke { stroke:var(--in-ink-soft); }
+.rt-editor .ql-snow .ql-fill, .rt-editor .ql-snow .ql-stroke.ql-fill { fill:var(--in-ink-soft); }
+.rt-editor .ql-snow .ql-picker { color:var(--in-ink-soft); }
+.rt-editor .ql-snow .ql-picker-options { background:var(--in-card); border-color:var(--in-line); }
+.rt-editor .ql-snow .ql-picker.ql-expanded .ql-picker-label { border-color:var(--in-line); }
+.rt-editor .ql-snow.ql-toolbar button:hover .ql-stroke,
+.rt-editor .ql-snow.ql-toolbar button.ql-active .ql-stroke { stroke:var(--in-accent); }
+.rt-editor .ql-snow.ql-toolbar button:hover .ql-fill,
+.rt-editor .ql-snow.ql-toolbar button.ql-active .ql-fill { fill:var(--in-accent); }
+.rt-editor .ql-snow .ql-tooltip { background:var(--in-card); border-color:var(--in-line); color:var(--in-ink); box-shadow:0 8px 24px rgba(11,31,42,.14); z-index:60; }
+.rt-editor .ql-snow .ql-tooltip input[type=text] { background:var(--in-bg); border-color:var(--in-line); color:var(--in-ink); }
+/* editing surface should preview roughly how the post will render */
+.rt-editor .ql-editor blockquote { border-left:3px solid var(--in-line); padding-left:12px; color:var(--in-ink-soft); }
+.rt-editor .ql-editor .ql-code-block-container {
+  background:var(--in-bg); border:1px solid var(--in-line); border-radius:8px;
+  padding:10px 12px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:13px;
+}
+.rt-editor .ql-editor h2 { font-size:17px; }
+.rt-editor .ql-editor h3 { font-size:15px; }
+
 /* ---- rendered rich text: block formats -------------------------------
    Applies wherever sanitized rich text is displayed (feed posts, job
    descriptions). Margins are tight because posts are compact; first/last

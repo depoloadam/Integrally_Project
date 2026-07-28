@@ -838,7 +838,7 @@ function buildComposer(opts) {
   try {
     const saved = JSON.parse(localStorage.getItem(draftKey) || "null");
     if (saved?.html && Date.now() - (saved.t || 0) < 7 * 86400e3) {
-      editor.el.innerHTML = saved.html;
+      editor.setHTML(saved.html);
       composer.querySelector("#comp-vis").value = saved.vis || "public";
       draftBar.style.display = "flex";
       expand();
@@ -873,17 +873,9 @@ function buildComposer(opts) {
     b.onmousedown = (e) => e.preventDefault();
     b.onclick = () => {
       expand();
-      editor.el.focus();
-      const sel = window.getSelection();
-      if (!sel.rangeCount || !editor.el.contains(sel.anchorNode)) {
-        // Caret isn't in the editor — put it at the end.
-        const range = document.createRange();
-        range.selectNodeContents(editor.el);
-        range.collapse(false);
-        sel.removeAllRanges();
-        sel.addRange(range);
-      }
-      document.execCommand("insertText", false, em);
+      // Insert through the editor API: Quill owns its document model, so
+      // execCommand/Range writes against the DOM would desync it.
+      editor.insertText(em);
       editor.el.dispatchEvent(new Event("input", { bubbles: true }));
     };
     emojiWrap.appendChild(b);
