@@ -1678,13 +1678,38 @@ textarea.jf-input { resize:vertical; }
 .rt-editor .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="32px"]::before,
 .rt-editor .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="32px"]::before { content:"Huge"; }
 
-/* Compact the toolbar so it sits on one row at composer width. */
-.rt-editor .ql-toolbar.ql-snow { padding:4px 6px; }
-.rt-editor .ql-toolbar.ql-snow .ql-formats { margin-right:9px; }
-.rt-editor .ql-snow.ql-toolbar button { width:26px; height:26px; padding:3px 4px; }
-.rt-editor .ql-snow .ql-picker.ql-header { width:104px; }
-.rt-editor .ql-snow .ql-picker.ql-size { width:78px; }
-.rt-editor .ql-snow .ql-picker-label { padding-left:6px; }
+/* Toolbar layout. Quill lays this out with FLOATS and mixes 24px-tall
+   pickers (whose labels use line-height:22px) with 24px buttons, so icons
+   land on slightly different baselines and group spacing looks uneven.
+   Re-lay it out with flexbox at one uniform control height instead. */
+.rt-editor .ql-toolbar.ql-snow {
+  display:flex; flex-wrap:wrap; align-items:center;
+  gap:3px 10px; padding:5px 8px;
+}
+.rt-editor .ql-toolbar.ql-snow .ql-formats {
+  display:inline-flex; align-items:center; gap:1px; margin:0;
+}
+.rt-editor .ql-toolbar.ql-snow .ql-formats::after { content:none; display:none; }
+.rt-editor .ql-snow.ql-toolbar button {
+  float:none; display:inline-flex; align-items:center; justify-content:center;
+  width:28px; height:26px; padding:0; border-radius:5px;
+}
+.rt-editor .ql-snow.ql-toolbar button svg { float:none; width:18px; height:18px; }
+.rt-editor .ql-snow .ql-picker {
+  float:none; display:inline-flex; align-items:center; height:26px;
+}
+.rt-editor .ql-snow .ql-picker-label {
+  display:inline-flex; align-items:center; height:26px; width:100%;
+  padding:0 18px 0 8px; border-radius:5px;
+}
+.rt-editor .ql-snow .ql-picker-label::before { line-height:1; }
+/* icon/colour pickers are square controls, not labelled dropdowns */
+.rt-editor .ql-snow .ql-color-picker,
+.rt-editor .ql-snow .ql-icon-picker { width:28px; }
+.rt-editor .ql-snow .ql-color-picker .ql-picker-label,
+.rt-editor .ql-snow .ql-icon-picker .ql-picker-label { padding:0; justify-content:center; }
+.rt-editor .ql-snow .ql-picker.ql-header { width:106px; }
+.rt-editor .ql-snow .ql-picker.ql-size { width:80px; }
 
 /* ---- rendered rich text: block formats -------------------------------
    Applies wherever sanitized rich text is displayed (feed posts, job

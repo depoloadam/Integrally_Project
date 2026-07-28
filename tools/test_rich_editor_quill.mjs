@@ -160,5 +160,22 @@ const savedTail = execFileSync("php", ["-r",
   'require "src/RichText.php"; echo RichText::clean("<pre>code();</pre><p></p>");'], { encoding: "utf8" });
 ok(savedTail === "<pre>code();</pre>", "the helper paragraph is stripped on save (not stored)");
 
+console.log("\ntoolbar alignment (uniform control height, no floats)");
+const cssT = readFileSync("assets/css/app.css", "utf8");
+// Strip CSS comments first — prose describing Quill's own 22px line-height
+// would otherwise be matched as if it were a declaration.
+const tbBlock = cssT.slice(cssT.indexOf(".rt-editor .ql-toolbar.ql-snow {"),
+                           cssT.indexOf(".rt-editor .ql-snow .ql-picker.ql-size { width:80px; }") + 60)
+                    .replace(/\/\*[\s\S]*?\*\//g, "");
+ok(/display:flex/.test(tbBlock), "toolbar uses flex layout");
+ok(/align-items:center/.test(tbBlock), "controls are vertically centred");
+ok(/button[\s\S]*?float:none/.test(tbBlock), "button floats are cleared");
+ok(/\.ql-picker \{[\s\S]*?float:none/.test(tbBlock), "picker floats are cleared");
+// buttons and pickers must share one height, or icons sit on different lines
+const btnH = /\.ql-snow\.ql-toolbar button \{[\s\S]*?height:(\d+)px/.exec(tbBlock);
+const pickH = /\.ql-snow \.ql-picker \{[\s\S]*?height:(\d+)px/.exec(tbBlock);
+ok(btnH && pickH && btnH[1] === pickH[1],
+   `buttons and pickers share a height (${btnH && btnH[1]}px vs ${pickH && pickH[1]}px)`);
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
