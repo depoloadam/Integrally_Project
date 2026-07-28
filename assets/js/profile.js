@@ -472,8 +472,8 @@ function renderScoreRow(s, showOwnerControls) {
         <div class="score-mini">${miniRows}</div>
         <div class="score-detail-actions">
           ${showOwnerControls ? `<button class="in-btn primary score-rescorebtn" style="flex:none;padding:8px 14px">Re-score</button>` : ""}
-          <button class="in-btn ghost score-fullbtn" style="flex:none;padding:8px 14px">View full breakdown →</button>
-          <button class="in-btn ghost score-histbtn" style="flex:none;padding:8px 14px">View history →</button>
+          ${showOwnerControls ? `<button class="in-btn ghost score-fullbtn" style="flex:none;padding:8px 14px">View full breakdown →</button>` : ""}
+          ${showOwnerControls ? `<button class="in-btn ghost score-histbtn" style="flex:none;padding:8px 14px">View history →</button>` : ""}
           ${showOwnerControls ? `<button class="in-btn danger-ghost score-delbtn" style="flex:none;padding:8px 14px">Remove score</button>` : ""}
         </div>
       </div>
@@ -492,11 +492,15 @@ function renderScoreRow(s, showOwnerControls) {
       loadScoreComparison(s, row.querySelector(".score-compare-slot"), s.id);
     }
   };
-  row.querySelector(".score-fullbtn").onclick = () => { location.hash = "score/" + s.id; };
-  row.querySelector(".score-histbtn").onclick = () => {
-    location.hash = "score-history/" + encodeURIComponent(s.target_type + "|" + s.target_value);
-  };
   if (showOwnerControls) {
+    // Full breakdown and history route to viewer-scoped endpoints
+    // (history.php / score.php serve the logged-in user's own scores),
+    // so these only work on your own profile — hence owner-gated.
+    row.querySelector(".score-fullbtn").onclick = () => { location.hash = "score/" + s.id; };
+    row.querySelector(".score-histbtn").onclick = () => {
+      location.hash = "score-history/" + encodeURIComponent(s.target_type + "|" + s.target_value);
+    };
+
     // Re-score runs the SAME target again — no retyping, and it can't trip
     // the entry cap because it reuses an existing target rather than
     // adding one. Confirmed first: it writes a new history entry, and the
