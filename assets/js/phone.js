@@ -129,6 +129,9 @@
   function mount(input, select, opts) {
     opts = opts || {};
     if (!input || !select) return null;
+    // Guard against double-binding if a form re-renders onto the same nodes.
+    if (input.dataset.phoneMounted === "1") return null;
+    input.dataset.phoneMounted = "1";
 
     // Populate the country <select> once.
     if (!select.dataset.phoneCountry) {
@@ -158,6 +161,12 @@
     }
     select.value = startIso;
 
+    // The country currently reflected in the input's value. Tracked so a
+    // country CHANGE can strip the OLD country's dial code precisely,
+    // rather than guessing from digit length (which failed for short
+    // numbers — e.g. "+33 " → US wrongly kept "33" as national digits).
+    var currentIso = select.value;
+
     var format = function () {
       var country = byIso(select.value) || byIso("US");
       var nat = nationalDigitsOf(input.value, country);
@@ -168,6 +177,7 @@
         var pos = Math.max(0, composed.length - fromEnd);
         try { input.setSelectionRange(pos, pos); } catch (e) {}
       }
+      currentIso = select.value;
     };
 
     // Seed initial display from a stored value.
@@ -187,8 +197,18 @@
 
     input.addEventListener("input", format);
     select.addEventListener("change", function () {
+      // Re-mask under the new country. Compute national digits relative to
+      // the OLD country so its dial code (any length, incl. short prefix-
+      // only codes) is removed exactly — not re-absorbed into the number.
+      var oldCountry = byIso(currentIso) || byIso("US");
+      var newCountry = byIso(select.value) || byIso("US");
+      var digits = (input.value || "").replace(/\D/g, "");
+      if (oldCountry.dial && digits.indexOf(oldCountry.dial) === 0) {
+        digits = digits.slice(oldCountry.dial.length);
+      }
       setPlaceholder();
-      format();  // re-mask existing digits under the new country
+      input.value = compose(newCountry, digits);
+      currentIso = select.value;
     });
 
     return {

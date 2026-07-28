@@ -73,6 +73,42 @@ inp.value = "7911123456";
 inp.dispatchEvent(new window.Event("input", { bubbles: true }));
 ok(inp.value === "+44 7911 123456", "a real UK number masks to +44 7911 123456");
 
+console.log("\ncountry switch — old dial code is stripped, never re-absorbed");
+// The reported bug: on a prefix-only country (+33) with an EMPTY number,
+// switching must not carry "33" into the new number as national digits.
+let s1 = mk();
+PF.mount(s1.inp, s1.sel, { initialIso: "FR" });
+// The +33 prefix appears once the user types a digit (empty field shows
+// only a placeholder — we don't prefill a bare code).
+s1.inp.value = "6"; s1.inp.dispatchEvent(new window.Event("input", { bubbles: true }));
+ok(/^\+33/.test(s1.inp.value), "France shows the +33 prefix after typing a digit");
+s1.sel.value = "US";
+s1.sel.dispatchEvent(new window.Event("change", { bubbles: true }));
+ok(s1.inp.value === "+1 (6", "FR('+33 6') -> US drops 33, keeps the typed 6 (not '+1 (33')");
+// compounding: several switches never accumulate old codes
+s1.sel.value = "GB"; s1.sel.dispatchEvent(new window.Event("change", { bubbles: true }));
+s1.sel.value = "AU"; s1.sel.dispatchEvent(new window.Event("change", { bubbles: true }));
+s1.sel.value = "US"; s1.sel.dispatchEvent(new window.Event("change", { bubbles: true }));
+ok(s1.inp.value === "+1 (6", "repeated switches never accumulate old dial codes");
+
+// With a real number present, switching swaps the dial code but keeps the
+// national digits (round-trips without gaining/losing digits).
+let s2 = mk();
+PF.mount(s2.inp, s2.sel, { initialIso: "US" });
+s2.inp.value = "+1 (555) 123-4567";
+s2.sel.value = "FR"; s2.sel.dispatchEvent(new window.Event("change", { bubbles: true }));
+ok(s2.inp.value === "+33 5551234567", "US# -> FR: +1 stripped, digits kept under +33");
+s2.sel.value = "GB"; s2.sel.dispatchEvent(new window.Event("change", { bubbles: true }));
+ok(s2.inp.value === "+44 5551 234567", "FR -> GB: +33 stripped, digits re-masked under +44");
+s2.sel.value = "US"; s2.sel.dispatchEvent(new window.Event("change", { bubbles: true }));
+ok(s2.inp.value === "+1 (555) 123-4567", "GB -> US: round-trips back to the original US number");
+
+// double-mount guard: re-mounting the same input is a no-op (no stacked listeners)
+let s3 = mk();
+PF.mount(s3.inp, s3.sel, { initialIso: "US" });
+const second = PF.mount(s3.inp, s3.sel, { initialIso: "US" });
+ok(second === null, "re-mounting the same input is a guarded no-op");
+
 // seeding from a stored +44 value infers the country
 let m2 = mk();
 PF.mount(m2.inp, m2.sel, { initialValue: "+44 7911 123456", initialIso: "US" });
