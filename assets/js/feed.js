@@ -239,6 +239,12 @@ async function renderFeed() {
   const scoreSlot = el(`<div class="rail-slot"></div>`);
   rail.appendChild(scoreSlot);
   buildScoreRail(scoreSlot);
+  // Plus promo sits between "Your scores" and the discover cards. Slot is
+  // reserved synchronously (like the score slot) so its position never
+  // depends on async ordering.
+  const plusSlot = el(`<div class="rail-slot"></div>`);
+  rail.appendChild(plusSlot);
+  buildPlusPromo(plusSlot);
   buildDiscoverRail(rail);
 
   // ---- tabs + post list ----
@@ -364,6 +370,33 @@ async function buildScoreRail(mount) {
 
   mount.appendChild(card);
 }
+
+// ---- Plus promo (rail) ------------------------------------------------
+// A compact upsell card between "Your scores" and the discover cards.
+// Gated like the sub-nav CTA: not shown to existing Plus members (nothing
+// to upsell) and not on company feeds (Plus is a member-only offer). The
+// slot is removed on any bail-out so a skip leaves no gap. Payments aren't
+// built yet, so the CTA reuses the shared "coming soon" acknowledgement.
+function buildPlusPromo(mount) {
+  const drop = () => { if (mount && mount.parentNode) mount.remove(); };
+  // Members only, and only those not already on Plus.
+  if (!mount || !ME || (ME.plan === "plus")) { drop(); return; }
+
+  const card = el(`
+    <div class="railcard pluscard">
+      <div class="pluscard-glow" aria-hidden="true"></div>
+      <div class="pluscard-tag">PLUS<span>+</span></div>
+      <div class="pluscard-head">Get seen by more employers</div>
+      <div class="pluscard-sub">Priority ranking, deeper score insights, and more re-scores.</div>
+      <button class="pluscard-cta" type="button">Try PLUS+</button>
+    </div>`);
+  card.querySelector(".pluscard-cta").onclick = () => {
+    // Same acknowledgement as the sub-nav CTA until the Plus cluster ships.
+    toast("PLUS+ is coming soon — we'll let you know when it's ready.");
+  };
+  mount.appendChild(card);
+}
+
 
 async function buildDiscoverRail(mount) {
   if (!mount || !(ME || CO)) return;
