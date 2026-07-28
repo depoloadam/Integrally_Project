@@ -38,8 +38,9 @@ const shell = readFileSync("assets/js/shell.js", "utf8");
 const slice = (from, to) => shell.slice(shell.indexOf(from), shell.indexOf(to));
 const editorSrc =
   shell.slice(shell.indexOf("const RT_COLORS"), shell.indexOf("\n}\n", shell.indexOf("function mountRichEditor")) + 3);
-w.eval(editorSrc + "\n;window.mountRichEditor = mountRichEditor;");
+w.eval(editorSrc + "\n;window.mountRichEditor = mountRichEditor; window.__RT_FORMATS = RT_FORMATS;");
 ok(typeof w.mountRichEditor === "function", "mountRichEditor loads");
+const RT_FORMATS_CHECK = w.__RT_FORMATS || [];
 
 console.log("\nAPI contract (what feed.js / company.js depend on)");
 const ed = w.mountRichEditor("host", { placeholder: "Write something…" });
@@ -117,6 +118,25 @@ const evil = execFileSync("php", ["-r",
   'require "src/RichText.php"; echo RichText::clean("<script>bad()</script><b>ok</b>");'
 ], { encoding: "utf8" });
 ok(!evil.includes("script") && evil.includes("ok"), "sanitizer still strips (round-trip check is meaningful)");
+
+console.log("\ntoolbar composition (no duplicate/ambiguous controls)");
+const tb = w.document.querySelector(".ql-toolbar");
+ok(!!tb, "toolbar rendered");
+// Quill maps `code` and `code-block` to the SAME icon, so having both made
+// two identical </> buttons. Only the block version is on the toolbar.
+ok(!!tb.querySelector("button.ql-code-block"), "code-block button present");
+ok(!tb.querySelector("button.ql-code"), "inline-code button removed (was an identical icon)");
+// ...but the format is still accepted, so pasted inline code survives.
+ok(RT_FORMATS_CHECK.includes("code"), "inline code still an allowed format");
+// Both pickers exist and are labelled by CSS, not left as twin "Normal"s.
+ok(!!tb.querySelector(".ql-picker.ql-header"), "heading picker present");
+ok(!!tb.querySelector(".ql-picker.ql-size"), "size picker present");
+const css = readFileSync("assets/css/app.css", "utf8");
+ok(/ql-picker\.ql-header[\s\S]*?content:"Paragraph"/.test(css), "heading picker labelled 'Paragraph' (not a second 'Normal')");
+[["12px","Small"],["24px","Large"],["32px","Huge"]].forEach(([v,l]) =>
+  ok(css.includes(`ql-size .ql-picker-item[data-value="${v}"]::before { content:"${l}"; }`)
+     || new RegExp(`data-value="${v}"\\]::before \\{ content:"${l}"`).test(css),
+     `size ${v} labelled '${l}'`));
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

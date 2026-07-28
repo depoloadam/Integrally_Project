@@ -401,7 +401,7 @@ function mountRichEditor(mountId, opts = {}) {
         [{ header: [2, 3, false] }],
         ["bold", "italic", "underline"],
         [{ list: "bullet" }, { list: "ordered" }],
-        ["blockquote", "code-block", "code"],
+        ["blockquote", "code-block"],
         [{ align: [] }],
         [{ color: RT_COLORS }],
         [{ size: RT_SIZES.map(s => s[1]) }],

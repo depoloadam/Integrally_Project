@@ -1644,6 +1644,36 @@ textarea.jf-input { resize:vertical; }
 .rt-editor .ql-editor h2 { font-size:17px; }
 .rt-editor .ql-editor h3 { font-size:15px; }
 
+/* Picker labels. Quill's snow theme only labels its own size keywords
+   (small/large/huge); we feed it px values, so every option fell through to
+   the default "Normal" — making the size picker look identical to the
+   heading picker. Label both explicitly, in posting language. */
+.rt-editor .ql-snow .ql-picker.ql-header .ql-picker-label::before,
+.rt-editor .ql-snow .ql-picker.ql-header .ql-picker-item::before { content:"Paragraph"; }
+.rt-editor .ql-snow .ql-picker.ql-header .ql-picker-label[data-value="2"]::before,
+.rt-editor .ql-snow .ql-picker.ql-header .ql-picker-item[data-value="2"]::before { content:"Heading"; }
+.rt-editor .ql-snow .ql-picker.ql-header .ql-picker-label[data-value="3"]::before,
+.rt-editor .ql-snow .ql-picker.ql-header .ql-picker-item[data-value="3"]::before { content:"Subheading"; }
+
+.rt-editor .ql-snow .ql-picker.ql-size .ql-picker-label::before,
+.rt-editor .ql-snow .ql-picker.ql-size .ql-picker-item::before { content:"Normal"; }
+.rt-editor .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="12px"]::before,
+.rt-editor .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="12px"]::before { content:"Small"; }
+.rt-editor .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="16px"]::before,
+.rt-editor .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="16px"]::before { content:"Normal"; }
+.rt-editor .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="24px"]::before,
+.rt-editor .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="24px"]::before { content:"Large"; }
+.rt-editor .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="32px"]::before,
+.rt-editor .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="32px"]::before { content:"Huge"; }
+
+/* Compact the toolbar so it sits on one row at composer width. */
+.rt-editor .ql-toolbar.ql-snow { padding:4px 6px; }
+.rt-editor .ql-toolbar.ql-snow .ql-formats { margin-right:9px; }
+.rt-editor .ql-snow.ql-toolbar button { width:26px; height:26px; padding:3px 4px; }
+.rt-editor .ql-snow .ql-picker.ql-header { width:104px; }
+.rt-editor .ql-snow .ql-picker.ql-size { width:78px; }
+.rt-editor .ql-snow .ql-picker-label { padding-left:6px; }
+
 /* ---- rendered rich text: block formats -------------------------------
    Applies wherever sanitized rich text is displayed (feed posts, job
    descriptions). Margins are tight because posts are compact; first/last
