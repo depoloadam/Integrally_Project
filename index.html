@@ -82,6 +82,9 @@
   .in-tab.active { background:var(--in-bg); color:var(--in-ink); box-shadow:0 1px 3px rgba(11,31,42,.12); }
 
   .in-field { margin-bottom:14px; }
+  .phone-row { display:flex; gap:8px; align-items:stretch; }
+  .phone-row .phone-country { flex:0 0 42%; max-width:220px; }
+  .phone-row input { flex:1 1 auto; min-width:0; }
   .in-field label { display:block; font-size:12.5px; font-weight:600; margin-bottom:6px; color:var(--in-ink-soft); }
   .in-field input, .in-field select {
     width:100%; padding:11px 13px; font-size:14.5px; background:var(--in-field-bg);
@@ -244,7 +247,10 @@
 
         <div class="in-field">
           <label for="reg-phone">Phone <span class="opt">(optional, private)</span></label>
-          <input type="tel" id="reg-phone" autocomplete="tel" placeholder="+1 (555) 123-4567" />
+          <div class="phone-row">
+            <select id="reg-phone-country" class="phone-country" aria-label="Country code"></select>
+            <input type="tel" id="reg-phone" autocomplete="tel" placeholder="(555) 123-4567" />
+          </div>
         </div>
         <div class="in-field">
           <label for="reg-country">Country <span class="opt">(optional)</span></label>
@@ -263,6 +269,7 @@
 </div>
 
 <script src="assets/js/geo.js"></script>
+<script src="assets/js/phone.js?v=1"></script>
 <script>
   // ===================================================================
   // CONFIG — set to match your XAMPP folder.
@@ -318,6 +325,8 @@
   $("reg-pass").addEventListener("input", checkPasswordReqs);
   // Dynamic country -> state/province/region field.
   geoInitCountry($("reg-country"), $("reg-sub-wrap"));
+  // Phone country-code + auto-format (shared module). Defaults to US.
+  if (window.PhoneField) window.PhoneField.mount($("reg-phone"), $("reg-phone-country"), { initialIso: "US" });
   $("reg-pass2").addEventListener("input", checkPasswordReqs);
 
   // --- LOGIN ---------------------------------------------------------
