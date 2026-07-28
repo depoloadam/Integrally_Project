@@ -161,21 +161,33 @@ const savedTail = execFileSync("php", ["-r",
 ok(savedTail === "<pre>code();</pre>", "the helper paragraph is stripped on save (not stored)");
 
 console.log("\ntoolbar alignment (uniform control height, no floats)");
-const cssT = readFileSync("assets/css/app.css", "utf8");
 // Strip CSS comments first — prose describing Quill's own 22px line-height
 // would otherwise be matched as if it were a declaration.
-const tbBlock = cssT.slice(cssT.indexOf(".rt-editor .ql-toolbar.ql-snow {"),
-                           cssT.indexOf(".rt-editor .ql-snow .ql-picker.ql-size { width:80px; }") + 60)
-                    .replace(/\/\*[\s\S]*?\*\//g, "");
-ok(/display:flex/.test(tbBlock), "toolbar uses flex layout");
-ok(/align-items:center/.test(tbBlock), "controls are vertically centred");
-ok(/button[\s\S]*?float:none/.test(tbBlock), "button floats are cleared");
-ok(/\.ql-picker \{[\s\S]*?float:none/.test(tbBlock), "picker floats are cleared");
-// buttons and pickers must share one height, or icons sit on different lines
-const btnH = /\.ql-snow\.ql-toolbar button \{[\s\S]*?height:(\d+)px/.exec(tbBlock);
-const pickH = /\.ql-snow \.ql-picker \{[\s\S]*?height:(\d+)px/.exec(tbBlock);
-ok(btnH && pickH && btnH[1] === pickH[1],
-   `buttons and pickers share a height (${btnH && btnH[1]}px vs ${pickH && pickH[1]}px)`);
+const cssT = readFileSync("assets/css/app.css", "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+// A selector may be styled in more than one block (theming, then layout);
+// collect every occurrence so we assert against the full cascade.
+const rule = (sel) => {
+  let out = "", i = -1;
+  while ((i = cssT.indexOf(sel + " {", i + 1)) >= 0) out += cssT.slice(i, cssT.indexOf("}", i)) + "\n";
+  return out;
+};
+const tbRule = rule(".rt-editor .ql-toolbar.ql-snow");
+ok(/display:flex/.test(tbRule), "toolbar uses flex layout");
+ok(/align-items:center/.test(tbRule), "controls are vertically centred");
+const btnRule = rule(".rt-editor .ql-snow.ql-toolbar button");
+const pickRule = rule(".rt-editor .ql-snow .ql-picker");
+ok(/float:none/.test(btnRule), "button floats are cleared");
+ok(/float:none/.test(pickRule), "picker floats are cleared");
+// last declaration wins in the cascade
+const h = (r) => { const m = [...r.matchAll(/height:(\d+)px/g)]; return m.length ? m[m.length - 1][1] : undefined; };
+ok(h(btnRule) && h(btnRule) === h(pickRule),
+   `buttons and pickers share a height (${h(btnRule)}px vs ${h(pickRule)}px)`);
+// The align + colour controls are PICKERS, so button-svg sizing never reached
+// them — that is why those two icons rendered larger and lower than the rest.
+ok(/width:17px/.test(cssT.slice(cssT.indexOf(".ql-icon-picker .ql-picker-label svg"))),
+   "icon/colour picker SVGs are explicitly sized");
+ok(cssT.includes(".rt-editor .ql-snow .ql-icon-picker .ql-picker-label svg"),
+   "align (icon picker) SVG is targeted");
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
