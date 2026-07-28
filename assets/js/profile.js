@@ -461,38 +461,41 @@ function renderScoreRow(s, showOwnerControls) {
         <div class="in-score-badge">${val}</div>
         <div class="meta"><div class="t">${esc(s.target_value)}${isHidden ? '<span class="score-hidden-tag">Hidden</span>' : ""}</div><div class="s">${typeLabel} · ${date}</div></div>
         ${showOwnerControls ? `<button class="score-hide-toggle" title="${isHidden ? "Unhide from your profile" : "Hide from your profile"}">${isHidden ? "🙈" : "👁"}</button>` : ""}
-        <button class="score-expand" title="Show breakdown">▾</button>
+        ${showOwnerControls ? `<button class="score-expand" title="Show breakdown">▾</button>` : ""}
       </div>
       <div class="score-bar">
         <div class="score-bar-track"></div>
         <div class="score-bar-marker" style="left:${val}%"><div class="score-bar-arrow"></div></div>
       </div>
+      ${showOwnerControls ? `
       <div class="score-detail" style="display:none">
         <div class="score-compare-slot"></div>
         <div class="score-mini">${miniRows}</div>
         <div class="score-detail-actions">
-          ${showOwnerControls ? `<button class="in-btn primary score-rescorebtn" style="flex:none;padding:8px 14px">Re-score</button>` : ""}
-          ${showOwnerControls ? `<button class="in-btn ghost score-fullbtn" style="flex:none;padding:8px 14px">View full breakdown →</button>` : ""}
-          ${showOwnerControls ? `<button class="in-btn ghost score-histbtn" style="flex:none;padding:8px 14px">View history →</button>` : ""}
-          ${showOwnerControls ? `<button class="in-btn danger-ghost score-delbtn" style="flex:none;padding:8px 14px">Remove score</button>` : ""}
+          <button class="in-btn primary score-rescorebtn" style="flex:none;padding:8px 14px">Re-score</button>
+          <button class="in-btn ghost score-fullbtn" style="flex:none;padding:8px 14px">View full breakdown →</button>
+          <button class="in-btn ghost score-histbtn" style="flex:none;padding:8px 14px">View history →</button>
+          <button class="in-btn danger-ghost score-delbtn" style="flex:none;padding:8px 14px">Remove score</button>
         </div>
-      </div>
+      </div>` : ""}
     </div>`);
-  const detail = row.querySelector(".score-detail");
-  const caret = row.querySelector(".score-expand");
-  let compareLoaded = false;
-  caret.onclick = () => {
-    const open = detail.style.display !== "none";
-    detail.style.display = open ? "none" : "block";
-    caret.textContent = open ? "▾" : "▴";
-    // Lazy-load the "Top X%" comparison the first time the row is opened,
-    // and only for the owner (comparing your own standing).
-    if (!open && !compareLoaded && showOwnerControls && !isHidden) {
-      compareLoaded = true;
-      loadScoreComparison(s, row.querySelector(".score-compare-slot"), s.id);
-    }
-  };
   if (showOwnerControls) {
+    // Caret + detail panel exist only on the owner's own row (visitor rows
+    // are just badge/target/bar — nothing to expand).
+    const detail = row.querySelector(".score-detail");
+    const caret = row.querySelector(".score-expand");
+    let compareLoaded = false;
+    caret.onclick = () => {
+      const open = detail.style.display !== "none";
+      detail.style.display = open ? "none" : "block";
+      caret.textContent = open ? "▾" : "▴";
+      // Lazy-load the "Top X%" comparison the first time the row is opened.
+      if (!open && !compareLoaded && !isHidden) {
+        compareLoaded = true;
+        loadScoreComparison(s, row.querySelector(".score-compare-slot"), s.id);
+      }
+    };
+
     // Full breakdown and history route to viewer-scoped endpoints
     // (history.php / score.php serve the logged-in user's own scores),
     // so these only work on your own profile — hence owner-gated.
@@ -500,7 +503,6 @@ function renderScoreRow(s, showOwnerControls) {
     row.querySelector(".score-histbtn").onclick = () => {
       location.hash = "score-history/" + encodeURIComponent(s.target_type + "|" + s.target_value);
     };
-
     // Re-score runs the SAME target again — no retyping, and it can't trip
     // the entry cap because it reuses an existing target rather than
     // adding one. Confirmed first: it writes a new history entry, and the

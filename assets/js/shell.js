@@ -517,9 +517,9 @@ async function boot() {
     $("profile-menu").style.display = "";
     $("auth-menu").style.display = "none";
     if ($("search-trigger")) $("search-trigger").style.display = "inline-flex";
-    // Shown to members. When Plus ships, this is where a plan check would
-    // hide the upsell from existing subscribers.
-    setSubnav(true);
+    // Upsell is for non-Plus members only — hide it from existing
+    // subscribers. Mirrors the ME.plan check used on the profile page.
+    setSubnav(!(ME && ME.plan === "plus"));
     document.querySelectorAll("[data-nav]").forEach(b => b.style.display = "");
     // The company-only Feed button stays hidden for users (they have their own).
     const coFeedBtn = document.querySelector('[data-nav="company-feed"]');
@@ -570,7 +570,7 @@ async function boot() {
     $("profile-menu").style.display = "none";
     $("auth-menu").style.display = "";
     if ($("search-trigger")) $("search-trigger").style.display = "none";
-    setSubnav(true);                         // upsell is visible to visitors too
+    setSubnav(false);                        // no upsell to signed-out visitors
     if (typeof hideNotifications === "function") hideNotifications();
     if (typeof hideMessaging === "function") hideMessaging();
     renderSignedOut();

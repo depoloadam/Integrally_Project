@@ -114,11 +114,32 @@ const coBranch   = js.indexOf("setupCompanyIdentityNav()");
 const outBranch  = js.indexOf('$("auth-menu").style.display = "";');
 ok(userBranch > -1 && coBranch > -1 && outBranch > -1, "located all three identity branches");
 const near = (idx, needle, span = 500) => js.slice(Math.max(0, idx - span), idx + span).includes(needle);
-ok(near(userBranch, "setSubnav(true)"), "signed-in user -> shown");
+ok(near(userBranch, 'setSubnav(!(ME && ME.plan === "plus"))'), "signed-in user -> shown unless already Plus");
 ok(near(coBranch, "setSubnav(false)"), "company -> hidden");
-ok(near(outBranch, "setSubnav(true)"), "signed out -> shown");
+ok(near(outBranch, "setSubnav(false)"), "signed out -> hidden (no upsell to visitors)");
+// teeth: the old always-on behaviour must be gone from both branches.
+ok(!near(outBranch, "setSubnav(true)"), "signed-out no longer unconditionally shows the upsell");
 // Sanity: the 'near' matcher must reject something that isn't there.
 ok(!near(coBranch, "setSubnav(__nope__)"), "near() rejects absent text");
+
+// Behavioral: drive the REAL setSubnav with the plan gate for each identity
+// so we test the resulting visibility, not just that the source contains a
+// string. gate(ME) mirrors the expression in the signed-in branch.
+console.log("\nplus / signed-out visibility gate");
+const gate = (ME) => !(ME && ME.plan === "plus");
+// free user -> bar shown
+setSubnav(gate({ plan: "free" }));
+ok(document.documentElement.classList.contains("has-subnav"), "free user sees the upsell");
+// plus user -> bar hidden
+setSubnav(gate({ plan: "plus" }));
+ok(!document.documentElement.classList.contains("has-subnav"), "Plus user does NOT see the upsell");
+// user with no plan field (defensive) -> treated as non-Plus, shown
+setSubnav(gate({}));
+ok(document.documentElement.classList.contains("has-subnav"), "user without a plan field is treated as non-Plus (shown)");
+// signed-out (company/visitor branches pass false directly)
+setSubnav(false);
+ok(!document.documentElement.classList.contains("has-subnav"), "signed-out / company: upsell hidden");
+
 
 console.log("\nclick -> coming-soon notice");
 // Rebuild the delegated handler exactly as shell.js registers it.

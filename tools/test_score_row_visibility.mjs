@@ -69,13 +69,18 @@ ok(!visitorRow.querySelector(".score-delbtn"), "visitor does not see Remove");
 // The score itself is still shown to visitors — we hid the actions, not the data.
 ok(!!visitorRow.querySelector(".in-score-badge"), "visitor still sees the score badge/value");
 ok(visitorRow.textContent.includes("Data Analyst"), "visitor still sees the target");
-// The expand caret still works for a visitor (mini-breakdown is inline, allowed).
-ok(!!visitorRow.querySelector(".score-expand"), "visitor still has the expand caret");
-
-// teeth: expanding a visitor row must not throw (handlers were the risk).
-const caret = visitorRow.querySelector(".score-expand");
-ok((() => { try { caret.dispatchEvent(new window.MouseEvent("click", { bubbles: true })); return true; } catch { return false; } })(),
-   "expanding a visitor row does not throw");
+ok(!!visitorRow.querySelector(".score-bar"), "visitor still sees the score bar");
+// Caret and the whole detail panel are gone for visitors — nothing to expand.
+ok(!visitorRow.querySelector(".score-expand"), "visitor has NO expand caret");
+ok(!visitorRow.querySelector(".score-detail"), "visitor has NO detail panel");
+ok(!visitorRow.querySelector(".score-mini"), "visitor has no mini-breakdown block");
+ok(!visitorRow.querySelector(".score-detail-actions"), "visitor has no actions row");
+// teeth: the owner still HAS a working caret + detail (removed only for visitors).
+ok(!!ownerRow.querySelector(".score-expand"), "owner still has the expand caret");
+ok(!!ownerRow.querySelector(".score-detail"), "owner still has the detail panel");
+const ownerCaret = ownerRow.querySelector(".score-expand");
+ok((() => { try { ownerCaret.dispatchEvent(new window.MouseEvent("click", { bubbles: true })); return true; } catch { return false; } })(),
+   "owner caret still expands without throwing");
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
