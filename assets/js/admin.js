@@ -496,6 +496,11 @@ async function loadAdminUsers() {
       if (res.ok && res.data?.success) {
         adminNotify(msg, "ok", `Set @${u.username} to ${newPlan === "plus" ? "Plus" : "Free"}.`);
         u.plan = newPlan;
+        // If the admin changed their OWN plan, refresh the live identity so
+        // the Try PLUS+ CTA / promo update immediately — no hard refresh.
+        if (typeof ME !== "undefined" && ME && ME.uuid === u.uuid && typeof refreshMe === "function") {
+          refreshMe();
+        }
       } else {
         adminNotify(msg, "err", res.data?.error || "Could not update plan.");
         planSelect.value = u.plan; // revert on failure

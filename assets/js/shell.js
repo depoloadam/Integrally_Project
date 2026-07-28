@@ -293,6 +293,7 @@ function mountAvatarPicker(mountId, state, opts = {}) {
         <div class="avatar-pick-controls">
           <button type="button" class="in-btn ghost" id="${mountId}-btn" style="flex:none;padding:8px 14px">${url ? "Change photo" : "Upload photo"}</button>
           ${url ? `<button type="button" class="in-btn ghost" id="${mountId}-rm" style="flex:none;padding:8px 14px">Remove</button>` : ""}
+          <div class="avatar-pick-hint" id="${mountId}-hint">JPG, PNG, GIF, or WEBP · up to 8 MB. Square images look best; we'll center-crop to a ${shape === "square" ? "square" : "circle"}.</div>
           <div class="avatar-pick-msg" id="${mountId}-msg"></div>
         </div>
         <input type="file" id="${mountId}-file" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none">
@@ -306,10 +307,29 @@ function mountAvatarPicker(mountId, state, opts = {}) {
       const file = e.target.files[0];
       if (!file) return;
       const msg = $(`${mountId}-msg`);
+      // Client-side pre-check so oversized/wrong-type files fail instantly
+      // with a clear reason, before a wasted upload round-trip. The server
+      // re-validates regardless (it's the enforcer) — these bounds MIRROR
+      // api/upload/avatar.php: 8 MB cap, JPG/PNG/GIF/WEBP only.
+      const OK_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+      const MAX_BYTES = 8 * 1024 * 1024;
+      if (file.type && !OK_TYPES.includes(file.type)) {
+        msg.textContent = "That format isn't supported. Use JPG, PNG, GIF, or WEBP.";
+        msg.className = "avatar-pick-msg err";
+        e.target.value = "";
+        return;
+      }
+      if (file.size > MAX_BYTES) {
+        msg.textContent = "That image is too large. Please use one under 8 MB.";
+        msg.className = "avatar-pick-msg err";
+        e.target.value = "";
+        return;
+      }
       msg.textContent = "Uploading…"; msg.className = "avatar-pick-msg";
       const up = await uploadAvatar(file);
       if (up && up.url) { state.avatarUrl = up.url; render(); }
-      else { msg.textContent = "Upload failed. Use a JPG/PNG/GIF/WEBP under 5 MB."; msg.className = "avatar-pick-msg err"; }
+      else { msg.textContent = "Upload failed. Use a JPG, PNG, GIF, or WEBP under 8 MB."; msg.className = "avatar-pick-msg err"; }
+      e.target.value = "";   // allow re-picking the same file after an error
     };
   };
   render();
@@ -797,6 +817,82 @@ function setPlusCta(show) {
   const btn = document.querySelector('#subnav-inner [data-subnav="plus"]');
   if (btn) btn.style.display = show ? "" : "none";
 }
+
+// Re-apply every Plus-dependent surface from the CURRENT ME.plan, so a plan
+// change takes effect without a hard refresh. Covers the sub-nav CTA now;
+// if the feed is the active view, re-render it so the rail promo card
+// re-evaluates too. Company identities never show the upsell.
+function applyPlusState() {
+  if (ME) setPlusCta(!(ME.plan === "plus"));
+  else setPlusCta(false);
+  // If the feed is on screen, its rail promo depends on ME.plan — refresh it.
+  const raw = location.hash.replace(/^#/, "");
+  if ((raw === "" || raw === "feed") && typeof renderFeed === "function") renderFeed();
+}
+window.applyPlusState = applyPlusState;
+
+// Re-fetch the current user from the server and re-apply plan-dependent UI.
+// Call after anything that can change the signed-in user's own plan (admin
+// self-change today; the Plus purchase flow later). Returns the fresh ME.
+async function refreshMe() {
+  try {
+    const { ok, data } = await api("/auth/me.php");
+    if (ok && data?.success) { ME = data.data; applyPlusState(); }
+  } catch (_) { /* leave ME as-is on failure */ }
+  return ME;
+}
+window.refreshMe = refreshMe;
+
+// =====================================================================
+// US phone auto-formatting. Attaches to a tel input and formats a US /
+// NANP number as (555) 123-4567 while typing. Deliberately hands-off for
+// international input: the moment the value starts with "+", we leave it
+// completely alone so a country code like +44 20 7946 0958 isn't mangled.
+// The server stores whatever string it receives; this is display sugar.
+// =====================================================================
+function formatUsPhone(raw) {
+  // International or explicitly-prefixed: don't touch it.
+  if (/^\s*\+/.test(raw)) return raw;
+
+  const digits = raw.replace(/\D/g, "");
+  // Allow a leading US country code "1" but don't require it.
+  let d = digits;
+  let prefix = "";
+  if (d.length === 11 && d[0] === "1") { prefix = "1 "; d = d.slice(1); }
+  else if (d.length > 10 && d[0] === "1") { prefix = "1 "; d = d.slice(1); }
+
+  // More than 10 significant digits and not a clean US number → likely
+  // international typed without "+"; leave the raw input rather than guess.
+  if (d.length > 10) return raw;
+
+  const a = d.slice(0, 3), b = d.slice(3, 6), c = d.slice(6, 10);
+  let out = "";
+  if (d.length > 6)      out = `(${a}) ${b}-${c}`;
+  else if (d.length > 3) out = `(${a}) ${b}`;
+  else if (d.length > 0) out = `(${a}`;
+  return prefix + out;
+}
+
+function attachPhoneFormat(input) {
+  if (!input || input.dataset.phoneFmt === "1") return;
+  input.dataset.phoneFmt = "1";
+  // Format the initial value (e.g. a stored number when editing).
+  input.value = formatUsPhone(input.value);
+  input.addEventListener("input", () => {
+    const before = input.value;
+    // Preserve caret position sensibly: track distance from the end, since
+    // formatting only inserts characters to the left of the cursor for the
+    // common append case.
+    const fromEnd = before.length - (input.selectionStart ?? before.length);
+    const formatted = formatUsPhone(before);
+    if (formatted !== before) {
+      input.value = formatted;
+      const pos = Math.max(0, formatted.length - fromEnd);
+      try { input.setSelectionRange(pos, pos); } catch (_) {}
+    }
+  });
+}
+window.attachPhoneFormat = attachPhoneFormat;
 
 // Delegated so items added to the bar later work without new wiring.
 const subnavInner = $("subnav-inner");

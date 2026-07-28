@@ -446,7 +446,7 @@ async function loadApplyContact() {
       <div class="ap-contact-line"><span class="ap-contact-k">Email</span><span class="ap-contact-val">${email ? esc(email) : "<em style='color:var(--in-muted)'>none on file</em>"}</span></div>
       <div class="ap-contact-edit-row">
         <label class="ap-contact-k" for="ap-phone-edit">Phone</label>
-        <input id="ap-phone-edit" type="tel" value="${esc(phone)}" placeholder="+1 (555) 123-4567">
+        <input id="ap-phone-edit" type="tel" value="${esc(phone)}" placeholder="(555) 123-4567">
       </div>
       <div class="ap-contact-editnote" id="ap-contact-editnote"></div>
       <div class="ap-contact-edit-actions">
@@ -454,6 +454,7 @@ async function loadApplyContact() {
         <button type="button" class="in-btn primary" id="ap-phone-save" style="padding:6px 12px">Save phone</button>
       </div>`;
     editBtn.style.display = "none";
+    if (typeof attachPhoneFormat === "function") attachPhoneFormat($("ap-phone-edit"));
     $("ap-phone-cancel").onclick = () => { editBtn.style.display = ""; render(); };
     $("ap-phone-save").onclick = async () => {
       const val = $("ap-phone-edit").value.trim();
