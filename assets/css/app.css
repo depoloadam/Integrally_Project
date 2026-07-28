@@ -1606,6 +1606,44 @@ textarea.jf-input { resize:vertical; }
 /* rendered rich text in posts/jobs */
 .rich-content { line-height:1.5; word-break:break-word; }
 
+/* ---- rendered rich text: block formats -------------------------------
+   Applies wherever sanitized rich text is displayed (feed posts, job
+   descriptions). Margins are tight because posts are compact; first/last
+   child margins collapse so a block never adds stray space at the edges. */
+.rich-content p { margin:0 0 8px; }
+.rich-content h2, .rich-content h3 { margin:14px 0 6px; line-height:1.3; font-weight:700; color:var(--in-ink); }
+.rich-content h2 { font-size:17px; letter-spacing:-0.2px; }
+.rich-content h3 { font-size:15px; }
+.rich-content ul, .rich-content ol { margin:0 0 8px; padding-left:22px; }
+.rich-content li { margin:2px 0; }
+.rich-content ul ul, .rich-content ol ol,
+.rich-content ul ol, .rich-content ol ul { margin:2px 0 0; }
+.rich-content blockquote {
+  margin:8px 0; padding:2px 0 2px 12px;
+  border-left:3px solid var(--in-line); color:var(--in-ink-soft);
+}
+.rich-content pre {
+  margin:8px 0; padding:10px 12px; border-radius:8px; overflow-x:auto;
+  background:var(--in-bg); border:1px solid var(--in-line);
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:13px; line-height:1.45; white-space:pre-wrap; word-break:normal;
+}
+.rich-content code {
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:0.92em; background:var(--in-bg);
+  border:1px solid var(--in-line); border-radius:4px; padding:1px 5px;
+}
+.rich-content pre code { background:none; border:none; padding:0; font-size:inherit; }
+.rich-content a { color:var(--in-accent); text-decoration:none; }
+.rich-content a:hover { text-decoration:underline; }
+.rich-content > *:first-child { margin-top:0; }
+.rich-content > *:last-child { margin-bottom:0; }
+
+/* alignment — emitted by the sanitizer from a fixed enum */
+.rich-content .rt-align-center  { text-align:center; }
+.rich-content .rt-align-right   { text-align:right; }
+.rich-content .rt-align-justify { text-align:justify; }
+
 /* ---------- employer live search (job history) ---------- */
 .emp-search { position:relative; }
 .emp-results { position:absolute; left:0; right:0; top:calc(100% + 2px); z-index:40; background:var(--in-card); border:1px solid var(--in-line); border-radius:10px; box-shadow:0 8px 24px rgba(11,31,42,.14); padding:6px; display:none; max-height:280px; overflow-y:auto; }
@@ -2078,50 +2116,6 @@ a.ap-title:hover { color:var(--in-accent); }
 }
 .ja-sort-sel:hover { border-color:var(--in-muted); }
 .ja-sort-sel:focus-visible { outline:none; border-color:var(--in-accent); }
-
-/* ---- Applicant graph (collapsible; histogram + beeswarm) ------------- */
-.ja-graph { border:1px solid var(--in-line); border-radius:12px; margin:4px 0 16px; overflow:hidden; }
-.ja-graph.open { border-color:var(--in-muted); }
-.ja-graph-toggle {
-  display:flex; align-items:center; gap:10px; width:100%; text-align:left;
-  background:var(--in-bg); border:none; cursor:pointer; font-family:inherit;
-  padding:11px 14px; color:var(--in-ink);
-}
-.ja-graph-toggle:hover { background:var(--in-card); }
-.ja-graph-caret { display:inline-block; transition:transform .15s; color:var(--in-muted); font-size:12px; }
-.ja-graph.open .ja-graph-caret { transform:rotate(90deg); }
-.ja-graph-toggle-lbl { font-size:14px; font-weight:700; }
-.ja-graph-toggle-hint { font-size:12px; color:var(--in-muted); }
-.ja-graph-body { padding:14px; border-top:1px solid var(--in-line); }
-.ja-graph-bar { display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-bottom:14px; }
-.ja-graph-scope { font-size:12.5px; color:var(--in-ink-soft); line-height:1.45; max-width:60ch; }
-.ja-graph-scope strong { color:var(--in-ink); }
-.ja-graph-modes { display:inline-flex; gap:4px; flex:none; background:var(--in-bg); border:1px solid var(--in-line); border-radius:8px; padding:3px; }
-.ja-graph-mode { font-family:inherit; font-size:12.5px; font-weight:600; cursor:pointer; border:none; background:none; color:var(--in-ink-soft); padding:5px 12px; border-radius:6px; }
-.ja-graph-mode.active { background:var(--in-card); color:var(--in-ink); box-shadow:0 1px 2px rgba(0,0,0,.06); }
-.ja-graph-note { margin-top:10px; font-size:12px; color:var(--in-muted); }
-.ja-graph-canvas { min-height:120px; }
-
-/* histogram */
-.ja-hist-bars { display:flex; align-items:flex-end; gap:5px; height:140px; }
-.ja-hist-col { flex:1; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; gap:4px; cursor:default; height:100%; }
-.ja-hist-count { font-size:11px; font-weight:700; color:var(--in-ink-soft); height:14px; }
-.ja-hist-bar { width:100%; border-radius:4px 4px 0 0; background:linear-gradient(180deg,var(--in-teal-bright),var(--in-accent)); transition:filter .12s; }
-.ja-hist-col:hover .ja-hist-bar { filter:brightness(1.08); }
-.ja-hist-axis { display:flex; justify-content:space-between; margin-top:6px; font-size:11px; color:var(--in-muted); }
-
-/* beeswarm */
-.ja-swarm { padding-top:4px; }
-.ja-swarm-lane { position:relative; width:100%; }
-.ja-swarm-dot { position:absolute; transform:translateX(-50%); cursor:pointer; transition:transform .1s; }
-.ja-swarm-dot:hover, .ja-swarm-dot.hot { z-index:3; transform:translateX(-50%) scale(1.18); }
-.ja-swarm-dot .connect-ava { border:2px solid var(--in-card); box-shadow:0 1px 3px rgba(0,0,0,.18); }
-.ja-swarm-dot.hot .connect-ava { border-color:var(--in-accent); }
-.ja-swarm-axis { display:flex; justify-content:space-between; margin-top:8px; font-size:11px; color:var(--in-muted); border-top:1px solid var(--in-line); padding-top:4px; }
-
-/* two-way sync: a row lit from the graph */
-.ja-row.hot { background:var(--in-bg); border-radius:8px; box-shadow:inset 0 0 0 1px var(--in-accent); }
-.ja-hist-col.hot .ja-hist-bar { filter:brightness(1.15); box-shadow:0 0 0 2px var(--in-accent) inset; }
 
 /* Company: applicant detail score block */
 .ja-detail-score { display:flex; gap:16px; align-items:flex-start; padding:12px; background:var(--in-bg); border-radius:12px; margin-bottom:6px; }

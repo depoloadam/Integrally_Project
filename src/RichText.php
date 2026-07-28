@@ -2,34 +2,86 @@
 
 // =====================================================================
 // FILE: src/RichText.php
-// A small, strict HTML sanitizer for user-authored rich text (posts and
-// job descriptions). Rich text is dangerous: rendering user HTML without
-// sanitizing is a stored-XSS hole. This allows ONLY a tiny whitelist of
+// A strict HTML sanitizer for user-authored rich text (posts and job
+// descriptions). Rich text is dangerous: rendering user HTML without
+// sanitizing is a stored-XSS hole. This allows ONLY a whitelist of
 // formatting and strips everything else.
 //
-// Allowed:
-//   <b> <strong> <i> <em> <u>            (bold / italic / underline)
-//   <br>                                 (line breaks)
-//   <span style="color:...; font-size:..."> with ONLY color + font-size,
-//                                          and only safe values.
+// Allowed INLINE:
+//   <b> <strong> <i> <em> <u>          bold / italic / underline
+//   <code>                             inline code
+//   <a href>                           links (http/https/mailto ONLY)
+//   <br>                               line breaks
+//   <span style="color; font-size">    with only safe values
 //
-// Everything else — scripts, event handlers, links, images, arbitrary
-// tags/attributes, javascript: urls — is removed. We parse with DOMDocument
-// rather than regex (regex HTML sanitizers are notoriously bypassable).
+// Allowed BLOCK:
+//   <p>                                paragraph
+//   <h2> <h3>                          headings (h1/h4-h6 clamp onto these)
+//   <blockquote>                       quote
+//   <pre>                              code block
+//   <ul> <ol> <li>                     lists (nestable)
+//
+// Block elements may carry ONE alignment class from a fixed enum
+// (rt-align-center / -right / -justify). No attacker-controlled value is
+// ever echoed into a class or style.
+//
+// Everything else — scripts, event handlers, images, iframes, arbitrary
+// tags/attributes, javascript:/data: urls — is removed. We parse with
+// DOMDocument rather than regex (regex HTML sanitizers are notoriously
+// bypassable).
+//
+// IDEMPOTENCE: clean() is safe to run on its own output. Job descriptions
+// get re-sanitized on every update, so output must survive re-cleaning
+// unchanged.
 // =====================================================================
 
 class RichText
 {
-    /** Tags allowed in output. Keys are lowercase tag names. */
-    private const ALLOWED_TAGS = [
+    /** Inline tags allowed in output. */
+    private const INLINE_TAGS = [
         'b' => true, 'strong' => true,
         'i' => true, 'em' => true,
         'u' => true,
+        'code' => true,
+        'a' => true,
         'br' => true,
         'span' => true,   // only for color / font-size styles
         'font' => true,   // legacy execCommand output; converted to span
-        'div' => true,    // contentEditable emits divs for lines; we keep as breaks
-        'p'  => true,
+    ];
+
+    /** Block tags allowed in output. */
+    private const BLOCK_TAGS = [
+        'p' => true,
+        'h1' => true, 'h2' => true, 'h3' => true,
+        'h4' => true, 'h5' => true, 'h6' => true,
+        'blockquote' => true,
+        'pre' => true,
+        'ul' => true, 'ol' => true, 'li' => true,
+        'div' => true,    // legacy: contentEditable line wrapper -> <br>
+    ];
+
+    /** Headings are clamped to two levels; posts must not emit <h1>. */
+    private const HEADING_MAP = [
+        'h1' => 'h2', 'h2' => 'h2',
+        'h3' => 'h3', 'h4' => 'h3', 'h5' => 'h3', 'h6' => 'h3',
+    ];
+
+    /**
+     * Alignment: a FIXED enum. We accept Quill's ql-align-* classes, our own
+     * canonical rt-align-* (so re-cleaning is idempotent), and a text-align
+     * inline style — all normalised to one canonical class. Nothing the user
+     * supplies is ever echoed verbatim.
+     */
+    private const ALIGN_MAP = [
+        'ql-align-center'  => 'rt-align-center',
+        'ql-align-right'   => 'rt-align-right',
+        'ql-align-justify' => 'rt-align-justify',
+        'rt-align-center'  => 'rt-align-center',
+        'rt-align-right'   => 'rt-align-right',
+        'rt-align-justify' => 'rt-align-justify',
+        'center'           => 'rt-align-center',
+        'right'            => 'rt-align-right',
+        'justify'          => 'rt-align-justify',
     ];
 
     // Allowed font sizes (px). We clamp to a small set so users can't set
@@ -68,7 +120,7 @@ class RichText
 
         $out = '';
         foreach (iterator_to_array($root->childNodes) as $child) {
-            $out .= self::renderNode($child);
+            $out .= self::renderNode($child, true, false);
         }
 
         // Collapse excessive break runs, strip a leading break (the first
@@ -78,8 +130,16 @@ class RichText
         return trim($out);
     }
 
-    /** Recursively render an allowed node to safe HTML. */
-    private static function renderNode(DOMNode $node): string
+    /**
+     * Recursively render an allowed node to safe HTML.
+     *
+     * @param bool $allowBlocks  false inside inline elements, so a block
+     *                           nested in <b> is unwrapped rather than
+     *                           producing invalid markup.
+     * @param bool $inList       true directly inside <ul>/<ol>, which is the
+     *                           only place <li> is meaningful.
+     */
+    private static function renderNode(DOMNode $node, bool $allowBlocks, bool $inList): string
     {
         // Text node: escape it.
         if ($node->nodeType === XML_TEXT_NODE) {
@@ -92,45 +152,82 @@ class RichText
         /** @var DOMElement $node */
         $tag = strtolower($node->nodeName);
 
-        if (!isset(self::ALLOWED_TAGS[$tag])) {
-            // Disallowed tag: drop the tag but keep its (sanitized) text content.
-            $inner = '';
-            foreach (iterator_to_array($node->childNodes) as $c) {
-                $inner .= self::renderNode($c);
-            }
-            return $inner;
+        $isInline = isset(self::INLINE_TAGS[$tag]);
+        $isBlock  = isset(self::BLOCK_TAGS[$tag]);
+
+        // Disallowed tag, or a block where blocks aren't permitted:
+        // drop the tag but keep its (sanitized) content.
+        if ((!$isInline && !$isBlock) || ($isBlock && !$allowBlocks)) {
+            return self::renderChildren($node, $allowBlocks, false);
         }
 
         // <br> is self-closing.
         if ($tag === 'br') return '<br>';
 
-        // contentEditable wraps each new line in a <div> (or <p>). A block
-        // always starts on a new line, so emit a <br> BEFORE its content.
-        // (A leading <br> at the very top is stripped in clean().) This
-        // fixes lines running together when the first line is bare text and
-        // following lines are wrapped in divs.
-        if ($tag === 'div' || $tag === 'p') {
-            $inner = '';
-            foreach (iterator_to_array($node->childNodes) as $c) {
-                $inner .= self::renderNode($c);
-            }
-            // An empty div from contentEditable represents a blank line.
+        // ---- legacy line model -------------------------------------------
+        // contentEditable (the current execCommand editor) wraps each new
+        // line in a <div>. A block always starts on a new line, so emit a
+        // <br> BEFORE its content. Kept so the existing editor is unaffected.
+        if ($tag === 'div') {
+            $inner = self::renderChildren($node, true, false);
             if (trim(strip_tags($inner)) === '' && strpos($inner, '<br>') === false) {
                 return '<br>';
             }
             return '<br>' . $inner;
         }
 
-        // Build inner content.
-        $inner = '';
-        foreach (iterator_to_array($node->childNodes) as $c) {
-            $inner .= self::renderNode($c);
+        // ---- lists --------------------------------------------------------
+        if ($tag === 'ul' || $tag === 'ol') {
+            // Only <li> children are meaningful; anything else is unwrapped
+            // into an implicit item so no content is silently lost.
+            $inner = '';
+            foreach (iterator_to_array($node->childNodes) as $c) {
+                $inner .= self::renderNode($c, true, true);
+            }
+            if (trim(strip_tags($inner)) === '') return '';
+            return '<' . $tag . self::alignAttr($node) . '>' . $inner . '</' . $tag . '>';
+        }
+
+        if ($tag === 'li') {
+            // An <li> outside a list is unwrapped to its content.
+            $inner = self::renderChildren($node, true, false);
+            if (!$inList) return $inner;
+            if ($inner === '') return '';
+            return '<li>' . $inner . '</li>';
+        }
+
+        // ---- other blocks --------------------------------------------------
+        if ($tag === 'blockquote' || $tag === 'pre' || $tag === 'p' || isset(self::HEADING_MAP[$tag])) {
+            // <pre> holds preformatted text; keep inline formatting minimal
+            // but don't allow nested blocks inside it.
+            $inner = ($tag === 'pre')
+                ? self::renderChildren($node, false, false)
+                : self::renderChildren($node, true, false);
+
+            if (trim(strip_tags($inner)) === '' && strpos($inner, '<br>') === false) {
+                return '';   // empty block -> drop
+            }
+            $out = isset(self::HEADING_MAP[$tag]) ? self::HEADING_MAP[$tag] : $tag;
+            return '<' . $out . self::alignAttr($node) . '>' . $inner . '</' . $out . '>';
+        }
+
+        // ---- inline --------------------------------------------------------
+        $inner = self::renderChildren($node, false, false);
+
+        // <a href> — links are the highest-risk allowance. Only absolute
+        // http/https and mailto survive; anything else unwraps to its text.
+        if ($tag === 'a') {
+            if ($inner === '') return '';
+            $href = self::safeHref($node->getAttribute('href'));
+            if ($href === null) return $inner;   // unsafe/relative -> plain text
+            return '<a href="' . htmlspecialchars($href, ENT_QUOTES, 'UTF-8')
+                 . '" rel="nofollow noopener noreferrer" target="_blank">' . $inner . '</a>';
         }
 
         // <span> may carry a sanitized style (color + font-size only).
         if ($tag === 'span') {
-            $style = self::safeStyle($node->getAttribute('style'));
             if ($inner === '') return '';
+            $style = self::safeStyle($node->getAttribute('style'));
             return $style !== ''
                 ? '<span style="' . $style . '">' . $inner . '</span>'
                 : $inner;   // no allowed style -> unwrap
@@ -142,7 +239,6 @@ class RichText
             $styles = [];
             $color = self::normalizeColor($node->getAttribute('color'));
             if ($color !== null) $styles[] = 'color:' . $color;
-            // <font style="..."> may also carry color/size.
             $fromStyle = self::safeStyle($node->getAttribute('style'));
             if ($fromStyle !== '') $styles[] = $fromStyle;
             $style = implode(';', $styles);
@@ -152,10 +248,67 @@ class RichText
         }
 
         // Normalise synonyms to canonical tags.
-        $canonical = ['strong' => 'strong', 'b' => 'strong', 'em' => 'em', 'i' => 'em', 'u' => 'u'][$tag] ?? $tag;
+        $canonical = ['strong' => 'strong', 'b' => 'strong', 'em' => 'em', 'i' => 'em',
+                      'u' => 'u', 'code' => 'code'][$tag] ?? $tag;
 
         if ($inner === '') return '';
         return '<' . $canonical . '>' . $inner . '</' . $canonical . '>';
+    }
+
+    /** Render every child of a node. */
+    private static function renderChildren(DOMNode $node, bool $allowBlocks, bool $inList): string
+    {
+        $out = '';
+        foreach (iterator_to_array($node->childNodes) as $c) {
+            $out .= self::renderNode($c, $allowBlocks, $inList);
+        }
+        return $out;
+    }
+
+    /**
+     * Return ' class="rt-align-x"' for a block carrying a recognised
+     * alignment, or '' otherwise. The emitted value comes from a fixed enum
+     * — never from user input.
+     */
+    private static function alignAttr(DOMElement $node): string
+    {
+        // 1. class="ql-align-center" / "rt-align-center"
+        $classes = preg_split('/\s+/', strtolower(trim($node->getAttribute('class'))));
+        foreach ($classes as $c) {
+            if ($c !== '' && isset(self::ALIGN_MAP[$c])) {
+                return ' class="' . self::ALIGN_MAP[$c] . '"';
+            }
+        }
+        // 2. style="text-align:center"
+        $style = $node->getAttribute('style');
+        if ($style !== '' && preg_match('/text-align\s*:\s*([a-z]+)/i', $style, $m)) {
+            $key = strtolower($m[1]);
+            if (isset(self::ALIGN_MAP[$key])) {
+                return ' class="' . self::ALIGN_MAP[$key] . '"';
+            }
+        }
+        return '';
+    }
+
+    /**
+     * Validate a link target. WHITELIST ONLY: absolute http/https, or
+     * mailto. Because we whitelist rather than blacklist, obfuscated
+     * javascript:/data: payloads fail automatically — there is no scheme
+     * blacklist to bypass.
+     */
+    private static function safeHref(string $href): ?string
+    {
+        // Control characters and whitespace can hide a scheme
+        // ("java\tscript:"). Strip them, then decode entities, then strip
+        // again (entities can re-introduce control characters).
+        $h = preg_replace('/[\x00-\x20\x7F]+/', '', $href);
+        $h = html_entity_decode($h, ENT_QUOTES, 'UTF-8');
+        $h = preg_replace('/[\x00-\x20\x7F]+/', '', $h);
+        if ($h === '' || strlen($h) > 2000) return null;
+
+        if (preg_match('#^https?://[^\s<>"]+$#i', $h))       return $h;
+        if (preg_match('#^mailto:[^\s<>"@]+@[^\s<>"@]+$#i', $h)) return $h;
+        return null;
     }
 
     /**
@@ -168,7 +321,7 @@ class RichText
         $parts = [];
 
         // color: hex, rgb(), or a conservative set of named colors.
-        if (preg_match('/color\s*:\s*([^;]+)/i', $style, $m)) {
+        if (preg_match('/(?<!-)\bcolor\s*:\s*([^;]+)/i', $style, $m)) {
             $color = self::normalizeColor(trim($m[1]));
             if ($color !== null) {
                 $parts[] = 'color:' . $color;
@@ -178,7 +331,6 @@ class RichText
         // font-size: a number of px that we clamp to the allowed set.
         if (preg_match('/font-size\s*:\s*(\d+)\s*px/i', $style, $m)) {
             $size = (int) $m[1];
-            // snap to nearest allowed size
             $best = self::ALLOWED_SIZES[0];
             foreach (self::ALLOWED_SIZES as $s) {
                 if (abs($s - $size) < abs($best - $size)) $best = $s;
@@ -191,19 +343,15 @@ class RichText
 
     /**
      * Normalize a color to a safe hex/named value, or null if unsafe.
-     * Accepts #hex, rgb(r,g,b), and a small set of named colors. This is
-     * what makes execCommand('foreColor') output (which is rgb()) survive.
      */
     private static function normalizeColor(string $color): ?string
     {
         $color = trim($color);
 
-        // #hex (3 or 6 digits)
         if (preg_match('/^#([0-9a-f]{3}|[0-9a-f]{6})$/i', $color)) {
             return $color;
         }
 
-        // rgb(r, g, b) -> #rrggbb
         if (preg_match('/^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i', $color, $m)) {
             $r = min(255, (int) $m[1]);
             $g = min(255, (int) $m[2]);
@@ -211,7 +359,6 @@ class RichText
             return sprintf('#%02x%02x%02x', $r, $g, $b);
         }
 
-        // named colors
         $named = [
             'black','white','red','green','blue','orange','purple','teal',
             'gray','grey','navy','maroon','olive','lime','aqua','fuchsia',
@@ -226,11 +373,14 @@ class RichText
 
     /**
      * Strip ALL tags to a plain-text preview (for feed snippets, search,
-     * notifications, etc. where formatting isn't wanted).
+     * notifications, etc. where formatting isn't wanted). Block boundaries
+     * become spaces so list items and paragraphs don't run together.
      */
     public static function toPlain(string $html): string
     {
         $text = preg_replace('#<br\s*/?>#i', ' ', $html);
+        // Closing block tags are word boundaries in plain text.
+        $text = preg_replace('#</(p|li|ul|ol|h2|h3|blockquote|pre|div)\s*>#i', ' ', $text);
         $text = strip_tags($text);
         $text = html_entity_decode($text, ENT_QUOTES, 'UTF-8');
         return trim(preg_replace('/\s+/', ' ', $text));

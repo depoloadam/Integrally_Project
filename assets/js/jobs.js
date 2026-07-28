@@ -6,6 +6,17 @@
 
 let JOBS_STATE = { q: "", location: "", employment_type: "", remote_policy: "", page: 1, limit: 20 };
 
+// Job descriptions are stored as SERVER-SANITIZED rich HTML (RichText::clean
+// runs in api/jobs/create.php and update.php), so they render as HTML. Rows
+// written before rich text existed are plain text with newlines — those have
+// no tags, so we escape them and convert newlines to breaks instead. This
+// replaces an older path that escaped everything, which made saved formatting
+// display as literal tag soup.
+function richOrPlain(s) {
+  const v = s || "";
+  return /<[a-z][\s\S]*>/i.test(v) ? v : esc(v).replace(/\n/g, "<br>");
+}
+
 const EMP_LABELS = {
   full_time: "Full-time", part_time: "Part-time", contract: "Contract",
   internship: "Internship", temporary: "Temporary",
@@ -199,7 +210,7 @@ async function renderJobDetail(uuid) {
         </div>
       </div>
       <div class="job-tags" style="margin:14px 0">${tags.map(t => `<span class="job-tag">${esc(t)}</span>`).join("")}</div>
-      ${j.description ? `<div class="job-desc">${esc(j.description).replace(/\n/g, "<br>")}</div>` : `<div class="in-empty">No description provided.</div>`}
+      ${j.description ? `<div class="job-desc rich-content">${richOrPlain(j.description)}</div>` : `<div class="in-empty">No description provided.</div>`}
       <div class="job-apply-row"></div>
     </div>`);
 
