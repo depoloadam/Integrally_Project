@@ -1559,6 +1559,7 @@ textarea.jf-input { resize:vertical; }
 .in-avatar:has(img),
 .post-avatar:has(img), .post-avatar.company:has(img),
 .in-profile-ava:has(img), .comp-avatar:has(img),
+.comp-id-ava:has(img),
 .connect-ava:has(img), .connect-ava.company:has(img) { background:#fff; }
 
 /* avatar picker (profile editors) */

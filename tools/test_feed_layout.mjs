@@ -94,5 +94,28 @@ const s2 = composer2.querySelector(".comp-id-score");
 ok(s2.style.display === "none" && s2.textContent === "",
    "with no scores the strip still shows no chip — the rail card owns the empty-state CTA");
 
+// ---- composer avatar backdrop (the transparent-logo outline fix) -------
+// When the avatar shows a real image (e.g. a company logo with transparent
+// corners), the tile must switch to a white backdrop so the gradient does
+// not ring the logo. Every other avatar class already does this; the
+// composer avatar was missing from the shared rule.
+const css = readFileSync("assets/css/app.css", "utf8");
+// 1. structural: the composer avatar markup (feed.js) renders an <img>
+// when a picture is set — same shape as buildComposer emits at line 451.
+const avatarHTML = `<img src="logo.png" alt="">`;
+const avaImg = el(`<div class="comp-id-ava" title="View profile">${avatarHTML}</div>`);
+ok(!!avaImg.querySelector("img"), "composer avatar renders an <img> when a picture is set");
+
+// 2. CSS contract: .comp-id-ava:has(img) is part of the white-backdrop rule.
+// jsdom can't resolve :has() backgrounds, so assert the declaration exists —
+// the same CSS-contract approach the sub-nav suite uses.
+const backdropRule = css.match(/\.in-avatar:has\(img\)[\s\S]*?\{\s*background:#fff;\s*\}/);
+ok(!!backdropRule, "white-backdrop avatar rule located");
+ok(backdropRule && /\.comp-id-ava:has\(img\)/.test(backdropRule[0]),
+   "composer avatar (.comp-id-ava) is included in the white-backdrop rule");
+// teeth: the matcher must reject an avatar class that is NOT in the rule.
+ok(!/\.__nope-ava:has\(img\)/.test(backdropRule ? backdropRule[0] : ""),
+   "backdrop-rule matcher rejects an absent avatar class");
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
