@@ -441,6 +441,26 @@ function mountRichEditor(mountId, opts = {}) {
 
   if (initialHTML) setHTML(initialHTML);
 
+  // A code block (or quote) sitting as the LAST line traps the caret: there
+  // is nothing below it to click into. Quill's built-in escape is pressing
+  // Enter on two blank lines, which nobody discovers. Guarantee a plain
+  // paragraph after a trailing block so there's always somewhere to continue.
+  let fixingTail = false;
+  const ensureTrailingParagraph = () => {
+    if (fixingTail) return;
+    const len = quill.getLength();
+    const [line] = quill.getLine(len - 1);
+    if (!line || typeof line.formats !== "function") return;
+    const f = line.formats() || {};
+    if (f["code-block"] || f.blockquote) {
+      fixingTail = true;
+      quill.insertText(len, "\n", { "code-block": false, blockquote: false }, "silent");
+      fixingTail = false;
+    }
+  };
+  quill.on("text-change", ensureTrailingParagraph);
+  ensureTrailingParagraph();
+
   return {
     getHTML: semanticHTML,
     getText: () => quill.getText().replace(/\u200B/g, "").trim(),

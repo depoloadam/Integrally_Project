@@ -15,7 +15,7 @@ const ok = (c, n) => { c ? (pass++, console.log("  ✓ " + n)) : (fail++, consol
 const eq = (g, w, n) => { g === w ? (pass++, console.log("  ✓ " + n))
   : (fail++, console.log(`  ✗ ${n}\n      want: ${w}\n      got:  ${g}`)); };
 
-const dom = new JSDOM(`<!doctype html><body><div id="host"></div></body>`,
+const dom = new JSDOM(`<!doctype html><body><div id="host"></div><div id="host2"></div></body>`,
   { pretendToBeVisual: true, runScripts: "outside-only" });
 const w = dom.window;
 // jsdom lacks Range.getBoundingClientRect / getClientRects, which Quill's
@@ -137,6 +137,28 @@ ok(/ql-picker\.ql-header[\s\S]*?content:"Paragraph"/.test(css), "heading picker 
   ok(css.includes(`ql-size .ql-picker-item[data-value="${v}"]::before { content:"${l}"; }`)
      || new RegExp(`data-value="${v}"\\]::before \\{ content:"${l}"`).test(css),
      `size ${v} labelled '${l}'`));
+
+console.log("\ncode block: visible text + an escape route");
+// Quill snow ships a dark code block (#23241f bg, #f8f8f2 text). We re-skin
+// it light, so the colour MUST be overridden or the code is invisible.
+const cssB = readFileSync("assets/css/app.css", "utf8");
+const cbRule = cssB.slice(cssB.indexOf(".rt-editor .ql-snow .ql-editor .ql-code-block-container"),
+                          cssB.indexOf(".rt-editor .ql-snow .ql-editor .ql-code-block-container") + 500);
+ok(/color:var\(--in-ink\)/.test(cbRule), "code block sets an explicit text colour (not Quill's near-white)");
+ok(!/#f8f8f2/.test(cbRule), "Quill's light-on-light text colour is not carried over");
+
+// A trailing code block must not trap the caret: a plain paragraph follows it.
+const tEd = w.mountRichEditor("host2", {});
+tEd.quill.setContents([{ insert: "code();" }, { insert: "\n", attributes: { "code-block": true } }]);
+const tLen = tEd.quill.getLength();
+const [tLast] = tEd.quill.getLine(tLen - 1);
+const tF = tLast && tLast.formats ? tLast.formats() : {};
+ok(!tF["code-block"], "a plain paragraph is appended after a trailing code block");
+ok(/<pre>code\(\);<\/pre>/.test(tEd.getHTML()), "the code block itself still exports correctly");
+// ...and the helper paragraph is empty, so the sanitizer drops it on save.
+const savedTail = execFileSync("php", ["-r",
+  'require "src/RichText.php"; echo RichText::clean("<pre>code();</pre><p></p>");'], { encoding: "utf8" });
+ok(savedTail === "<pre>code();</pre>", "the helper paragraph is stripped on save (not stored)");
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

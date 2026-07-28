@@ -1637,9 +1637,21 @@ textarea.jf-input { resize:vertical; }
 .rt-editor .ql-snow .ql-tooltip input[type=text] { background:var(--in-bg); border-color:var(--in-line); color:var(--in-ink); }
 /* editing surface should preview roughly how the post will render */
 .rt-editor .ql-editor blockquote { border-left:3px solid var(--in-line); padding-left:12px; color:var(--in-ink-soft); }
-.rt-editor .ql-editor .ql-code-block-container {
-  background:var(--in-bg); border:1px solid var(--in-line); border-radius:8px;
-  padding:10px 12px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:13px;
+/* Quill's snow theme ships a DARK code block (#23241f bg, #f8f8f2 text).
+   We re-skin it to the app's light surface, so the text colour must be
+   overridden too — otherwise it stays near-white on a light background and
+   the code is invisible (but still selectable). Extra class for specificity. */
+.rt-editor .ql-snow .ql-editor .ql-code-block-container,
+.rt-editor .ql-snow .ql-editor .ql-code-block-container .ql-code-block {
+  background:var(--in-bg); color:var(--in-ink);
+  border-radius:8px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:13px;
+}
+.rt-editor .ql-snow .ql-editor .ql-code-block-container {
+  border:1px solid var(--in-line); padding:10px 12px;
+}
+.rt-editor .ql-snow .ql-editor .ql-code-block-container .ql-code-block {
+  border:none; padding:0;
 }
 .rt-editor .ql-editor h2 { font-size:17px; }
 .rt-editor .ql-editor h3 { font-size:15px; }
