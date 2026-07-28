@@ -472,6 +472,7 @@ async function renderJobApplicants(jobUuid) {
           <select id="ja-sort-sel" class="ja-sort-sel">${sortOpts}</select>
         </label>
       </div>
+      <div id="ja-graph-slot"></div>
       <div id="ja-list"></div>
     </div>`);
   wrap.appendChild(card);
@@ -492,6 +493,10 @@ async function renderJobApplicants(jobUuid) {
     return;
   }
 
+  // Build the collapsible graph above the list. It reads the SAME apps
+  // array (no extra fetch) and wires two-way hover sync with the rows.
+  buildApplicantGraph(card.querySelector("#ja-graph-slot"), apps, d.job, jobUuid);
+
   apps.forEach((a) => {
     const cand = a.candidate || {};
     const name = cand.full_name || cand.username || "Candidate";
@@ -507,7 +512,7 @@ async function renderJobApplicants(jobUuid) {
     const dim = a.status !== "submitted" ? ' style="opacity:.55"' : "";
     const hov = cand.uuid ? ` data-hover-card="user" data-hover-uuid="${esc(cand.uuid)}"` : "";
     const row = el(`
-      <div class="ja-row"${dim}>
+      <div class="ja-row" data-app-uuid="${esc(a.uuid)}"${dim}>
         ${rankCell}
         ${score}
         <div class="connect-ava" style="width:40px;height:40px"${hov}>${av}</div>
@@ -518,8 +523,170 @@ async function renderJobApplicants(jobUuid) {
         <button class="in-btn ghost" style="flex:none;padding:7px 14px;font-size:13px">View</button>
       </div>`);
     row.querySelector("button").onclick = () => openApplicantDetail(a.uuid);
+    // Row -> graph sync: hovering a row highlights its mark in the graph.
+    row.addEventListener("mouseenter", () => highlightGraphMark(a.uuid, true));
+    row.addEventListener("mouseleave", () => highlightGraphMark(a.uuid, false));
     list.appendChild(row);
   });
+}
+
+// Remembers the open/closed state and which chart is shown across renders
+// (e.g. after a sort change re-runs renderJobApplicants).
+let JA_GRAPH = { open: false, mode: "histogram" };
+
+// Two-way sync helper: highlight a graph mark from a list-row hover. Defined
+// at module scope so row handlers can reach it; rebound each build.
+let highlightGraphMark = function () {};
+
+// ---- applicant graph (histogram + beeswarm, collapsible) --------------
+// A visual of who ranks where for THIS job, built entirely from the already
+// -loaded applicant data. Two chart modes the company can switch between,
+// two-way hover sync with the list, and a header that makes clear the data
+// is scoped to this specific job title.
+function buildApplicantGraph(mount, apps, job, jobUuid) {
+  if (!mount) return;
+  // Only applicants with a score can be placed on a score axis.
+  const scored = apps.filter(a => a.score_value != null);
+
+  const shell = el(`
+    <div class="ja-graph ${JA_GRAPH.open ? "open" : ""}">
+      <button type="button" class="ja-graph-toggle" aria-expanded="${JA_GRAPH.open}">
+        <span class="ja-graph-caret">▸</span>
+        <span class="ja-graph-toggle-lbl">Applicant graph</span>
+        <span class="ja-graph-toggle-hint">visualize who ranks where</span>
+      </button>
+      <div class="ja-graph-body" ${JA_GRAPH.open ? "" : 'style="display:none"'}>
+        <div class="ja-graph-bar">
+          <div class="ja-graph-scope">
+            Scores for applicants to <strong>${esc(job.title)}</strong> — how each ranks against the others who applied to this role.
+          </div>
+          <div class="ja-graph-modes" role="tablist">
+            <button type="button" class="ja-graph-mode ${JA_GRAPH.mode === "histogram" ? "active" : ""}" data-mode="histogram">Distribution</button>
+            <button type="button" class="ja-graph-mode ${JA_GRAPH.mode === "beeswarm" ? "active" : ""}" data-mode="beeswarm">Spread</button>
+          </div>
+        </div>
+        <div class="ja-graph-canvas" id="ja-graph-canvas"></div>
+        ${scored.length < apps.length ? `<div class="ja-graph-note">${apps.length - scored.length} applicant${apps.length - scored.length === 1 ? "" : "s"} without a score ${apps.length - scored.length === 1 ? "isn't" : "aren't"} plotted.</div>` : ""}
+      </div>`);
+
+  const toggle = shell.querySelector(".ja-graph-toggle");
+  const body = shell.querySelector(".ja-graph-body");
+  const canvas = shell.querySelector("#ja-graph-canvas");
+
+  const paint = () => {
+    canvas.innerHTML = "";
+    if (!scored.length) {
+      canvas.appendChild(el(`<div class="in-empty" style="font-style:normal">No scored applicants to plot yet.</div>`));
+      return;
+    }
+    if (JA_GRAPH.mode === "histogram") canvas.appendChild(buildApplicantHistogram(scored));
+    else canvas.appendChild(buildApplicantBeeswarm(scored));
+  };
+
+  toggle.onclick = () => {
+    JA_GRAPH.open = !JA_GRAPH.open;
+    shell.classList.toggle("open", JA_GRAPH.open);
+    toggle.setAttribute("aria-expanded", JA_GRAPH.open);
+    body.style.display = JA_GRAPH.open ? "" : "none";
+    if (JA_GRAPH.open) paint();
+  };
+
+  shell.querySelectorAll(".ja-graph-mode").forEach(b => {
+    b.onclick = () => {
+      JA_GRAPH.mode = b.dataset.mode;
+      shell.querySelectorAll(".ja-graph-mode").forEach(x => x.classList.toggle("active", x === b));
+      paint();
+    };
+  });
+
+  // Rebind the row->graph sync to this build's canvas.
+  highlightGraphMark = (uuid, on) => {
+    const mark = canvas.querySelector(`[data-app-uuid="${cssEscape(uuid)}"]`);
+    if (mark) mark.classList.toggle("hot", on);
+  };
+
+  mount.appendChild(shell);
+  if (JA_GRAPH.open) paint();
+}
+
+// Small local CSS.escape shim (older sandboxes lack window.CSS.escape).
+function cssEscape(s) {
+  return String(s).replace(/[^a-zA-Z0-9_-]/g, ch => "\\" + ch);
+}
+
+// Graph mark -> list sync: highlight and scroll the matching row.
+function graphMarkToRow(uuid, on) {
+  const row = document.querySelector(`.ja-row[data-app-uuid="${cssEscape(uuid)}"]`);
+  if (!row) return;
+  row.classList.toggle("hot", on);
+  if (on && row.scrollIntoView) row.scrollIntoView({ block: "nearest" });
+}
+
+// Distribution histogram: 10 score buckets (0–9 … 90–100), bar height = count.
+function buildApplicantHistogram(scored) {
+  const buckets = new Array(10).fill(0);
+  const members = new Array(10).fill(null).map(() => []);
+  scored.forEach(a => {
+    const b = Math.min(9, Math.floor(Math.max(0, Math.min(100, a.score_value)) / 10));
+    buckets[b]++; members[b].push(a);
+  });
+  const maxB = Math.max(...buckets, 1);
+
+  const wrap = el(`<div class="ja-hist"></div>`);
+  const bars = el(`<div class="ja-hist-bars"></div>`);
+  buckets.forEach((count, i) => {
+    const h = Math.round((count / maxB) * 100);
+    const col = el(`
+      <div class="ja-hist-col" title="${i * 10}–${i === 9 ? 100 : i * 10 + 9}: ${count} applicant${count === 1 ? "" : "s"}">
+        <div class="ja-hist-count">${count || ""}</div>
+        <div class="ja-hist-bar" style="height:${count ? Math.max(6, h) : 2}%"></div>
+      </div>`);
+    // Hovering a bucket highlights all its applicants' rows.
+    col.addEventListener("mouseenter", () => members[i].forEach(a => graphMarkToRow(a.uuid, true)));
+    col.addEventListener("mouseleave", () => members[i].forEach(a => graphMarkToRow(a.uuid, false)));
+    bars.appendChild(col);
+  });
+  wrap.appendChild(bars);
+  wrap.appendChild(el(`<div class="ja-hist-axis"><span>0</span><span>50</span><span>100</span></div>`));
+  return wrap;
+}
+
+// Beeswarm: each scored applicant is an avatar dot placed by score on a
+// 0–100 axis, dodged vertically to avoid overlap. Shows spread and gaps.
+function buildApplicantBeeswarm(scored) {
+  const wrap = el(`<div class="ja-swarm"></div>`);
+  const lane = el(`<div class="ja-swarm-lane"></div>`);
+  // Sort by score so the dodge packs neatly; track occupancy per x-bin.
+  const sorted = scored.slice().sort((a, b) => b.score_value - a.score_value);
+  const rows = [];              // vertical lanes: last x used in each
+  const DOT = 30, GAP = 4;      // px
+  sorted.forEach(a => {
+    const x = Math.max(0, Math.min(100, a.score_value));
+    // Find the first vertical lane where this dot won't overlap the last.
+    let laneIdx = 0;
+    for (; laneIdx < rows.length; laneIdx++) {
+      if (x - rows[laneIdx] >= (DOT + GAP) / 4) break;   // /4: axis is % not px, coarse dodge
+    }
+    if (laneIdx === rows.length) rows.push(x); else rows[laneIdx] = x;
+    const cand = a.candidate || {};
+    const name = cand.full_name || cand.username || "Candidate";
+    const av = cand.avatar ? `<img src="${esc(cand.avatar)}" alt="">` : esc(name.charAt(0).toUpperCase());
+    const dot = el(`
+      <div class="ja-swarm-dot" data-app-uuid="${esc(a.uuid)}"
+           style="left:${x}%; top:${laneIdx * (DOT + GAP)}px"
+           title="${esc(name)} · ${Math.round(a.score_value)}">
+        <div class="connect-ava" style="width:${DOT}px;height:${DOT}px">${av}</div>
+      </div>`);
+    dot.addEventListener("mouseenter", () => graphMarkToRow(a.uuid, true));
+    dot.addEventListener("mouseleave", () => graphMarkToRow(a.uuid, false));
+    dot.addEventListener("click", () => openApplicantDetail(a.uuid));
+    lane.appendChild(dot);
+  });
+  // Lane height grows with the deepest dodge stack.
+  lane.style.height = (Math.max(1, rows.length) * (DOT + GAP) + 8) + "px";
+  wrap.appendChild(lane);
+  wrap.appendChild(el(`<div class="ja-swarm-axis"><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div>`));
+  return wrap;
 }
 
 async function openApplicantDetail(appUuid) {
