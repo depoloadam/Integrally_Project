@@ -114,31 +114,61 @@ const coBranch   = js.indexOf("setupCompanyIdentityNav()");
 const outBranch  = js.indexOf('$("auth-menu").style.display = "";');
 ok(userBranch > -1 && coBranch > -1 && outBranch > -1, "located all three identity branches");
 const near = (idx, needle, span = 500) => js.slice(Math.max(0, idx - span), idx + span).includes(needle);
-ok(near(userBranch, 'setSubnav(!(ME && ME.plan === "plus"))'), "signed-in user -> shown unless already Plus");
-ok(near(coBranch, "setSubnav(false)"), "company -> hidden");
-ok(near(outBranch, "setSubnav(false)"), "signed out -> hidden (no upsell to visitors)");
-// teeth: the old always-on behaviour must be gone from both branches.
-ok(!near(outBranch, "setSubnav(true)"), "signed-out no longer unconditionally shows the upsell");
+ok(near(userBranch, "setSubnav(true)"), "signed-in user -> bar shown (hosts search)");
+ok(near(userBranch, 'setPlusCta(!(ME && ME.plan === "plus"))'), "signed-in user -> Plus CTA hidden only if already Plus");
+ok(near(coBranch, "setSubnav(true)"), "company -> bar shown (identical bar, hosts search)");
+ok(near(coBranch, "setPlusCta(false)"), "company -> Plus CTA hidden (member-only offer)");
+ok(near(outBranch, "setSubnav(false)"), "signed out -> bar hidden (nothing left in it)");
+ok(near(outBranch, "setPlusCta(false)"), "signed out -> Plus CTA hidden");
+// teeth: the user branch must NOT collapse the whole bar based on plan —
+// that was the bug (hiding the bar also hid search for Plus users).
+ok(!near(userBranch, 'setSubnav(!(ME && ME.plan === "plus"))'), "user branch no longer hides the whole bar for Plus users");
+// teeth: company must NOT hide the whole bar anymore (that hid its search).
+ok(!near(coBranch, "setSubnav(false)"), "company branch no longer collapses the bar");
 // Sanity: the 'near' matcher must reject something that isn't there.
 ok(!near(coBranch, "setSubnav(__nope__)"), "near() rejects absent text");
 
-// Behavioral: drive the REAL setSubnav with the plan gate for each identity
-// so we test the resulting visibility, not just that the source contains a
-// string. gate(ME) mirrors the expression in the signed-in branch.
-console.log("\nplus / signed-out visibility gate");
-const gate = (ME) => !(ME && ME.plan === "plus");
-// free user -> bar shown
-setSubnav(gate({ plan: "free" }));
-ok(document.documentElement.classList.contains("has-subnav"), "free user sees the upsell");
-// plus user -> bar hidden
-setSubnav(gate({ plan: "plus" }));
-ok(!document.documentElement.classList.contains("has-subnav"), "Plus user does NOT see the upsell");
-// user with no plan field (defensive) -> treated as non-Plus, shown
-setSubnav(gate({}));
-ok(document.documentElement.classList.contains("has-subnav"), "user without a plan field is treated as non-Plus (shown)");
-// signed-out (company/visitor branches pass false directly)
-setSubnav(false);
-ok(!document.documentElement.classList.contains("has-subnav"), "signed-out / company: upsell hidden");
+// Behavioral: extract the REAL setPlusCta and verify it hides ONLY the
+// button, leaving the bar (and thus search) intact. This is the regression
+// guard for the reported bug: hiding the CTA must not collapse the bar.
+// Reuses the module-scope plusBtn / searchTrigger resolved earlier.
+console.log("\nplus CTA hides button, not the whole bar");
+const pm = js.match(/function setPlusCta\(show\)\s*\{[\s\S]*?\n\}/);
+ok(!!pm, "setPlusCta extracted from shell.js");
+const setPlusCta = new Function("document", pm[0] + "; return setPlusCta;")(document);
+
+const gatePlus = (ME) => !(ME && ME.plan === "plus");
+// The identity branches set search visibility themselves; the CTA toggle
+// must not touch it. Simulate the branch's search state, then prove
+// setPlusCta leaves it exactly as-is.
+// free user: branch shows search
+searchTrigger.style.display = "inline-flex";
+setSubnav(true); setPlusCta(gatePlus({ plan: "free" }));
+ok(document.documentElement.classList.contains("has-subnav"), "free user: bar visible");
+ok(plusBtn.style.display !== "none", "free user: Plus button visible");
+ok(searchTrigger.style.display === "inline-flex", "free user: search left visible by CTA toggle");
+// PLUS user: bar STILL shown, button hidden, search untouched  <-- the bug
+searchTrigger.style.display = "inline-flex";
+setSubnav(true); setPlusCta(gatePlus({ plan: "plus" }));
+ok(document.documentElement.classList.contains("has-subnav"), "Plus user: bar STILL visible (search preserved)");
+ok(plusBtn.style.display === "none", "Plus user: only the Plus button is hidden");
+ok(searchTrigger.style.display === "inline-flex", "Plus user: search trigger untouched by the CTA toggle");
+// COMPANY: identical to a Plus user — bar shown, search shown, no Plus button.
+searchTrigger.style.display = "inline-flex";
+setSubnav(true); setPlusCta(false);
+ok(document.documentElement.classList.contains("has-subnav"), "company: bar visible (identical bar)");
+ok(plusBtn.style.display === "none", "company: no Plus button");
+ok(searchTrigger.style.display === "inline-flex", "company: search present, same as members");
+// signed-out: button hidden AND bar collapsed (search also hidden elsewhere)
+setPlusCta(false); setSubnav(false);
+ok(!document.documentElement.classList.contains("has-subnav"), "signed-out: bar collapsed");
+ok(plusBtn.style.display === "none", "signed-out: Plus button hidden");
+// defensive: no plan field -> treated as non-Plus, button shown
+setSubnav(true); setPlusCta(gatePlus({}));
+ok(plusBtn.style.display !== "none", "user without a plan field: button shown (treated non-Plus)");
+
+
+
 
 
 console.log("\nclick -> coming-soon notice");

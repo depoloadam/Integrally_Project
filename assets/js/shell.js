@@ -517,9 +517,10 @@ async function boot() {
     $("profile-menu").style.display = "";
     $("auth-menu").style.display = "none";
     if ($("search-trigger")) $("search-trigger").style.display = "inline-flex";
-    // Upsell is for non-Plus members only — hide it from existing
-    // subscribers. Mirrors the ME.plan check used on the profile page.
-    setSubnav(!(ME && ME.plan === "plus"));
+    // The bar stays visible for members (it hosts search); only the Plus
+    // upsell itself is hidden from existing subscribers.
+    setSubnav(true);
+    setPlusCta(!(ME && ME.plan === "plus"));
     document.querySelectorAll("[data-nav]").forEach(b => b.style.display = "");
     // The company-only Feed button stays hidden for users (they have their own).
     const coFeedBtn = document.querySelector('[data-nav="company-feed"]');
@@ -541,7 +542,10 @@ async function boot() {
     $("profile-menu").style.display = "none";
     $("auth-menu").style.display = "none";   // hide user sign in/up to avoid confusion
     if ($("search-trigger")) $("search-trigger").style.display = "inline-flex";
-    setSubnav(false);                        // Plus is a member offer, not a company one
+    // Companies get the same secondary bar as members (it hosts search);
+    // they just never see the Plus upsell (Plus is a member-only offer).
+    setSubnav(true);
+    setPlusCta(false);
     setupCompanyIdentityNav();               // company avatar + sign-out menu
     // Company sees: Feed, Jobs, Connect (to follow people/companies for
     // its Following feed), and its Company dashboard.
@@ -570,7 +574,10 @@ async function boot() {
     $("profile-menu").style.display = "none";
     $("auth-menu").style.display = "";
     if ($("search-trigger")) $("search-trigger").style.display = "none";
-    setSubnav(false);                        // no upsell to signed-out visitors
+    // Nothing to show in the bar for a visitor: no upsell, and search is
+    // hidden until sign-in — so hide the CTA and collapse the empty bar.
+    setPlusCta(false);
+    setSubnav(false);
     if (typeof hideNotifications === "function") hideNotifications();
     if (typeof hideMessaging === "function") hideMessaging();
     renderSignedOut();
@@ -780,6 +787,15 @@ document.querySelectorAll("[data-nav]").forEach(b => {
 // display directly here would show the bar but leave the offset stale.
 function setSubnav(show) {
   document.documentElement.classList.toggle("has-subnav", !!show);
+}
+
+// Show/hide ONLY the "Try PLUS+" upsell button, independent of the bar
+// itself — the bar also hosts search, so hiding the CTA must not collapse
+// the whole bar. The bar's own visibility is driven separately by
+// setSubnav() based on whether anything in it is still visible.
+function setPlusCta(show) {
+  const btn = document.querySelector('#subnav-inner [data-subnav="plus"]');
+  if (btn) btn.style.display = show ? "" : "none";
 }
 
 // Delegated so items added to the bar later work without new wiring.
