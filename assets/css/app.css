@@ -1660,15 +1660,7 @@ textarea.jf-input { resize:vertical; }
 
 /* Picker labels. Quill's snow theme only labels its own size keywords
    (small/large/huge); we feed it px values, so every option fell through to
-   the default "Normal" — making the size picker look identical to the
-   heading picker. Label both explicitly, in posting language. */
-.rt-editor .ql-snow .ql-picker.ql-header .ql-picker-label::before,
-.rt-editor .ql-snow .ql-picker.ql-header .ql-picker-item::before { content:"Paragraph"; }
-.rt-editor .ql-snow .ql-picker.ql-header .ql-picker-label[data-value="2"]::before,
-.rt-editor .ql-snow .ql-picker.ql-header .ql-picker-item[data-value="2"]::before { content:"Heading"; }
-.rt-editor .ql-snow .ql-picker.ql-header .ql-picker-label[data-value="3"]::before,
-.rt-editor .ql-snow .ql-picker.ql-header .ql-picker-item[data-value="3"]::before { content:"Subheading"; }
-
+   the default "Normal". Label them explicitly, in posting language. */
 .rt-editor .ql-snow .ql-picker.ql-size .ql-picker-label::before,
 .rt-editor .ql-snow .ql-picker.ql-size .ql-picker-item::before { content:"Normal"; }
 .rt-editor .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="12px"]::before,
@@ -1718,14 +1710,12 @@ textarea.jf-input { resize:vertical; }
   position:static; right:auto; top:auto; margin:0; float:none;
   width:17px; height:17px;
 }
-.rt-editor .ql-snow .ql-picker.ql-header .ql-picker-label svg,
 .rt-editor .ql-snow .ql-picker.ql-size .ql-picker-label svg {
   position:absolute; right:3px; top:50%; margin-top:-9px; float:none;
   width:18px; height:18px;
 }
 .rt-editor .ql-snow .ql-color-picker .ql-picker-label,
 .rt-editor .ql-snow .ql-icon-picker .ql-picker-label { padding:0; justify-content:center; }
-.rt-editor .ql-snow .ql-picker.ql-header { width:96px; }
 .rt-editor .ql-snow .ql-picker.ql-size { width:70px; }
 
 /* ---- rendered rich text: block formats -------------------------------

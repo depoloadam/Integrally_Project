@@ -80,8 +80,6 @@ ok(/<pre>/.test(fixed), "repaired block is a <pre>");
 console.log("\nevery editor format survives src/RichText.php");
 ed.clear();
 ed.quill.setContents([
-  { insert: "Heading" },  { insert: "\n", attributes: { header: 2 } },
-  { insert: "Sub" },      { insert: "\n", attributes: { header: 3 } },
   { insert: "bold", attributes: { bold: true } },
   { insert: "italic", attributes: { italic: true } },
   { insert: "under", attributes: { underline: true } }, { insert: "\n" },
@@ -102,7 +100,6 @@ const cleaned = execFileSync("php", ["-r",
 ], { encoding: "utf8" });
 
 const survives = [
-  ["<h2>", "heading 2"], ["<h3>", "heading 3"],
   ["<strong>", "bold"], ["<em>", "italic"], ["<u>", "underline"],
   ["<ul>", "bulleted list"], ["<ol>", "numbered list"],
   ["<blockquote>", "blockquote"], ["<pre>", "code block"],
@@ -118,6 +115,12 @@ const evil = execFileSync("php", ["-r",
   'require "src/RichText.php"; echo RichText::clean("<script>bad()</script><b>ok</b>");'
 ], { encoding: "utf8" });
 ok(!evil.includes("script") && evil.includes("ok"), "sanitizer still strips (round-trip check is meaningful)");
+// Headings are gone from the TOOLBAR but stay whitelisted server-side, so
+// pasted or legacy <h2>/<h3> still render. Assert that directly.
+const heads = execFileSync("php", ["-r",
+  'require "src/RichText.php"; echo RichText::clean("<h2>H</h2><h3>S</h3>");'
+], { encoding: "utf8" });
+ok(heads.includes("<h2>") && heads.includes("<h3>"), "legacy/pasted headings still survive sanitizer");
 
 console.log("\ntoolbar composition (no duplicate/ambiguous controls)");
 const tb = w.document.querySelector(".ql-toolbar");
@@ -128,11 +131,11 @@ ok(!!tb.querySelector("button.ql-code-block"), "code-block button present");
 ok(!tb.querySelector("button.ql-code"), "inline-code button removed (was an identical icon)");
 // ...but the format is still accepted, so pasted inline code survives.
 ok(RT_FORMATS_CHECK.includes("code"), "inline code still an allowed format");
-// Both pickers exist and are labelled by CSS, not left as twin "Normal"s.
-ok(!!tb.querySelector(".ql-picker.ql-header"), "heading picker present");
+// Heading/paragraph picker removed from the toolbar — size controls text
+// scale instead. The format stays whitelisted so pasted headings survive.
+ok(!tb.querySelector(".ql-picker.ql-header"), "heading picker removed from toolbar");
 ok(!!tb.querySelector(".ql-picker.ql-size"), "size picker present");
 const css = readFileSync("assets/css/app.css", "utf8");
-ok(/ql-picker\.ql-header[\s\S]*?content:"Paragraph"/.test(css), "heading picker labelled 'Paragraph' (not a second 'Normal')");
 [["12px","Small"],["24px","Large"],["32px","Huge"]].forEach(([v,l]) =>
   ok(css.includes(`ql-size .ql-picker-item[data-value="${v}"]::before { content:"${l}"; }`)
      || new RegExp(`data-value="${v}"\\]::before \\{ content:"${l}"`).test(css),

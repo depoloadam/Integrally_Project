@@ -360,7 +360,7 @@ const RT_SIZES  = [["Small", "12px"], ["Normal", "16px"], ["Large", "24px"], ["H
 const RT_FORMATS = [
   "bold", "italic", "underline",
   "list", "blockquote", "code-block", "code",
-  "header", "align", "color", "size", "link",
+  "align", "color", "size", "link",
 ];
 
 let RT_REGISTERED = false;
@@ -398,7 +398,6 @@ function mountRichEditor(mountId, opts = {}) {
     formats: RT_FORMATS,
     modules: {
       toolbar: [
-        [{ header: [2, 3, false] }],
         ["bold", "italic", "underline"],
         [{ list: "bullet" }, { list: "ordered" }],
         ["blockquote", "code-block"],
