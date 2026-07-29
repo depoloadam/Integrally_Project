@@ -496,6 +496,7 @@ function buildComposer(opts) {
         ${opts.identity ? "" : `<div class="comp-avatar">${opts.avatarHTML}</div>`}
         <div id="comp-editor" style="flex:1;min-width:0"></div>
       </div>
+      <div class="comp-countrow"><span class="comp-count" id="comp-count"></span></div>
       <button type="button" class="comp-expand" id="comp-expand" title="Expand composer" aria-label="Expand composer">
         <span class="comp-expand-chev">⌄</span>
       </button>
@@ -522,7 +523,6 @@ function buildComposer(opts) {
           <option value="public">🌐 Public</option>
           <option value="followers">👥 Followers</option>
         </select>
-        <span class="comp-count" id="comp-count"></span>
         <button class="in-btn primary" id="comp-post" title="Post (Ctrl+Enter)" style="flex:none;padding:9px 18px">Post</button>
       </div>
     </div>`);

@@ -1132,6 +1132,7 @@ html:hover { scrollbar-color:rgba(11,31,42,.24) transparent; }
 
 /* collapsed: one line, no toolbar, no action row — expands on focus */
 .in-composer.collapsed .rt-toolbar,
+.in-composer.collapsed .comp-countrow,
 .in-composer.collapsed .comp-actions { display:none; }
 .in-composer.collapsed .rt-area { min-height:0; padding:12px 14px; }
 .in-composer.collapsed .rt-editor { cursor:text; }
@@ -1219,6 +1220,7 @@ html:hover { scrollbar-color:rgba(11,31,42,.24) transparent; }
 /* live character counter — always on. Amber in the last 10% of the
    budget, red once over. Tabular numerals so the width doesn't jitter
    as the count climbs. */
+.comp-countrow { display:flex; justify-content:flex-end; margin-top:6px; min-height:16px; }
 .comp-count { font-size:12px; color:var(--in-muted); font-variant-numeric:tabular-nums; }
 .comp-count.warn { color:#b26a00; font-weight:600; }
 .comp-count.over { color:var(--in-error); font-weight:700; }
