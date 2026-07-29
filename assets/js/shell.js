@@ -377,6 +377,49 @@ function registerQuillFormats() {
   // normalises those to its own rt-align-* enum.
 }
 
+// Block-level markdown input shortcuts we ADD on top of Quill's built-ins.
+//
+// Quill 2.0.3 already ships a "list autofill" binding for `- `, `* `, and
+// `1. ` (correctly guarded with format:{"code-block":false,blockquote:false}),
+// so we do NOT re-register those — doing so double-fired and, because our
+// versions lacked the guard, converted code-block lines into lists. We only
+// add what Quill lacks: `> ` for blockquote and ```` ``` ```` for a code block.
+//
+// Both use Quill's `format` guard so they're inert inside an existing code
+// block, exactly like the built-in list shortcut. `context.prefix` is the
+// matched line text before the caret, so deleting it is "back up by its
+// length". Deliberately block-only — no `## ` heading shortcut, since heading
+// authoring was removed from the toolbar and this must not be a back door to
+// it. Inline markdown (**bold**, `code`) is out of scope for this pass.
+function markdownBindings() {
+  return {
+    md_blockquote: {
+      key: " ",
+      collapsed: true,
+      format: { "code-block": false, blockquote: false },
+      prefix: /^>$/,
+      handler(range, context) {
+        const tokenLen = context.prefix.length;
+        this.quill.deleteText(range.index - tokenLen, tokenLen, "user");
+        this.quill.formatLine(range.index - tokenLen, 1, "blockquote", true, "user");
+        return false;   // swallow the trigger space
+      },
+    },
+    md_codeblock: {
+      key: "`",
+      collapsed: true,
+      format: { "code-block": false },
+      prefix: /^``$/,
+      handler(range, context) {
+        const tokenLen = context.prefix.length;   // the two existing backticks
+        this.quill.deleteText(range.index - tokenLen, tokenLen, "user");
+        this.quill.formatLine(range.index - tokenLen, 1, "code-block", true, "user");
+        return false;   // swallow the third backtick
+      },
+    },
+  };
+}
+
 function mountRichEditor(mountId, opts = {}) {
   const host = $(mountId);
   if (!host) return null;
@@ -407,7 +450,43 @@ function mountRichEditor(mountId, opts = {}) {
         ["link"],
         ["clean"],
       ],
+      keyboard: { bindings: markdownBindings() },
     },
+  });
+
+  // ---- paste cleaning --------------------------------------------------
+  // Quill already drops formats outside RT_FORMATS and the server re-sanitizes
+  // on save, so this is about ERGONOMICS: kill the noise that pasting from
+  // Word / Google Docs / web pages drags in (background colours, font
+  // families, inherited font-sizes that aren't in our size enum, empty
+  // spans). We keep the whitelisted formats — a pasted bulleted list stays a
+  // list — and strip the rest so the result matches what the editor can show.
+  const ALLOWED_SIZE_SET = new Set(RT_SIZES.map(s => s[1]));
+  // Strip inline style noise on every pasted element. Runs before Quill's own
+  // matchers; returning the delta unchanged, we only mutate the node's style.
+  quill.clipboard.addMatcher(Node.ELEMENT_NODE, (node, delta) => {
+    if (node.style) {
+      // Font-size only survives if it's exactly one of our allowed px values.
+      const fs = node.style.fontSize;
+      if (fs && !ALLOWED_SIZE_SET.has(fs)) node.style.fontSize = "";
+      // These never map to anything we support — always drop them.
+      node.style.backgroundColor = "";
+      node.style.fontFamily = "";
+      node.style.lineHeight = "";
+    }
+    return delta;
+  });
+
+  // Ctrl/Cmd+Shift+V — paste as plain text, discarding all formatting.
+  quill.root.addEventListener("paste", (e) => {
+    if (!(e.shiftKey && (e.ctrlKey || e.metaKey))) return;
+    e.preventDefault();
+    const text = (e.clipboardData || window.clipboardData).getData("text/plain");
+    const sel = quill.getSelection(true);
+    const idx = sel ? sel.index : quill.getLength();
+    if (sel && sel.length) quill.deleteText(idx, sel.length, "user");
+    quill.insertText(idx, text, "user");
+    quill.setSelection(idx + text.length, 0, "user");
   });
 
   // Quill 2.0.3 BUG: getSemanticHTML() emits an empty <pre> for code blocks —

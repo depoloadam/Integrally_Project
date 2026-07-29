@@ -192,5 +192,98 @@ ok(/width:17px/.test(cssT.slice(cssT.indexOf(".ql-icon-picker .ql-picker-label s
 ok(cssT.includes(".rt-editor .ql-snow .ql-icon-picker .ql-picker-label svg"),
    "align (icon picker) SVG is targeted");
 
+// ---- Stage 3: markdown shortcuts + paste cleaning ---------------------
+// Drives a keystroke the way Quill's keyboard module does: at the caret, find
+// the binding for `key` whose prefix matches the line text before the caret,
+// and call its handler. Returns what the handler returned (false = swallowed).
+function typeShortcut(ed, key) {
+  const q = ed.quill;
+  const sel = q.getSelection(true) || { index: q.getLength() - 1, length: 0 };
+  const [line, offsetInLine] = q.getLine(sel.index);
+  const lineStart = sel.index - offsetInLine;
+  const before = q.getText(lineStart, sel.index - lineStart);
+  const fmt = q.getFormat(sel.index);
+  const bindings = q.getModule("keyboard").bindings[key] || [];
+  for (const b of bindings) {
+    if (!b.prefix || !b.prefix.test(before)) continue;
+    // Honour Quill's own format guard: a binding with format:{"code-block":false}
+    // must NOT fire when the line already has that format.
+    if (b.format && typeof b.format === "object" && !Array.isArray(b.format)) {
+      const blocked = Object.keys(b.format).some(k =>
+        b.format[k] === false ? fmt[k] != null : b.format[k] === true ? fmt[k] == null : false);
+      if (blocked) continue;
+    }
+    const ctx = { prefix: before, collapsed: true, line, offset: offsetInLine, format: fmt };
+    return b.handler.call({ quill: q }, { index: sel.index, length: 0 }, ctx);
+  }
+  return true;   // no shortcut matched — the key would type normally
+}
+
+console.log("\nStage 3: markdown input shortcuts (block-level only)");
+const mdCase = (setup, key, wantHTML, label) => {
+  ed.clear();
+  setup(ed.quill);
+  const swallowed = typeShortcut(ed, key) === false;
+  ok(swallowed, `${label}: trigger key is swallowed`);
+  ok(wantHTML.test(ed.getHTML()), `${label}: line becomes ${wantHTML}`);
+};
+mdCase(q => { q.insertText(0, "-", "user"); q.setSelection(1, 0); },
+  " ", /<ul>/, "'- ' → bullet list");
+mdCase(q => { q.insertText(0, "*", "user"); q.setSelection(1, 0); },
+  " ", /<ul>/, "'* ' → bullet list");
+mdCase(q => { q.insertText(0, "1.", "user"); q.setSelection(2, 0); },
+  " ", /<ol>/, "'1. ' → numbered list");
+mdCase(q => { q.insertText(0, ">", "user"); q.setSelection(1, 0); },
+  " ", /<blockquote>/, "'> ' → blockquote");
+mdCase(q => { q.insertText(0, "``", "user"); q.setSelection(2, 0); },
+  "`", /<pre>/, "'```' → code block");
+
+// The token itself must be gone, not left as literal text in the line.
+ed.clear();
+ed.quill.insertText(0, "-", "user"); ed.quill.setSelection(1, 0);
+typeShortcut(ed, " ");
+ed.quill.insertText(ed.quill.getSelection(true).index, "item", "user");
+ok(/<ul><li>item<\/li><\/ul>/.test(ed.getHTML()), "trigger token is consumed, not left as text");
+
+// No `## ` heading shortcut — heading authoring was removed, and the markdown
+// path must not reintroduce it. Typing '## ' should produce literal text.
+ed.clear();
+ed.quill.insertText(0, "##", "user"); ed.quill.setSelection(2, 0);
+ok(typeShortcut(ed, " ") !== false, "'## ' is NOT a shortcut (returns normally)");
+ok(!/<h2>|<h3>/.test(ed.getHTML()), "'## ' does not create a heading");
+
+// Shortcuts are inert inside a code block — dashes/backticks stay literal.
+ed.clear();
+ed.quill.setContents([{ insert: "-" }, { insert: "\n", attributes: { "code-block": true } }]);
+ed.quill.setSelection(1, 0);
+ok(typeShortcut(ed, " ") !== false, "inside a code block, '- ' does not fire");
+
+console.log("\nStage 3: paste cleaning (keeps whitelisted formats, strips noise)");
+// clipboard.convert runs the registered matchers. Feed it messy HTML and
+// inspect the resulting Delta / round-tripped HTML.
+const pasteHTML = (html) => {
+  ed.clear();
+  const delta = ed.quill.clipboard.convert({ html });
+  ed.quill.setContents(delta);
+  return ed.getHTML();
+};
+// A pasted bulleted list stays a list (whitelisted format is kept).
+ok(/<ul>/.test(pasteHTML("<ul><li>a</li><li>b</li></ul>")), "pasted bullet list survives");
+// Background colour, font-family, line-height are stripped.
+const noisy = pasteHTML('<p style="background-color:#ff0;font-family:Arial;line-height:2">x</p>');
+ok(!/background-color/i.test(noisy), "pasted background-color is stripped");
+ok(!/font-family/i.test(noisy), "pasted font-family is stripped");
+ok(!/line-height/i.test(noisy), "pasted line-height is stripped");
+// A font-size NOT in the enum is dropped; one that IS survives.
+ok(!/font-size:\s*37px/.test(pasteHTML('<p style="font-size:37px">x</p>')), "off-enum font-size is stripped");
+ok(/font-size:\s*24px/.test(pasteHTML('<span style="font-size:24px">x</span>')), "in-enum font-size (24px) survives paste");
+// And the whole thing still survives the real server sanitizer.
+const pastedOut = pasteHTML('<ul><li>a</li></ul><p style="background-color:#ff0">b</p>');
+const pastedClean = execFileSync("php", ["-r",
+  'require "src/RichText.php"; echo RichText::clean(file_get_contents("php://stdin"));'
+], { input: pastedOut, encoding: "utf8" });
+ok(/<ul>/.test(pastedClean) && !/background-color/i.test(pastedClean),
+   "cleaned paste survives src/RichText.php intact");
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
