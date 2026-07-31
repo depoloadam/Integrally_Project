@@ -705,16 +705,25 @@ async function confirmAddToProfile() {
   const skillsBlock = listBlock("Skill", "s", add.skills.map(s => s.name));
   const certsBlock  = listBlock("Certification", "s", add.certifications.map(c => c.name));
 
-  // Education needs the extra fields — render an inline row per staged field.
+  // Education needs the full profile Add-Education fields so the row we
+  // write is identical to one added on the profile. Field of study is
+  // pre-filled from staging; institution is required (endpoint contract);
+  // degree and start/end years are optional. Mirrors profile.js addEducation.
+  const nowYear = new Date().getFullYear();
+  const maxYear = nowYear + 8;
   const eduBlock = add.education.length
     ? `<div class="in-confirm-group">
-         <div class="in-confirm-group-h">Field${add.education.length > 1 ? "s" : ""} of study</div>
-         <div class="in-confirm-note" style="margin:2px 0 8px">Add where you studied ${add.education.length > 1 ? "these" : "this"} so it can be saved as an education entry. Institution is required; degree is optional.</div>
+         <div class="in-confirm-group-h">Education</div>
+         <div class="in-confirm-note" style="margin:2px 0 8px">Complete ${add.education.length > 1 ? "these entries" : "this entry"} to save ${add.education.length > 1 ? "them" : "it"} to your profile. Institution is required.</div>
          ${add.education.map((e, i) => `
            <div class="in-confirm-edu" data-edu="${i}">
-             <div class="in-confirm-edu-field">${esc(e.field || "")}</div>
-             <input class="edu-inst" placeholder="Institution (e.g. Ohio State University)" autocomplete="off">
-             <input class="edu-deg" placeholder="Degree — optional (e.g. BS, MBA)" autocomplete="off">
+             <label>Institution</label><input class="edu-inst" placeholder="e.g. Ohio State University">
+             <label>Degree type</label><input class="edu-deg" placeholder="e.g. BS, MBA, Associate's">
+             <label>Field of study</label><div class="job-ta-wrap"><input class="edu-field" value="${esc(e.field || "")}" placeholder="e.g. Computer Science" autocomplete="off"></div>
+             <div class="row">
+               <div><label>Start year</label><input class="edu-start" type="number" min="1950" max="${maxYear}" step="1" placeholder="${nowYear - 4}"></div>
+               <div><label>End year</label><input class="edu-end" type="number" min="1950" max="${maxYear}" step="1" placeholder="${nowYear}"></div>
+             </div>
            </div>`).join("")}
        </div>`
     : "";
@@ -738,26 +747,34 @@ async function confirmAddToProfile() {
       <button class="in-btn primary" id="conf-accept">Add to my profile</button>
     </div>`);
 
-  // Same field-of-study typeahead the profile uses, if available.
-  // (Institution/degree are free text on the profile too, so no typeahead.)
+  // Mount the same field-of-study typeahead the profile uses, on each
+  // education row's field input. Institution/degree/years are free text on
+  // the profile too, so no typeahead there.
+  if (typeof jobMountTypeahead === "function" && typeof eduCatalogSearch === "function") {
+    document.querySelectorAll(".in-confirm-edu .edu-field").forEach(inp => {
+      jobMountTypeahead(inp, { search: eduCatalogSearch, minChars: 2, limit: 8 });
+    });
+  }
 
   $("conf-cancel").onclick = () => closeModal();
   $("conf-accept").onclick = async () => {
     // Validate education rows first: institution is required. Capture the
     // values BEFORE any await/closeModal so a DOM wipe can't lose them.
+    // Same payload shape as profile.js addEducation so the row is identical.
     const eduRows = [...document.querySelectorAll(".in-confirm-edu")];
     const eduPayloads = [];
     for (const row of eduRows) {
-      const idx  = Number(row.dataset.edu);
-      const inst = row.querySelector(".edu-inst").value.trim();
-      const deg  = row.querySelector(".edu-deg").value.trim();
-      const field = (add.education[idx] && add.education[idx].field) || "";
+      const inst  = row.querySelector(".edu-inst").value.trim();
+      const deg   = row.querySelector(".edu-deg").value.trim();
+      const field = row.querySelector(".edu-field").value.trim();
+      const sy    = row.querySelector(".edu-start").value;
+      const ey    = row.querySelector(".edu-end").value;
       if (!inst) {
-        toast("Add an institution for each field of study, or remove it first.", "err");
+        toast("Add an institution for each education entry, or remove it first.", "err");
         row.querySelector(".edu-inst").focus();
         return;   // keep the dialog open so the user can fix it
       }
-      eduPayloads.push({ institution: inst, degree: deg || undefined, field });
+      eduPayloads.push({ institution: inst, degree: deg, field, start_year: sy, end_year: ey });
     }
 
     const btn = $("conf-accept");
