@@ -227,6 +227,7 @@ function buildTargetStanding(p) {
       <div class="in-scores-compare">${compareLine}</div>
 
       <div class="in-scores-standing-actions">
+        <button class="in-btn primary in-scores-improve" style="flex:none;padding:8px 14px">Improve this score →</button>
         <button class="in-btn ghost in-scores-full" style="flex:none;padding:8px 14px">View full breakdown →</button>
         <button class="in-btn ghost in-scores-hist" style="flex:none;padding:8px 14px">View history →</button>
       </div>
@@ -235,6 +236,7 @@ function buildTargetStanding(p) {
   // Full breakdown needs the score id; insights doesn't carry it (it's a
   // per-target aggregate), so route via history which resolves by target.
   const encoded = encodeURIComponent(p.target_type + "|" + p.target_value);
+  node.querySelector(".in-scores-improve").onclick = () => { location.hash = "score-improve/" + encoded; };
   node.querySelector(".in-scores-hist").onclick = () => { location.hash = "score-history/" + encoded; };
   node.querySelector(".in-scores-full").onclick = () => { location.hash = "score-history/" + encoded; };
   return node;

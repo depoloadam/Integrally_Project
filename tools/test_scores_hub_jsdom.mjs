@@ -33,7 +33,7 @@ window.location.hash = "";
 // re-declarations aren't an issue (module scope), then eval into window.
 const src = readFileSync("assets/js/scores.js", "utf8");
 // Expose the builder fns + state on window by evaluating in global scope.
-const wrapped = src + "\n;window.__scores = { buildSummary, buildPersonalPanel, buildTargetStanding, buildStandingDetail, buildAverages, buildTrending, SCORES_STATE, get STAND_STATE(){return STAND_STATE;} };window.renderScores = renderScores;";
+const wrapped = src + "\n;window.__scores = { buildSummary, buildPersonalPanel, buildTargetStanding, buildAverages, buildTrending, SCORES_STATE };window.renderScores = renderScores;";
 window.eval(`var ME = window.ME, el = window.el, esc = window.esc, $ = window.$, scoreMe = window.scoreMe, location = window.location;\n${wrapped}`);
 const S = window.__scores;
 
@@ -141,90 +141,43 @@ const thin = S.buildTargetStanding(payload.personal[2]);
 ok(/first to score/i.test(thin.textContent), "pool of 1 shows 'first to score', not a fake percentile");
 ok(!thin.querySelector(".in-scores-avg-tick"), "no average tick when there's no community avg");
 
+// Improve entry point must exist on EVERY tab standing, including a
+// pool-of-1 target (this is the reachability fix — the coaching page
+// doesn't need a comparison pool).
+ok(!!daStanding.querySelector(".in-scores-improve"), "pooled target has an Improve button");
+ok(!!thin.querySelector(".in-scores-improve"), "solo (pool-of-1) target ALSO has an Improve button");
+window.location.hash = "";
+thin.querySelector(".in-scores-improve").dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+ok(window.location.hash.includes("score-improve/"), "improve button routes to the coaching page");
+ok(decodeURIComponent(window.location.hash).includes("skill|Python"), "improve route carries the target");
+
 // history link routes by target
 window.location.hash = "";
 daStanding.querySelector(".in-scores-hist").dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
 ok(window.location.hash.includes("score-history/"), "history button routes to score-history");
 ok(decodeURIComponent(window.location.hash).includes("job_title|Data Analyst"), "history route carries the target");
-// GUARD: the Region 2 "View history" button owns .in-scores-hist. The Region 3
-// distribution chart must NOT reuse that class, or the histogram's CSS
-// (56px flex box) lands on the button and wrecks it. jsdom can't see CSS,
-// so assert the class separation structurally instead.
-ok(daStanding.querySelector(".in-scores-hist").tagName === "BUTTON",
-   ".in-scores-hist is the history BUTTON in Region 2");
-const collisionProbe = S.buildStandingDetail(payload.personal[0]);
-ok(!collisionProbe.querySelector(".in-scores-hist"),
-   "Region 3 distribution chart does NOT reuse the button's .in-scores-hist class");
-ok(!!collisionProbe.querySelector(".in-scores-dist"),
-   "Region 3 distribution chart uses its own .in-scores-dist class");
 
-// ---- Region 3: where you stand (all-scores switcher) ---------------
+// ---- Region 3: where you stand -------------------------------------
 console.log("\nwhere you stand");
-S.STAND_STATE.target = null;   // reset
 const stand = S.buildAverages(payload, payload.personal);
+// Section header changed from platform averages to per-target standing.
 ok(/Where you stand/i.test(stand.textContent), "section is titled 'Where you stand'");
+// Only pooled targets (pool_size > 1) get a standing row; Python (pool 1) is excluded.
+const standRows = stand.querySelectorAll(".in-scores-stand");
+ok(standRows.length === 2, "one standing row per pooled target (Python pool-of-1 excluded)");
+ok(!stand.textContent.includes("Python"), "solo-pool target not shown as a standing");
+// Rank + range shown.
+ok(/#1\b/.test(stand.textContent) || /#2\b/.test(stand.textContent), "rank is displayed");
+ok(/Range 40–80/.test(stand.textContent), "pool range shown for Data Analyst");
+// Histogram bars render, with the viewer's bucket marked.
+const hists = stand.querySelectorAll(".in-scores-hist");
+ok(hists.length === 2, "a distribution histogram per pooled target");
+ok(stand.querySelector(".in-scores-hbar.mine"), "the viewer's own bucket is highlighted in the histogram");
+// Both targets are above average here -> positive standing callout.
+ok(/Your standing/i.test(stand.textContent) && !/Biggest gap/i.test(stand.textContent),
+   "all-above-average shows the positive standing callout, not a gap");
 
-// The switcher now covers EVERY scored target, solo included — the whole
-// point of this change. Pooled targets sort before solo ones.
-const switchBtns = stand.querySelectorAll(".in-scores-switch-btn");
-ok(switchBtns.length === 3, "switcher has a chip for every scored target (solo included)");
-const switchNames = [...switchBtns].map(b => b.querySelector(".in-scores-switch-name").textContent);
-ok(switchNames.includes("Python"), "solo target (Python) is reachable in the switcher, not dropped");
-// pooled first: Data Analyst & Healthcare (pooled) precede Python (solo).
-ok(switchNames.indexOf("Python") === 2, "solo target sorts after pooled ones");
-// pooled chips carry rank, solo chips carry a 'solo' tag.
-ok([...switchBtns].filter(b => b.querySelector(".in-scores-switch-rank")).length === 2, "pooled chips show rank");
-ok(!!stand.querySelector(".in-scores-switch-solo"), "solo chip is tagged 'solo'");
-
-// Only ONE target is detailed at a time (single panel, not stacked rows).
-const detailPanels = stand.querySelectorAll(".in-scores-stand-panel");
-ok(detailPanels.length === 1, "a single standing panel, not a row per target");
-const activeChip = stand.querySelector(".in-scores-switch-btn.active");
-ok(!!activeChip, "one chip is active by default");
-// First (default) target is the biggest-gap pooled one — here both are
-// above average, so ordering falls to gap ascending; Data Analyst (+5) < Healthcare (+30).
-ok(stand.querySelector(".in-scores-stand-panel").textContent.includes("Data Analyst"),
-   "panel shows the first target by default");
-ok(/Range 40–80/.test(stand.textContent), "pool range shown for the active pooled target");
-
-// Switching chips swaps the detailed target.
-const pythonChip = [...switchBtns].find(b => b.querySelector(".in-scores-switch-name").textContent === "Python");
-pythonChip.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-const afterSwitch = stand.querySelector(".in-scores-stand-panel");
-ok(afterSwitch.textContent.includes("Python"), "clicking a chip swaps the detailed target");
-ok(/first to score/i.test(afterSwitch.textContent), "solo target shows an honest 'no pool yet' body, not a fake rank");
-ok(!afterSwitch.querySelector(".in-scores-dist"), "solo target renders no histogram (no pool to distribute)");
-// sanity: the active state actually moved
-ok(stand.querySelector(".in-scores-switch-btn.active").querySelector(".in-scores-switch-name").textContent === "Python",
-   "active chip tracks the clicked target");
-
-// --- Interactive histogram + details strip (pooled target) ----------
-// Switch back to a pooled target and exercise the bars.
-const daChip = [...stand.querySelectorAll(".in-scores-switch-btn")].find(b => b.querySelector(".in-scores-switch-name").textContent === "Data Analyst");
-daChip.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-const daPanel = stand.querySelector(".in-scores-stand-panel");
-const bars = daPanel.querySelectorAll(".in-scores-hbar");
-ok(bars.length === 10, "histogram renders 10 buckets");
-ok(daPanel.querySelector(".in-scores-hbar.mine"), "the viewer's own bucket is highlighted");
-ok(bars[0].tagName === "BUTTON", "bars are focusable buttons, not inert spans");
-// details strip seeds with the viewer's own bucket at rest.
-const strip = daPanel.querySelector(".in-scores-dist-detail");
-ok(!!strip, "a details strip sits under the chart");
-ok(/Your score/i.test(strip.textContent), "at rest the strip describes the viewer's own bucket");
-// Data Analyst histogram [0,0,0,0,1,1,1,1,1,0], pool 5. Hover bucket 4 (40–49): 1 person, 20%.
-bars[4].dispatchEvent(new window.MouseEvent("mouseenter", { bubbles: true }));
-ok(/40–49/.test(strip.textContent), "hovering a bar shows that bucket's range");
-ok(/1 person/.test(strip.textContent), "strip shows the bucket count");
-ok(/20% of pool/.test(strip.textContent), "strip shows the bucket share of the pool");
-// teeth: a different bucket must produce different numbers.
-bars[7].dispatchEvent(new window.MouseEvent("mouseenter", { bubbles: true }));
-ok(/70–79/.test(strip.textContent) && !/40–49/.test(strip.textContent), "strip tracks the hovered bucket");
-// leaving the chart resets to the viewer's own bucket.
-daPanel.querySelector(".in-scores-dist").dispatchEvent(new window.MouseEvent("mouseleave", { bubbles: true }));
-ok(/Your score/i.test(strip.textContent), "leaving the chart resets the strip to the viewer's bucket");
-
-// --- Cross-target gap banner drives the switcher --------------------
-S.STAND_STATE.target = null;
+// Now force a below-average target -> the "biggest gap" callout appears.
 const withGap = {
   ...payload,
   personal: [
@@ -233,35 +186,22 @@ const withGap = {
   ],
 };
 const gapCard = S.buildAverages(withGap, withGap.personal);
-ok(/Biggest gap to close/i.test(gapCard.textContent), "a below-average target surfaces the biggest-gap banner");
-ok(/25 below/.test(gapCard.textContent), "gap banner states the size of the gap");
-const gapBtn = gapCard.querySelector(".in-scores-gap-btn");
-ok(!!gapBtn, "gap banner has an action button");
-// Clicking the banner jumps the switcher to the gap target (Healthcare), NOT to profile.
-window.location.hash = "";
-gapBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-ok(window.location.hash === "" || !window.location.hash.includes("profile"), "gap banner no longer bounces to profile");
-ok(gapCard.querySelector(".in-scores-stand-panel").textContent.includes("Healthcare"),
-   "gap banner jumps the switcher to the gap target");
-ok(gapCard.querySelector(".in-scores-switch-btn.active").querySelector(".in-scores-switch-name").textContent === "Healthcare",
-   "gap target's chip becomes active");
-// teeth: the all-above-average payload must NOT produce a gap banner.
-ok(!/Biggest gap to close/i.test(stand.textContent), "no false gap banner when everything is above average");
-ok(/Your standing/i.test(stand.textContent), "all-above-average shows the positive standing banner instead");
+ok(/Biggest gap to close/i.test(gapCard.textContent), "a below-average target surfaces the biggest-gap callout");
+ok(/25 below/.test(gapCard.textContent), "gap callout states the size of the gap");
+ok(!!gapCard.querySelector(".in-scores-gap-btn"), "gap callout has an improve-score action");
+// teeth: the positive payload must NOT produce a gap callout
+ok(!/Biggest gap to close/i.test(stand.textContent), "no false gap callout when everything is above average");
 
 // Platform averages survive as a small footnote only.
 ok(!!stand.querySelector(".in-scores-footnote"), "platform averages demoted to a footnote");
 ok(/Platform-wide averages/i.test(stand.textContent), "footnote labels the broad averages");
 ok(/broad context only/i.test(stand.textContent), "footnote flags the averages as broad context");
 
-// Solo-only user: switcher still shows the target, with an honest body.
-S.STAND_STATE.target = null;
+// No pooled targets at all -> honest empty state, footnote still present.
 const soloOnly = { ...payload, personal: [payload.personal[2]] };
 const soloCard = S.buildAverages(soloOnly, soloOnly.personal);
-ok(soloCard.querySelectorAll(".in-scores-switch-btn").length === 1, "solo-only user still gets a switcher chip");
-ok(/first to score/i.test(soloCard.textContent), "solo-only target explains there's no pool yet");
-ok(!soloCard.querySelector(".in-scores-dist"), "no histogram when there's no pool");
-ok(!soloCard.querySelector(".in-scores-gap"), "no gap banner when nothing is pooled");
+ok(/No one else has scored/i.test(soloCard.textContent), "no-pool state explains why there's nothing to compare");
+ok(!soloCard.querySelector(".in-scores-stand"), "no standing rows when no target has a pool");
 
 // ---- Region 4: trending --------------------------------------------
 console.log("\ntrending");
