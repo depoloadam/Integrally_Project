@@ -120,8 +120,7 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
   padding:12px 14px; background:var(--in-bg); border-radius:10px; margin-bottom:14px;
 }
 .in-scores-compare strong { color:var(--in-accent); }
-.in-scores-standing-actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
-.in-scores-standing-actions .in-btn { flex:none; padding:8px 14px; height:auto; border-radius:8px; }
+.in-scores-standing-actions { display:flex; flex-wrap:wrap; gap:8px; }
 
 /* Region 3 — where you stand (per-target standing + gap + distribution) */
 /* Biggest-gap callout */
@@ -139,7 +138,10 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 .in-scores-gap-body strong { color:var(--in-ink); }
 .in-scores-gap-btn { margin-top:10px; }
 
-/* One target's standing, shown one at a time inside .in-scores-stand-panel */
+/* Per-target standing rows */
+.in-scores-stand-rows { display:flex; flex-direction:column; gap:16px; }
+.in-scores-stand { padding-top:14px; border-top:1px solid var(--in-line); }
+.in-scores-stand-rows > .in-scores-stand:first-child { padding-top:0; border-top:none; }
 .in-scores-stand-top { display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin-bottom:7px; }
 .in-scores-stand-name { font-size:15px; font-weight:700; color:var(--in-ink); min-width:0; }
 .in-scores-stand-type { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.4px; color:var(--in-muted); margin-left:8px; }
@@ -157,72 +159,85 @@ body { margin:0; min-height:100%; display:flex; flex-direction:column; font-fami
 .in-scores-gap-pill.even { color:var(--in-muted); }
 
 /* Distribution histogram */
-/* Switcher across all scored targets — pooled first, solo after. Mirrors
-   the Region 2 tab strip but carries rank/solo context on each chip. */
-.in-scores-switch {
-  display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; margin-bottom:16px;
-  scrollbar-width:none;
-}
-.in-scores-switch::-webkit-scrollbar { display:none; }
-.in-scores-switch-btn {
-  display:inline-flex; align-items:center; gap:7px; flex:none;
-  border:1px solid var(--in-line); border-radius:10px; background:var(--in-bg);
-  padding:6px 12px 6px 7px; cursor:pointer; font-family:inherit; color:var(--in-ink-soft);
-  transition:border-color .12s, background .12s, color .12s;
-}
-.in-scores-switch-btn:hover { border-color:var(--in-muted); }
-.in-scores-switch-btn.active { border-color:var(--in-accent); background:var(--in-card); color:var(--in-ink); }
-.in-scores-switch-badge {
-  width:26px; height:26px; border-radius:7px; flex:none; display:grid; place-items:center;
-  font-size:12px; font-weight:800; color:#fff;
-  background:linear-gradient(135deg,var(--in-accent),var(--in-teal-bright));
-}
-.in-scores-switch-name { font-size:13px; font-weight:600; white-space:nowrap; }
-.in-scores-switch-rank { font-size:11px; font-weight:700; color:var(--in-muted); letter-spacing:.2px; }
-.in-scores-switch-solo {
-  font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.5px;
-  color:var(--in-muted); border:1px solid var(--in-line); border-radius:4px; padding:1px 5px;
-}
-.in-scores-switch-btn.active .in-scores-switch-rank { color:var(--in-ink-soft); }
-
-.in-scores-stand-panel { min-height:80px; }
-
-.in-scores-dist {
-  display:flex; align-items:flex-end; gap:3px; height:56px;
+.in-scores-hist {
+  display:flex; align-items:flex-end; gap:3px; height:40px;
   padding:6px 4px; background:var(--in-bg); border:1px solid var(--in-line); border-radius:8px;
 }
-.in-scores-hbar {
-  flex:1; min-height:2px; border:none; border-radius:2px 2px 0 0; padding:0;
-  background:var(--in-line); cursor:pointer; font:inherit;
-  transition:background .15s, opacity .15s, transform .1s;
-}
-.in-scores-hbar:hover, .in-scores-hbar.hover, .in-scores-hbar:focus-visible {
-  background:var(--in-muted); outline:none; transform:scaleY(1.02); transform-origin:bottom;
-}
+.in-scores-hbar { flex:1; min-height:2px; border-radius:2px 2px 0 0; background:var(--in-line); transition:background .15s; }
 .in-scores-hbar.mine { background:linear-gradient(180deg,var(--in-teal-bright),var(--in-accent)); }
-.in-scores-hbar.mine:hover, .in-scores-hbar.mine.hover, .in-scores-hbar.mine:focus-visible {
-  background:linear-gradient(180deg,var(--in-accent),var(--in-accent-d));
-}
-.in-scores-dist-axis {
-  display:flex; justify-content:space-between; margin-top:4px;
-  font-size:10.5px; color:var(--in-muted); font-variant-numeric:tabular-nums;
-}
-.in-scores-dist-detail {
-  display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-top:8px;
-  font-size:12.5px; color:var(--in-ink-soft); min-height:18px;
-}
-.in-scores-hd-range { font-weight:800; color:var(--in-ink); font-variant-numeric:tabular-nums; }
-.in-scores-hd-count { font-weight:600; }
-.in-scores-hd-pct { color:var(--in-muted); }
-.in-scores-hd-mine {
-  font-weight:700; color:var(--in-accent);
-  border:1px solid #9fd9c0; border-radius:999px; padding:1px 9px; font-size:11.5px;
-}
 
 /* Platform footnote — quiet, small, clearly secondary */
 .in-scores-footnote {
   margin-top:16px; padding-top:12px; border-top:1px solid var(--in-line);
   font-size:11.5px; color:var(--in-muted); line-height:1.5;
+}
+.in-scores-stand-improve { margin-top:10px; }
+
+/* Shared quiet link-button (used on standing rows + improve page) */
+.in-linkbtn {
+  background:none; border:none; padding:0; cursor:pointer; font-family:inherit;
+  font-size:13px; font-weight:600; color:var(--in-accent);
+}
+.in-linkbtn:hover { color:var(--in-teal-bright); text-decoration:underline; }
+
+/* ---------- Improve this score (coaching / what-if page) ---------- */
+.in-improve-back { margin-bottom:12px; }
+.in-improve-head { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:20px 24px; }
+.in-improve-target-name { font-size:20px; font-weight:800; letter-spacing:-.4px; color:var(--in-ink); }
+.in-improve-target-type { font-size:12px; text-transform:uppercase; letter-spacing:.5px; color:var(--in-muted); margin-top:2px; }
+.in-improve-dial { display:flex; align-items:center; gap:12px; }
+.in-improve-badge { width:64px; height:64px; font-size:26px; border-radius:15px; transition:background .25s; }
+.in-improve-badge.up { background:linear-gradient(135deg,var(--in-success),var(--in-teal-bright)); }
+.in-improve-dial-meta { min-width:64px; }
+.in-improve-now { font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--in-muted); }
+.in-improve-proj { font-size:13px; font-weight:600; color:var(--in-ink-soft); margin-top:2px; min-height:18px; }
+.in-improve-up { color:var(--in-success); font-weight:800; }
+.in-improve-down { color:var(--in-error); font-weight:800; }
+
+/* factor headroom bars */
+.in-improve-factors { display:flex; flex-direction:column; gap:15px; }
+.in-improve-factor-top { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:5px; }
+.in-improve-factor-name { font-size:14px; font-weight:600; color:var(--in-ink); }
+.in-improve-factor-pts { font-size:13px; font-weight:700; color:var(--in-ink); }
+.in-improve-gain { color:var(--in-success); }
+.in-improve-factor-bar { position:relative; display:flex; height:9px; border-radius:5px; background:var(--in-bg); border:1px solid var(--in-line); overflow:hidden; }
+.in-improve-factor-fill { height:100%; background:linear-gradient(90deg,var(--in-accent),var(--in-teal-bright)); }
+.in-improve-factor-gain { position:absolute; top:0; height:100%; background:var(--in-success); opacity:.55; }
+.in-improve-factor-foot { font-size:12px; color:var(--in-muted); margin-top:5px; line-height:1.4; }
+.in-improve-headroom { color:var(--in-accent); font-weight:600; }
+.in-improve-maxed { color:var(--in-success); font-weight:600; }
+
+/* staging inputs */
+.in-improve-stagers { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
+.in-improve-stager label { display:block; font-size:12px; font-weight:600; color:var(--in-ink-soft); margin-bottom:5px; }
+.in-improve-addrow { display:flex; gap:6px; }
+.in-improve-addrow input {
+  flex:1; min-width:0; font-family:inherit; font-size:13px; padding:8px 10px;
+  border:1px solid var(--in-line); border-radius:8px; background:var(--in-card); color:var(--in-ink);
+}
+.in-improve-addrow input:focus { outline:none; border-color:var(--in-accent); }
+.in-improve-addrow .in-btn { flex:none; padding:8px 12px; }
+.in-improve-staged { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+.in-improve-chip {
+  display:inline-flex; align-items:center; gap:7px; font-size:13px; color:var(--in-ink);
+  background:var(--in-bg); border:1px solid var(--in-line); border-radius:16px; padding:5px 8px 5px 10px;
+}
+.in-improve-chip-kind { font-size:10px; text-transform:uppercase; letter-spacing:.4px; color:var(--in-muted); font-weight:700; }
+.in-improve-chip-x { background:none; border:none; cursor:pointer; color:var(--in-muted); font-size:12px; line-height:1; padding:2px; }
+.in-improve-chip-x:hover { color:var(--in-error); }
+
+/* bridge to profile */
+.in-improve-bridge {
+  display:flex; align-items:center; justify-content:space-between; gap:16px;
+  background:var(--in-bg); border:1px solid var(--in-line); border-left:3px solid var(--in-accent);
+  border-radius:10px; padding:14px 16px; margin-top:4px;
+}
+.in-improve-bridge-text { font-size:13.5px; color:var(--in-ink-soft); line-height:1.45; }
+
+@media (max-width:640px) {
+  .in-improve-stagers { grid-template-columns:1fr; }
+  .in-improve-head { flex-direction:column; align-items:flex-start; }
+  .in-improve-bridge { flex-direction:column; align-items:flex-start; }
 }
 
 /* Region 4 — trending */
@@ -1045,11 +1060,6 @@ html:hover { scrollbar-color:rgba(11,31,42,.24) transparent; }
 .ep-identity label:first-child { margin-top:0; }
 .ep-grid { display:grid; grid-template-columns:1fr 1fr; column-gap:16px; }
 .ep-grid .ep-span { grid-column:1 / -1; }
-/* Phone field: country-code select + number input side by side. Shared by
-   the edit-profile form; the signup page carries its own copy inline. */
-.phone-row { display:flex; gap:8px; align-items:stretch; }
-.phone-row .phone-country { flex:0 0 42%; max-width:230px; }
-.phone-row input { flex:1 1 auto; min-width:0; }
 .ep-sep { display:flex; align-items:center; gap:10px; margin:20px 0 2px; }
 .ep-sep span { font-size:11.5px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; color:var(--in-muted); flex:none; }
 .ep-sep::after { content:""; height:1px; background:var(--in-line); flex:1; }
@@ -1132,7 +1142,6 @@ html:hover { scrollbar-color:rgba(11,31,42,.24) transparent; }
 
 /* collapsed: one line, no toolbar, no action row — expands on focus */
 .in-composer.collapsed .rt-toolbar,
-.in-composer.collapsed .comp-countrow,
 .in-composer.collapsed .comp-actions { display:none; }
 .in-composer.collapsed .rt-area { min-height:0; padding:12px 14px; }
 .in-composer.collapsed .rt-editor { cursor:text; }
@@ -1220,7 +1229,6 @@ html:hover { scrollbar-color:rgba(11,31,42,.24) transparent; }
 /* live character counter — always on. Amber in the last 10% of the
    budget, red once over. Tabular numerals so the width doesn't jitter
    as the count climbs. */
-.comp-countrow { display:flex; justify-content:flex-end; margin-top:6px; min-height:16px; }
 .comp-count { font-size:12px; color:var(--in-muted); font-variant-numeric:tabular-nums; }
 .comp-count.warn { color:#b26a00; font-weight:600; }
 .comp-count.over { color:var(--in-error); font-weight:700; }
@@ -1566,7 +1574,6 @@ textarea.jf-input { resize:vertical; }
 .in-avatar:has(img),
 .post-avatar:has(img), .post-avatar.company:has(img),
 .in-profile-ava:has(img), .comp-avatar:has(img),
-.comp-id-ava:has(img),
 .connect-ava:has(img), .connect-ava.company:has(img) { background:#fff; }
 
 /* avatar picker (profile editors) */
@@ -1580,7 +1587,6 @@ textarea.jf-input { resize:vertical; }
 .avatar-pick-preview.circle:has(img) { background:#fff; }
 .avatar-pick-preview img { width:100%; height:100%; object-fit:cover; display:block; }
 .avatar-pick-controls { display:flex; flex-direction:column; gap:8px; align-items:flex-start; }
-.avatar-pick-hint { font-size:12px; color:var(--in-muted); line-height:1.4; max-width:280px; }
 .avatar-pick-msg { font-size:12px; color:var(--in-muted); }
 .avatar-pick-msg.err { color:var(--in-error); }
 
@@ -1607,154 +1613,6 @@ textarea.jf-input { resize:vertical; }
 
 /* rendered rich text in posts/jobs */
 .rich-content { line-height:1.5; word-break:break-word; }
-
-/* ---- Quill editor chrome (vendored quill.snow.css themed to app tokens)
-   The old hand-rolled .rt-toolbar/.rt-btn/.rt-area rules above are now dead
-   (Quill emits .ql-toolbar/.ql-editor); left in place so nothing that still
-   references them breaks. */
-.rt-editor { border:1px solid var(--in-line); border-radius:10px; overflow:hidden; background:var(--in-card); }
-.rt-editor .ql-toolbar.ql-snow {
-  border:none; border-bottom:1px solid var(--in-line);
-  background:var(--in-bg); padding:6px 8px; font-family:inherit;
-}
-.rt-editor .ql-container.ql-snow { border:none; font-family:inherit; font-size:15px; }
-.rt-editor .ql-editor {
-  min-height:80px; max-height:340px; overflow-y:auto;
-  padding:11px 14px; line-height:1.55; color:var(--in-ink);
-}
-.rt-editor .ql-editor.ql-blank::before {
-  color:var(--in-muted); font-style:normal; left:14px; right:14px;
-}
-/* icons + pickers follow the theme so dark mode works */
-.rt-editor .ql-snow .ql-stroke { stroke:var(--in-ink-soft); }
-.rt-editor .ql-snow .ql-fill, .rt-editor .ql-snow .ql-stroke.ql-fill { fill:var(--in-ink-soft); }
-.rt-editor .ql-snow .ql-picker { color:var(--in-ink-soft); }
-.rt-editor .ql-snow .ql-picker-options { background:var(--in-card); border-color:var(--in-line); }
-.rt-editor .ql-snow .ql-picker.ql-expanded .ql-picker-label { border-color:var(--in-line); }
-.rt-editor .ql-snow.ql-toolbar button:hover .ql-stroke,
-.rt-editor .ql-snow.ql-toolbar button.ql-active .ql-stroke { stroke:var(--in-accent); }
-.rt-editor .ql-snow.ql-toolbar button:hover .ql-fill,
-.rt-editor .ql-snow.ql-toolbar button.ql-active .ql-fill { fill:var(--in-accent); }
-.rt-editor .ql-snow .ql-tooltip { background:var(--in-card); border-color:var(--in-line); color:var(--in-ink); box-shadow:0 8px 24px rgba(11,31,42,.14); z-index:60; }
-.rt-editor .ql-snow .ql-tooltip input[type=text] { background:var(--in-bg); border-color:var(--in-line); color:var(--in-ink); }
-/* editing surface should preview roughly how the post will render */
-.rt-editor .ql-editor blockquote { border-left:3px solid var(--in-line); padding-left:12px; color:var(--in-ink-soft); }
-/* Quill's snow theme ships a DARK code block (#23241f bg, #f8f8f2 text).
-   We re-skin it to the app's light surface, so the text colour must be
-   overridden too — otherwise it stays near-white on a light background and
-   the code is invisible (but still selectable). Extra class for specificity. */
-.rt-editor .ql-snow .ql-editor .ql-code-block-container,
-.rt-editor .ql-snow .ql-editor .ql-code-block-container .ql-code-block {
-  background:var(--in-bg); color:var(--in-ink);
-  border-radius:8px;
-  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:13px;
-}
-.rt-editor .ql-snow .ql-editor .ql-code-block-container {
-  border:1px solid var(--in-line); padding:10px 12px;
-}
-.rt-editor .ql-snow .ql-editor .ql-code-block-container .ql-code-block {
-  border:none; padding:0;
-}
-.rt-editor .ql-editor h2 { font-size:17px; }
-.rt-editor .ql-editor h3 { font-size:15px; }
-
-/* Picker labels. Quill's snow theme only labels its own size keywords
-   (small/large/huge); we feed it px values, so every option fell through to
-   the default "Normal". Label them explicitly, in posting language. */
-.rt-editor .ql-snow .ql-picker.ql-size .ql-picker-label::before,
-.rt-editor .ql-snow .ql-picker.ql-size .ql-picker-item::before { content:"Normal"; }
-.rt-editor .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="12px"]::before,
-.rt-editor .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="12px"]::before { content:"Small"; }
-.rt-editor .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="16px"]::before,
-.rt-editor .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="16px"]::before { content:"Normal"; }
-.rt-editor .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="24px"]::before,
-.rt-editor .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="24px"]::before { content:"Large"; }
-.rt-editor .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="32px"]::before,
-.rt-editor .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="32px"]::before { content:"Huge"; }
-
-/* Toolbar layout. Quill lays this out with FLOATS and mixes 24px-tall
-   pickers (whose labels use line-height:22px) with 24px buttons, so icons
-   land on slightly different baselines and group spacing looks uneven.
-   Re-lay it out with flexbox at one uniform control height instead. */
-.rt-editor .ql-toolbar.ql-snow {
-  display:flex; flex-wrap:wrap; align-items:center;
-  gap:2px 7px; padding:4px 6px;
-}
-.rt-editor .ql-toolbar.ql-snow .ql-formats {
-  display:inline-flex; align-items:center; gap:1px; margin:0;
-}
-.rt-editor .ql-toolbar.ql-snow .ql-formats::after { content:none; display:none; }
-.rt-editor .ql-snow.ql-toolbar button {
-  float:none; display:inline-flex; align-items:center; justify-content:center;
-  width:26px; height:26px; padding:0; border-radius:5px;
-}
-.rt-editor .ql-snow.ql-toolbar button svg { float:none; width:17px; height:17px; }
-.rt-editor .ql-snow .ql-picker {
-  float:none; display:inline-flex; align-items:center; height:26px;
-}
-.rt-editor .ql-snow .ql-picker-label {
-  display:inline-flex; align-items:center; height:26px; width:100%;
-  padding:0 16px 0 7px; border-radius:5px;
-}
-.rt-editor .ql-snow .ql-picker-label::before { line-height:1; }
-/* icon/colour pickers are square controls, not labelled dropdowns */
-/* Two different SVG roles inside picker labels:
-   - colour / align pickers: the SVG *is* the icon -> size and centre it
-   - heading / size pickers: the SVG is the dropdown caret -> pin it right
-   Quill positions these absolutely, which is why the align and colour icons
-   rendered larger and lower than the plain buttons. */
-.rt-editor .ql-snow .ql-color-picker,
-.rt-editor .ql-snow .ql-icon-picker { width:26px; }
-.rt-editor .ql-snow .ql-color-picker .ql-picker-label svg,
-.rt-editor .ql-snow .ql-icon-picker .ql-picker-label svg {
-  position:static; right:auto; top:auto; margin:0; float:none;
-  width:17px; height:17px;
-}
-.rt-editor .ql-snow .ql-picker.ql-size .ql-picker-label svg {
-  position:absolute; right:3px; top:50%; margin-top:-9px; float:none;
-  width:18px; height:18px;
-}
-.rt-editor .ql-snow .ql-color-picker .ql-picker-label,
-.rt-editor .ql-snow .ql-icon-picker .ql-picker-label { padding:0; justify-content:center; }
-.rt-editor .ql-snow .ql-picker.ql-size { width:70px; }
-
-/* ---- rendered rich text: block formats -------------------------------
-   Applies wherever sanitized rich text is displayed (feed posts, job
-   descriptions). Margins are tight because posts are compact; first/last
-   child margins collapse so a block never adds stray space at the edges. */
-.rich-content p { margin:0 0 8px; }
-.rich-content h2, .rich-content h3 { margin:14px 0 6px; line-height:1.3; font-weight:700; color:var(--in-ink); }
-.rich-content h2 { font-size:17px; letter-spacing:-0.2px; }
-.rich-content h3 { font-size:15px; }
-.rich-content ul, .rich-content ol { margin:0 0 8px; padding-left:22px; }
-.rich-content li { margin:2px 0; }
-.rich-content ul ul, .rich-content ol ol,
-.rich-content ul ol, .rich-content ol ul { margin:2px 0 0; }
-.rich-content blockquote {
-  margin:8px 0; padding:2px 0 2px 12px;
-  border-left:3px solid var(--in-line); color:var(--in-ink-soft);
-}
-.rich-content pre {
-  margin:8px 0; padding:10px 12px; border-radius:8px; overflow-x:auto;
-  background:var(--in-bg); border:1px solid var(--in-line);
-  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-  font-size:13px; line-height:1.45; white-space:pre-wrap; word-break:normal;
-}
-.rich-content code {
-  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-  font-size:0.92em; background:var(--in-bg);
-  border:1px solid var(--in-line); border-radius:4px; padding:1px 5px;
-}
-.rich-content pre code { background:none; border:none; padding:0; font-size:inherit; }
-.rich-content a { color:var(--in-accent); text-decoration:none; }
-.rich-content a:hover { text-decoration:underline; }
-.rich-content > *:first-child { margin-top:0; }
-.rich-content > *:last-child { margin-bottom:0; }
-
-/* alignment — emitted by the sanitizer from a fixed enum */
-.rich-content .rt-align-center  { text-align:center; }
-.rich-content .rt-align-right   { text-align:right; }
-.rich-content .rt-align-justify { text-align:justify; }
 
 /* ---------- employer live search (job history) ---------- */
 .emp-search { position:relative; }
@@ -2215,19 +2073,6 @@ a.ap-title:hover { color:var(--in-accent); }
 .ja-main { flex:1; min-width:0; }
 .ja-name { font-weight:600; font-size:14.5px; color:var(--in-ink); }
 .ja-sub { font-size:12.5px; color:var(--in-muted); margin-top:2px; }
-.ja-rank.none { color:var(--in-line); font-weight:600; }
-
-/* Applicants header: title block + sort control on one row */
-.ja-head { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:16px; }
-.ja-head-titles { min-width:0; }
-.ja-sort { display:inline-flex; align-items:center; gap:8px; flex:none; }
-.ja-sort-lbl { font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; color:var(--in-muted); }
-.ja-sort-sel {
-  font-family:inherit; font-size:13px; color:var(--in-ink); background:var(--in-card);
-  border:1px solid var(--in-line); border-radius:8px; padding:7px 10px; cursor:pointer;
-}
-.ja-sort-sel:hover { border-color:var(--in-muted); }
-.ja-sort-sel:focus-visible { outline:none; border-color:var(--in-accent); }
 
 /* Company: applicant detail score block */
 .ja-detail-score { display:flex; gap:16px; align-items:flex-start; padding:12px; background:var(--in-bg); border-radius:12px; margin-bottom:6px; }
@@ -2540,43 +2385,6 @@ html.in-reduce-motion *::after {
 /* ---------- rail cards (right rail) ---------- */
 .railcard { background:var(--in-card); border:1px solid var(--in-line); border-radius:14px; padding:16px 16px 12px; margin-bottom:16px; }
 .railcard h3 { margin:0 0 10px; font-size:12.5px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--in-ink-soft); }
-
-/* Plus promo card — a compact gold-accented upsell in the feed rail.
-   All colours run off --in-gold* tokens, which are redefined for dark
-   mode, so the card adapts without a separate dark rule. */
-.pluscard {
-  position:relative; overflow:hidden;
-  padding:14px 16px 15px;
-  border-color:color-mix(in srgb, var(--in-gold) 40%, var(--in-line));
-  background:
-    linear-gradient(180deg,
-      color-mix(in srgb, var(--in-gold-lt) 22%, var(--in-card)),
-      var(--in-card) 62%);
-}
-/* Soft corner glow — decorative, sits behind the content. */
-.pluscard-glow {
-  position:absolute; top:-40px; right:-40px; width:120px; height:120px;
-  border-radius:50%; pointer-events:none;
-  background:radial-gradient(circle, color-mix(in srgb, var(--in-gold) 34%, transparent), transparent 70%);
-}
-.pluscard > *:not(.pluscard-glow) { position:relative; }
-.pluscard-tag {
-  display:inline-block; font-size:11px; font-weight:800; letter-spacing:1px;
-  color:var(--in-gold-ink); background:linear-gradient(135deg, var(--in-gold-lt), var(--in-gold));
-  padding:2px 9px; border-radius:999px; margin-bottom:9px;
-}
-.pluscard-tag span { font-weight:800; }
-.pluscard-head { font-size:14.5px; font-weight:700; color:var(--in-ink); line-height:1.25; margin-bottom:4px; }
-.pluscard-sub { font-size:12.5px; color:var(--in-ink-soft); line-height:1.45; margin-bottom:12px; }
-.pluscard-cta {
-  width:100%; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer;
-  color:var(--in-gold-ink); border:none; border-radius:9px; padding:9px 12px;
-  background:linear-gradient(135deg, var(--in-gold-lt), var(--in-gold));
-  transition:filter .12s, transform .04s;
-}
-.pluscard-cta:hover { filter:brightness(1.05); }
-.pluscard-cta:active { transform:translateY(1px); }
-.pluscard-cta:focus-visible { outline:2px solid var(--in-gold-d); outline-offset:2px; }
 /* =====================================================================
    Feed rail — "Your scores" card
    ---------------------------------------------------------------------

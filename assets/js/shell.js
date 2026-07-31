@@ -293,7 +293,6 @@ function mountAvatarPicker(mountId, state, opts = {}) {
         <div class="avatar-pick-controls">
           <button type="button" class="in-btn ghost" id="${mountId}-btn" style="flex:none;padding:8px 14px">${url ? "Change photo" : "Upload photo"}</button>
           ${url ? `<button type="button" class="in-btn ghost" id="${mountId}-rm" style="flex:none;padding:8px 14px">Remove</button>` : ""}
-          <div class="avatar-pick-hint" id="${mountId}-hint">JPG, PNG, GIF, or WEBP · up to 8 MB. Square images look best; we'll center-crop to a ${shape === "square" ? "square" : "circle"}.</div>
           <div class="avatar-pick-msg" id="${mountId}-msg"></div>
         </div>
         <input type="file" id="${mountId}-file" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none">
@@ -307,29 +306,10 @@ function mountAvatarPicker(mountId, state, opts = {}) {
       const file = e.target.files[0];
       if (!file) return;
       const msg = $(`${mountId}-msg`);
-      // Client-side pre-check so oversized/wrong-type files fail instantly
-      // with a clear reason, before a wasted upload round-trip. The server
-      // re-validates regardless (it's the enforcer) — these bounds MIRROR
-      // api/upload/avatar.php: 8 MB cap, JPG/PNG/GIF/WEBP only.
-      const OK_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
-      const MAX_BYTES = 8 * 1024 * 1024;
-      if (file.type && !OK_TYPES.includes(file.type)) {
-        msg.textContent = "That format isn't supported. Use JPG, PNG, GIF, or WEBP.";
-        msg.className = "avatar-pick-msg err";
-        e.target.value = "";
-        return;
-      }
-      if (file.size > MAX_BYTES) {
-        msg.textContent = "That image is too large. Please use one under 8 MB.";
-        msg.className = "avatar-pick-msg err";
-        e.target.value = "";
-        return;
-      }
       msg.textContent = "Uploading…"; msg.className = "avatar-pick-msg";
       const up = await uploadAvatar(file);
       if (up && up.url) { state.avatarUrl = up.url; render(); }
-      else { msg.textContent = "Upload failed. Use a JPG, PNG, GIF, or WEBP under 8 MB."; msg.className = "avatar-pick-msg err"; }
-      e.target.value = "";   // allow re-picking the same file after an error
+      else { msg.textContent = "Upload failed. Use a JPG/PNG/GIF/WEBP under 5 MB."; msg.className = "avatar-pick-msg err"; }
     };
   };
   render();
@@ -349,211 +329,164 @@ window.mountAvatarPicker = mountAvatarPicker;
 const RT_COLORS = ["#0b1f2a", "#0d9488", "#c0392b", "#2563eb", "#7c3aed", "#d97706", "#16a34a", "#6b8590"];
 const RT_SIZES  = [["Small", "12px"], ["Normal", "16px"], ["Large", "24px"], ["Huge", "32px"]];
 
-// ---- rich text editor (Quill 2.0.3, vendored) -------------------------
-// Backed by Quill rather than execCommand: Quill keeps its own document
-// model and applies edits deterministically, which removes the whole class
-// of contentEditable bugs that forced the old selection-only model.
-//
-// The enabled formats are deliberately the EXACT set src/RichText.php
-// whitelists. If Quill could produce a format the sanitizer strips, the
-// user would watch their formatting vanish on save.
-const RT_FORMATS = [
-  "bold", "italic", "underline",
-  "list", "blockquote", "code-block", "code",
-  "align", "color", "size", "link",
-];
-
-let RT_REGISTERED = false;
-function registerQuillFormats() {
-  if (RT_REGISTERED || typeof Quill === "undefined") return;
-  RT_REGISTERED = true;
-  // Emit inline styles for size/colour instead of Quill's default classes,
-  // because the sanitizer reads `style="font-size:..."` / `style="color:..."`.
-  const SizeStyle = Quill.import("attributors/style/size");
-  SizeStyle.whitelist = RT_SIZES.map(s => s[1]);
-  Quill.register(SizeStyle, true);
-  Quill.register(Quill.import("attributors/style/color"), true);
-  // Alignment stays on Quill's ql-align-* classes — the sanitizer already
-  // normalises those to its own rt-align-* enum.
-}
-
-// Block-level markdown input shortcuts we ADD on top of Quill's built-ins.
-//
-// Quill 2.0.3 already ships a "list autofill" binding for `- `, `* `, and
-// `1. ` (correctly guarded with format:{"code-block":false,blockquote:false}),
-// so we do NOT re-register those — doing so double-fired and, because our
-// versions lacked the guard, converted code-block lines into lists. We only
-// add what Quill lacks: `> ` for blockquote and ```` ``` ```` for a code block.
-//
-// Both use Quill's `format` guard so they're inert inside an existing code
-// block, exactly like the built-in list shortcut. `context.prefix` is the
-// matched line text before the caret, so deleting it is "back up by its
-// length". Deliberately block-only — no `## ` heading shortcut, since heading
-// authoring was removed from the toolbar and this must not be a back door to
-// it. Inline markdown (**bold**, `code`) is out of scope for this pass.
-function markdownBindings() {
-  return {
-    md_blockquote: {
-      key: " ",
-      collapsed: true,
-      format: { "code-block": false, blockquote: false },
-      prefix: /^>$/,
-      handler(range, context) {
-        const tokenLen = context.prefix.length;
-        this.quill.deleteText(range.index - tokenLen, tokenLen, "user");
-        this.quill.formatLine(range.index - tokenLen, 1, "blockquote", true, "user");
-        return false;   // swallow the trigger space
-      },
-    },
-    md_codeblock: {
-      key: "`",
-      collapsed: true,
-      format: { "code-block": false },
-      prefix: /^``$/,
-      handler(range, context) {
-        const tokenLen = context.prefix.length;   // the two existing backticks
-        this.quill.deleteText(range.index - tokenLen, tokenLen, "user");
-        this.quill.formatLine(range.index - tokenLen, 1, "code-block", true, "user");
-        return false;   // swallow the third backtick
-      },
-    },
-  };
-}
-
 function mountRichEditor(mountId, opts = {}) {
   const host = $(mountId);
   if (!host) return null;
   const placeholder = opts.placeholder || "Write something…";
   const initialHTML = opts.html || "";
 
-  if (typeof Quill === "undefined") {
-    // Fail loudly rather than handing the user a dead box.
-    host.innerHTML = `<div class="in-empty">The editor failed to load. Please refresh the page.</div>`;
-    return null;
+  host.innerHTML = `
+    <div class="rt-editor">
+      <div class="rt-toolbar">
+        <button type="button" class="rt-btn" data-cmd="bold" title="Bold"><b>B</b></button>
+        <button type="button" class="rt-btn" data-cmd="italic" title="Italic"><i>I</i></button>
+        <button type="button" class="rt-btn" data-cmd="underline" title="Underline"><u>U</u></button>
+        <span class="rt-sep"></span>
+        <span class="rt-color-wrap">
+          <button type="button" class="rt-btn" id="${mountId}-colorbtn" title="Text color">A<span class="rt-color-bar"></span></button>
+          <div class="rt-color-menu" id="${mountId}-colormenu">
+            ${RT_COLORS.map(c => `<button type="button" class="rt-swatch" data-color="${c}" style="background:${c}"></button>`).join("")}
+          </div>
+        </span>
+        <select class="rt-size" id="${mountId}-size" title="Text size">
+          ${RT_SIZES.map(([lbl, px]) => `<option value="${px}"${px === "16px" ? " selected" : ""}>${lbl}</option>`).join("")}
+        </select>
+      </div>
+      <div class="rt-area" id="${mountId}-area" contenteditable="true" data-placeholder="${esc(placeholder)}">${initialHTML}</div>
+    </div>`;
+
+  const area = $(`${mountId}-area`);
+
+  // Selection-only formatting: a command applies to highlighted text. With
+  // no selection we do nothing and briefly hint, which avoids the whole
+  // class of contentEditable "pending format" bugs.
+  const hasSelection = () => {
+    const sel = window.getSelection();
+    return sel && sel.rangeCount && !sel.isCollapsed && area.contains(sel.anchorNode);
+  };
+  let hintTimer = null;
+  function flashHint() {
+    const tb = host.querySelector(".rt-toolbar");
+    if (!tb) return;
+    tb.classList.add("rt-hint");
+    clearTimeout(hintTimer);
+    hintTimer = setTimeout(() => tb.classList.remove("rt-hint"), 900);
   }
-  registerQuillFormats();
 
-  host.innerHTML = `<div class="rt-editor"><div id="${mountId}-area"></div></div>`;
+  const exec = (cmd, val = null) => {
+    if (!hasSelection()) { flashHint(); return; }
+    area.focus();
+    document.execCommand(cmd, false, val);
+    syncToolbar();
+  };
 
-  const quill = new Quill($(`${mountId}-area`), {
-    theme: "snow",
-    placeholder,
-    formats: RT_FORMATS,
-    modules: {
-      toolbar: [
-        ["bold", "italic", "underline"],
-        [{ list: "bullet" }, { list: "ordered" }],
-        ["blockquote", "code-block"],
-        [{ align: [] }],
-        [{ color: RT_COLORS }],
-        [{ size: RT_SIZES.map(s => s[1]) }],
-        ["link"],
-        ["clean"],
-      ],
-      keyboard: { bindings: markdownBindings() },
-    },
+  host.querySelectorAll(".rt-btn[data-cmd]").forEach(b => {
+    b.onmousedown = (e) => { e.preventDefault(); };   // keep selection
+    b.onclick = () => exec(b.dataset.cmd);
   });
 
-  // ---- paste cleaning --------------------------------------------------
-  // Quill already drops formats outside RT_FORMATS and the server re-sanitizes
-  // on save, so this is about ERGONOMICS: kill the noise that pasting from
-  // Word / Google Docs / web pages drags in (background colours, font
-  // families, inherited font-sizes that aren't in our size enum, empty
-  // spans). We keep the whitelisted formats — a pasted bulleted list stays a
-  // list — and strip the rest so the result matches what the editor can show.
-  const ALLOWED_SIZE_SET = new Set(RT_SIZES.map(s => s[1]));
-  // Strip inline style noise on every pasted element. Runs before Quill's own
-  // matchers; returning the delta unchanged, we only mutate the node's style.
-  quill.clipboard.addMatcher(Node.ELEMENT_NODE, (node, delta) => {
-    if (node.style) {
-      // Font-size only survives if it's exactly one of our allowed px values.
-      const fs = node.style.fontSize;
-      if (fs && !ALLOWED_SIZE_SET.has(fs)) node.style.fontSize = "";
-      // These never map to anything we support — always drop them.
-      node.style.backgroundColor = "";
-      node.style.fontFamily = "";
-      node.style.lineHeight = "";
+  // Color menu
+  const colorBtn = $(`${mountId}-colorbtn`);
+  const colorMenu = $(`${mountId}-colormenu`);
+  colorBtn.onmousedown = (e) => e.preventDefault();
+  colorBtn.onclick = (e) => { e.preventDefault(); colorMenu.classList.toggle("show"); };
+  colorMenu.querySelectorAll(".rt-swatch").forEach(s => {
+    s.onmousedown = (e) => e.preventDefault();
+    s.onclick = () => {
+      if (!hasSelection()) { flashHint(); colorMenu.classList.remove("show"); return; }
+      const color = s.dataset.color;
+      area.focus();
+      document.execCommand("foreColor", false, color);
+      area.querySelectorAll("font[color]").forEach(f => {
+        const span = document.createElement("span");
+        span.style.color = f.getAttribute("color");
+        span.innerHTML = f.innerHTML;
+        f.parentNode.replaceChild(span, f);
+      });
+      colorMenu.classList.remove("show");
+    };
+  });
+  document.addEventListener("click", (e) => {
+    if (!colorBtn.contains(e.target) && !colorMenu.contains(e.target)) colorMenu.classList.remove("show");
+  });
+
+  // Apply a font size to the current selection (wrap in a styled span).
+  const sizeSelect = $(`${mountId}-size`);
+  const applySize = (px) => {
+    if (!px) return;
+    area.focus();
+    const sel = window.getSelection();
+    // Selection-only model: formatting applies to highlighted text. If
+    // nothing is selected, do nothing (and nudge the user once).
+    if (!sel || !sel.rangeCount || sel.isCollapsed || !area.contains(sel.anchorNode)) {
+      flashHint();
+      syncToolbar();   // revert the dropdown to reflect the real caret state
+      return;
     }
-    return delta;
-  });
-
-  // Ctrl/Cmd+Shift+V — paste as plain text, discarding all formatting.
-  quill.root.addEventListener("paste", (e) => {
-    if (!(e.shiftKey && (e.ctrlKey || e.metaKey))) return;
-    e.preventDefault();
-    const text = (e.clipboardData || window.clipboardData).getData("text/plain");
-    const sel = quill.getSelection(true);
-    const idx = sel ? sel.index : quill.getLength();
-    if (sel && sel.length) quill.deleteText(idx, sel.length, "user");
-    quill.insertText(idx, text, "user");
-    quill.setSelection(idx + text.length, 0, "user");
-  });
-
-  // Quill 2.0.3 BUG: getSemanticHTML() emits an empty <pre> for code blocks —
-  // the text lives in the DOM (.ql-code-block) and the Delta, but the
-  // exporter drops it. Everything else exports correctly, so we use the
-  // semantic export and repair just the code blocks, in document order.
-  const semanticHTML = () => {
-    let html = quill.getSemanticHTML();
-    const blocks = Array.from(quill.root.querySelectorAll(".ql-code-block-container"));
-    if (!blocks.length) return html;
-    let i = 0;
-    return html.replace(/<pre\b[^>]*>[\s\S]*?<\/pre>/g, () => {
-      const c = blocks[i++];
-      if (!c) return "";
-      const text = Array.from(c.querySelectorAll(".ql-code-block"))
-        .map(d => d.textContent).join("\n");
-      return "<pre>" + esc(text) + "</pre>";
+    document.execCommand("fontSize", false, "7");   // tag selection as font[size=7]
+    area.querySelectorAll('font[size="7"]').forEach(f => {
+      const span = document.createElement("span");
+      span.style.fontSize = px;
+      span.innerHTML = f.innerHTML;
+      f.parentNode.replaceChild(span, f);
     });
+    syncToolbar();
   };
+  sizeSelect.addEventListener("change", (e) => applySize(e.target.value));
 
-  // Replace all content with HTML. Goes through Quill's clipboard so its
-  // document model stays in sync — writing quill.root.innerHTML directly
-  // would desync the model from the DOM. Input is either our own saved
-  // draft or server-sanitized stored HTML, and Quill drops anything outside
-  // RT_FORMATS on the way in; the server re-sanitizes on save regardless.
-  const setHTML = (html) => {
-    quill.setContents([]);
-    if (html) quill.clipboard.dangerouslyPasteHTML(html, "silent");
-  };
-
-  if (initialHTML) setHTML(initialHTML);
-
-  // A code block (or quote) sitting as the LAST line traps the caret: there
-  // is nothing below it to click into. Quill's built-in escape is pressing
-  // Enter on two blank lines, which nobody discovers. Guarantee a plain
-  // paragraph after a trailing block so there's always somewhere to continue.
-  let fixingTail = false;
-  const ensureTrailingParagraph = () => {
-    if (fixingTail) return;
-    const len = quill.getLength();
-    const [line] = quill.getLine(len - 1);
-    if (!line || typeof line.formats !== "function") return;
-    const f = line.formats() || {};
-    if (f["code-block"] || f.blockquote) {
-      fixingTail = true;
-      quill.insertText(len, "\n", { "code-block": false, blockquote: false }, "silent");
-      fixingTail = false;
+  // --- selection tracking: reflect the current selection's formatting in
+  // the toolbar (bold/italic/underline active states + the size dropdown),
+  // like a normal word processor. ---
+  const sizeFromNode = (node) => {
+    let el2 = (node && node.nodeType === 3) ? node.parentElement : node;
+    while (el2 && el2 !== area) {
+      if (el2.style && el2.style.fontSize) return el2.style.fontSize;
+      el2 = el2.parentElement;
     }
+    return "16px"; // default
   };
-  quill.on("text-change", ensureTrailingParagraph);
-  ensureTrailingParagraph();
+
+  let syncing = false;
+  function syncToolbar() {
+    if (syncing) return;
+    syncing = true;
+    try {
+      const sel = window.getSelection();
+      const inside = sel && sel.rangeCount && area.contains(sel.anchorNode);
+      if (inside) {
+        host.querySelector('[data-cmd="bold"]').classList.toggle("active", document.queryCommandState("bold"));
+        host.querySelector('[data-cmd="italic"]').classList.toggle("active", document.queryCommandState("italic"));
+        host.querySelector('[data-cmd="underline"]').classList.toggle("active", document.queryCommandState("underline"));
+        // Reflect the size of wherever the caret/selection is.
+        const px = sizeFromNode(sel.anchorNode);
+        // Snap to the closest option we offer.
+        const opts = Array.from(sizeSelect.options).map(o => o.value);
+        if (opts.includes(px)) sizeSelect.value = px;
+      }
+    } finally { syncing = false; }
+  }
+
+  // Update the toolbar as the selection moves within this editor.
+  document.addEventListener("selectionchange", () => {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount && area.contains(sel.anchorNode)) syncToolbar();
+  });
+  area.addEventListener("keyup", syncToolbar);
+  area.addEventListener("mouseup", syncToolbar);
+  area.addEventListener("focus", syncToolbar);
+
+  // "@" mention picker. Attached here so every rich editor gets it —
+  // the post composer today, job descriptions and anything else later.
+  if (opts.mentions !== false && typeof attachMentionPicker === "function") {
+    attachMentionPicker(area);
+  }
 
   return {
-    getHTML: semanticHTML,
-    getText: () => quill.getText().replace(/\u200B/g, "").trim(),
-    setHTML,
-    // Insert at the caret (or at the end if the caret isn't in the editor).
-    insertText: (t) => {
-      const sel = quill.getSelection(true);
-      const idx = sel ? sel.index : quill.getLength();
-      quill.insertText(idx, t, "user");
-      quill.setSelection(idx + t.length, 0);
-    },
-    clear: () => quill.setContents([]),
-    focus: () => quill.focus(),
-    el: quill.root,
-    quill,
+    getHTML: () => area.innerHTML,
+    getText: () => area.innerText.replace(/\u200B/g, "").trim(),
+    clear:   () => { area.innerHTML = ""; },
+    focus:   () => area.focus(),
+    el: area,
   };
 }
 window.mountRichEditor = mountRichEditor;
@@ -584,10 +517,9 @@ async function boot() {
     $("profile-menu").style.display = "";
     $("auth-menu").style.display = "none";
     if ($("search-trigger")) $("search-trigger").style.display = "inline-flex";
-    // The bar stays visible for members (it hosts search); only the Plus
-    // upsell itself is hidden from existing subscribers.
+    // Shown to members. When Plus ships, this is where a plan check would
+    // hide the upsell from existing subscribers.
     setSubnav(true);
-    setPlusCta(!(ME && ME.plan === "plus"));
     document.querySelectorAll("[data-nav]").forEach(b => b.style.display = "");
     // The company-only Feed button stays hidden for users (they have their own).
     const coFeedBtn = document.querySelector('[data-nav="company-feed"]');
@@ -609,10 +541,7 @@ async function boot() {
     $("profile-menu").style.display = "none";
     $("auth-menu").style.display = "none";   // hide user sign in/up to avoid confusion
     if ($("search-trigger")) $("search-trigger").style.display = "inline-flex";
-    // Companies get the same secondary bar as members (it hosts search);
-    // they just never see the Plus upsell (Plus is a member-only offer).
-    setSubnav(true);
-    setPlusCta(false);
+    setSubnav(false);                        // Plus is a member offer, not a company one
     setupCompanyIdentityNav();               // company avatar + sign-out menu
     // Company sees: Feed, Jobs, Connect (to follow people/companies for
     // its Following feed), and its Company dashboard.
@@ -641,10 +570,7 @@ async function boot() {
     $("profile-menu").style.display = "none";
     $("auth-menu").style.display = "";
     if ($("search-trigger")) $("search-trigger").style.display = "none";
-    // Nothing to show in the bar for a visitor: no upsell, and search is
-    // hidden until sign-in — so hide the CTA and collapse the empty bar.
-    setPlusCta(false);
-    setSubnav(false);
+    setSubnav(true);                         // upsell is visible to visitors too
     if (typeof hideNotifications === "function") hideNotifications();
     if (typeof hideMessaging === "function") hideMessaging();
     renderSignedOut();
@@ -856,91 +782,6 @@ function setSubnav(show) {
   document.documentElement.classList.toggle("has-subnav", !!show);
 }
 
-// Show/hide ONLY the "Try PLUS+" upsell button, independent of the bar
-// itself — the bar also hosts search, so hiding the CTA must not collapse
-// the whole bar. The bar's own visibility is driven separately by
-// setSubnav() based on whether anything in it is still visible.
-function setPlusCta(show) {
-  const btn = document.querySelector('#subnav-inner [data-subnav="plus"]');
-  if (btn) btn.style.display = show ? "" : "none";
-}
-
-// Re-apply every Plus-dependent surface from the CURRENT ME.plan, so a plan
-// change takes effect without a hard refresh. Covers the sub-nav CTA now;
-// if the feed is the active view, re-render it so the rail promo card
-// re-evaluates too. Company identities never show the upsell.
-function applyPlusState() {
-  if (ME) setPlusCta(!(ME.plan === "plus"));
-  else setPlusCta(false);
-  // If the feed is on screen, its rail promo depends on ME.plan — refresh it.
-  const raw = location.hash.replace(/^#/, "");
-  if ((raw === "" || raw === "feed") && typeof renderFeed === "function") renderFeed();
-}
-window.applyPlusState = applyPlusState;
-
-// Re-fetch the current user from the server and re-apply plan-dependent UI.
-// Call after anything that can change the signed-in user's own plan (admin
-// self-change today; the Plus purchase flow later). Returns the fresh ME.
-async function refreshMe() {
-  try {
-    const { ok, data } = await api("/auth/me.php");
-    if (ok && data?.success) { ME = data.data; applyPlusState(); }
-  } catch (_) { /* leave ME as-is on failure */ }
-  return ME;
-}
-window.refreshMe = refreshMe;
-
-// =====================================================================
-// US phone auto-formatting. Attaches to a tel input and formats a US /
-// NANP number as (555) 123-4567 while typing. Deliberately hands-off for
-// international input: the moment the value starts with "+", we leave it
-// completely alone so a country code like +44 20 7946 0958 isn't mangled.
-// The server stores whatever string it receives; this is display sugar.
-// =====================================================================
-function formatUsPhone(raw) {
-  // International or explicitly-prefixed: don't touch it.
-  if (/^\s*\+/.test(raw)) return raw;
-
-  const digits = raw.replace(/\D/g, "");
-  // Allow a leading US country code "1" but don't require it.
-  let d = digits;
-  let prefix = "";
-  if (d.length === 11 && d[0] === "1") { prefix = "1 "; d = d.slice(1); }
-  else if (d.length > 10 && d[0] === "1") { prefix = "1 "; d = d.slice(1); }
-
-  // More than 10 significant digits and not a clean US number → likely
-  // international typed without "+"; leave the raw input rather than guess.
-  if (d.length > 10) return raw;
-
-  const a = d.slice(0, 3), b = d.slice(3, 6), c = d.slice(6, 10);
-  let out = "";
-  if (d.length > 6)      out = `(${a}) ${b}-${c}`;
-  else if (d.length > 3) out = `(${a}) ${b}`;
-  else if (d.length > 0) out = `(${a}`;
-  return prefix + out;
-}
-
-function attachPhoneFormat(input) {
-  if (!input || input.dataset.phoneFmt === "1") return;
-  input.dataset.phoneFmt = "1";
-  // Format the initial value (e.g. a stored number when editing).
-  input.value = formatUsPhone(input.value);
-  input.addEventListener("input", () => {
-    const before = input.value;
-    // Preserve caret position sensibly: track distance from the end, since
-    // formatting only inserts characters to the left of the cursor for the
-    // common append case.
-    const fromEnd = before.length - (input.selectionStart ?? before.length);
-    const formatted = formatUsPhone(before);
-    if (formatted !== before) {
-      input.value = formatted;
-      const pos = Math.max(0, formatted.length - fromEnd);
-      try { input.setSelectionRange(pos, pos); } catch (_) {}
-    }
-  });
-}
-window.attachPhoneFormat = attachPhoneFormat;
-
 // Delegated so items added to the bar later work without new wiring.
 const subnavInner = $("subnav-inner");
 if (subnavInner) {
@@ -1144,6 +985,10 @@ function routeFromHash() {
   }
   if (raw === "scores") {
     showTab("scores");
+    return;
+  }
+  if (raw.startsWith("score-improve/")) {
+    renderScoreImprove(raw.slice("score-improve/".length));
     return;
   }
   if (raw === "notifications") {
