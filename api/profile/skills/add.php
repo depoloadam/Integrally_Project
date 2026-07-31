@@ -45,8 +45,22 @@ try {
         $skillId = (int) $pdo->lastInsertId();
     }
 
-    // Link user -> skill. ON DUPLICATE is a no-op so re-adding an
-    // existing skill succeeds silently instead of erroring.
+    // Duplicate guard: does the user already have this skill linked?
+    // The user_skills PK (user_id, skill_id) already makes the link
+    // idempotent, but a silent success gives the UI nothing to say —
+    // which reads to the user as "the Add button did nothing". Detect
+    // the duplicate explicitly and surface it with a machine-readable
+    // code so the frontend can toast "You already have that skill".
+    $has = $pdo->prepare(
+        'SELECT 1 FROM user_skills WHERE user_id = ? AND skill_id = ? LIMIT 1'
+    );
+    $has->execute([$userId, $skillId]);
+    if ($has->fetchColumn()) {
+        $pdo->commit();  // nothing to write, but close the txn cleanly
+        Response::error('You already have that skill on your profile.', 409, 'already_exists');
+    }
+
+    // Link user -> skill.
     $pdo->prepare(
         'INSERT INTO user_skills (user_id, skill_id)
          VALUES (?, ?)
@@ -55,7 +69,7 @@ try {
 
     $pdo->commit();
 } catch (Throwable $e) {
-    $pdo->rollBack();
+    if ($pdo->inTransaction()) $pdo->rollBack();
     throw $e;
 }
 

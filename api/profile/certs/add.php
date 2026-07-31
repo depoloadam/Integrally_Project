@@ -24,6 +24,26 @@ $pdo    = Database::conn();
 
 $name = trim($in['name'] ?? '');
 if ($name === '') Response::error('Certification name is required.', 422);
+if (strlen($name) > 150) Response::error('Certification name is too long.', 422);
+
+$issuer = trim($in['issuer'] ?? '') ?: null;
+
+// Duplicate guard: the certifications table has no unique constraint, so a
+// blind INSERT lets the same credential be added twice. Treat a cert as a
+// duplicate when the same user already has a row with the same name AND the
+// same issuer (case-insensitive; general_ci collation folds case for us).
+// Name+issuer, not name alone, because "Associate" from AWS and Azure are
+// legitimately distinct certs.
+$dupe = $pdo->prepare(
+    'SELECT 1 FROM certifications
+      WHERE user_id = ? AND name = ?
+        AND (issuer <=> ?)
+      LIMIT 1'
+);
+$dupe->execute([$userId, $name, $issuer]);
+if ($dupe->fetchColumn()) {
+    Response::error('You already have that certification on your profile.', 409, 'already_exists');
+}
 
 $stmt = $pdo->prepare(
     'INSERT INTO certifications
@@ -33,7 +53,7 @@ $stmt = $pdo->prepare(
 $stmt->execute([
     $userId,
     $name,
-    trim($in['issuer'] ?? '') ?: null,
+    $issuer,
     !empty($in['issue_date'])  ? $in['issue_date']  : null,
     !empty($in['expiry_date']) ? $in['expiry_date'] : null,
     trim($in['credential_id'] ?? '') ?: null,

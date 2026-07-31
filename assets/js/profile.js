@@ -1927,8 +1927,21 @@ function addCert(existing) {
     const expiry = $("c-has-exp").checked ? $("c-exp").value : "";
     if ($("c-has-exp").checked && !expiry) { toast("Enter an expiration date, or uncheck “This certification expires.”", "err"); return; }
     const payload = { name, issuer, issue_date:$("c-issue").value, expiry_date:expiry };
-    if (isEdit) { await api("/profile/certs/update.php","POST",{ id:existing.id, ...payload }); closeModal(); refreshAfterProfileChange(); }
-    else        { await api("/profile/certs/add.php","POST", payload); closeModal(); offerShareCert(name, issuer); refreshAfterProfileChange(); }
+    const btn = $("save-cert"); const label = btn.textContent;
+    btn.disabled = true; btn.textContent = isEdit ? "Saving…" : "Adding…";
+    const res = isEdit
+      ? await api("/profile/certs/update.php","POST",{ id:existing.id, ...payload })
+      : await api("/profile/certs/add.php","POST", payload);
+    if (res.ok) {
+      closeModal();
+      if (!isEdit) offerShareCert(name, issuer);
+      refreshAfterProfileChange();
+    } else {
+      btn.disabled = false; btn.textContent = label;
+      if (res.status !== 429) {
+        toast(res.data?.error || "Could not save that certification. Please try again.", "err");
+      }
+    }
   };
 }
 
@@ -1939,8 +1952,21 @@ function addSkill() {
     <div class="in-modal-actions"><button class="in-btn ghost" onclick="closeModal()">Cancel</button><button class="in-btn primary" id="save-skill">Add</button></div>`);
   $("save-skill").onclick = async () => {
     const name = $("s-name").value.trim(); if (!name) return;
-    await api("/profile/skills/add.php","POST",{ name });
-    closeModal(); refreshChipSection("skill");
+    const btn = $("save-skill"); btn.disabled = true; btn.textContent = "Adding…";
+    const res = await api("/profile/skills/add.php","POST",{ name });
+    if (res.ok) {
+      closeModal();
+      refreshChipSection("skill");
+      refreshAfterProfileChange();   // skills feed the score — recompute the meters
+    } else {
+      // Never leave the button in a silent dead state. Surface the reason:
+      // duplicate, rate limit (already toasted by api()), validation, or a
+      // network/server failure that would otherwise vanish.
+      btn.disabled = false; btn.textContent = "Add";
+      if (res.status !== 429) {
+        toast(res.data?.error || "Could not add that skill. Please try again.", "err");
+      }
+    }
   };
 }
 
