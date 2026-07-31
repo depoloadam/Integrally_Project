@@ -685,39 +685,53 @@ function paintStaged() {
 // user's explicit Accept — writes each staged item through the real,
 // duplicate-guarded profile endpoints. Nothing is written until Accept.
 //
-// Skills and certs are complete as staged, so they write one-click. A
-// staged "field of study" is NOT a complete education row: the profile's
-// education endpoint (like the Add Education form) requires an institution.
-// So each staged field gets a small inline sub-form here — institution
-// (required) + degree (optional) — and we write the SAME payload shape the
-// profile form does, so the resulting row renders and scores identically.
+// Each type mirrors its profile "Add" form so the rows written here are
+// identical to ones added on the profile (same fields, same payloads,
+// same typeaheads): skills are a single name; certifications get name +
+// issuer + issued/expiry; education gets institution + degree + field +
+// years. Nothing is written until the user hits Accept.
 async function confirmAddToProfile() {
   if (!IMPROVE_STATE) return;
   const add = IMPROVE_STATE.additions;
   const total = add.skills.length + add.certifications.length + add.education.length;
   if (!total) { toast("Nothing staged to add yet.", "err"); return; }
 
-  const listBlock = (label, plural, items) =>
-    items.length
-      ? `<div class="in-confirm-group"><div class="in-confirm-group-h">${label}${items.length > 1 ? plural : ""}</div><ul>${items.map(n => `<li>${esc(n)}</li>`).join("")}</ul></div>`
-      : "";
-
-  const skillsBlock = listBlock("Skill", "s", add.skills.map(s => s.name));
-  const certsBlock  = listBlock("Certification", "s", add.certifications.map(c => c.name));
-
-  // Education needs the full profile Add-Education fields so the row we
-  // write is identical to one added on the profile. Field of study is
-  // pre-filled from staging; institution is required (endpoint contract);
-  // degree and start/end years are optional. Mirrors profile.js addEducation.
   const nowYear = new Date().getFullYear();
   const maxYear = nowYear + 8;
+
+  // --- Skills: a name is complete on its own; show as a simple list. -----
+  const skillsBlock = add.skills.length
+    ? `<div class="in-confirm-group">
+         <div class="in-confirm-group-h">Skill${add.skills.length > 1 ? "s" : ""}</div>
+         <ul class="in-confirm-list">${add.skills.map(s => `<li>${esc(s.name)}</li>`).join("")}</ul>
+       </div>`
+    : "";
+
+  // --- Certifications: mirror profile.js addCert (name + issuer + dates). -
+  const certsBlock = add.certifications.length
+    ? `<div class="in-confirm-group">
+         <div class="in-confirm-group-h">Certification${add.certifications.length > 1 ? "s" : ""}</div>
+         ${add.certifications.map((c, i) => `
+           <div class="in-confirm-card" data-cert="${i}">
+             <label>Name *</label><div class="job-ta-wrap"><input class="cert-name" value="${esc(c.name || "")}" placeholder="e.g. Google Data Analytics" autocomplete="off"></div>
+             <label>Issuer</label><input class="cert-issuer" placeholder="e.g. Google">
+             <div class="row">
+               <div><label>Issued</label><input class="cert-issue" type="date"></div>
+               <div class="cert-exp-wrap" hidden><label>Expires</label><input class="cert-exp" type="date"></div>
+             </div>
+             <label class="cert-expcheck"><input type="checkbox" class="cert-has-exp"> This certification expires</label>
+           </div>`).join("")}
+       </div>`
+    : "";
+
+  // --- Education: mirror profile.js addEducation (all five fields). -------
   const eduBlock = add.education.length
     ? `<div class="in-confirm-group">
          <div class="in-confirm-group-h">Education</div>
-         <div class="in-confirm-note" style="margin:2px 0 8px">Complete ${add.education.length > 1 ? "these entries" : "this entry"} to save ${add.education.length > 1 ? "them" : "it"} to your profile. Institution is required.</div>
+         <div class="in-confirm-note in-confirm-subnote">Complete ${add.education.length > 1 ? "these entries" : "this entry"} to save ${add.education.length > 1 ? "them" : "it"} to your profile. Institution is required.</div>
          ${add.education.map((e, i) => `
-           <div class="in-confirm-edu" data-edu="${i}">
-             <label>Institution</label><input class="edu-inst" placeholder="e.g. Ohio State University">
+           <div class="in-confirm-card in-confirm-edu" data-edu="${i}">
+             <label>Institution *</label><input class="edu-inst" placeholder="e.g. Ohio State University">
              <label>Degree type</label><input class="edu-deg" placeholder="e.g. BS, MBA, Associate's">
              <label>Field of study</label><div class="job-ta-wrap"><input class="edu-field" value="${esc(e.field || "")}" placeholder="e.g. Computer Science" autocomplete="off"></div>
              <div class="row">
@@ -740,16 +754,40 @@ async function confirmAddToProfile() {
   openModal(`
     <h3>Add these to your profile?</h3>
     <div class="in-confirm-note">These will be written to your profile and will count toward your real score.</div>
-    ${skillsBlock}${certsBlock}${eduBlock}
+    <div class="in-confirm-body">
+      ${skillsBlock}${certsBlock}${eduBlock}
+    </div>
     ${deltaLine}
     <div class="in-modal-actions">
       <button class="in-btn ghost" id="conf-cancel">Not now</button>
       <button class="in-btn primary" id="conf-accept">Add to my profile</button>
-    </div>`);
+    </div>`, { wide: true });
 
-  // Mount the same field-of-study typeahead the profile uses, on each
-  // education row's field input. Institution/degree/years are free text on
-  // the profile too, so no typeahead there.
+  // Cert-name typeahead + issuer autofill, exactly as the profile does.
+  if (typeof jobMountTypeahead === "function" && typeof certMergedSearch === "function") {
+    if (typeof certCustomEntries === "function") certCustomEntries();  // warm admin-entries cache
+    document.querySelectorAll(".in-confirm-card[data-cert]").forEach(card => {
+      const nameInp = card.querySelector(".cert-name");
+      jobMountTypeahead(nameInp, {
+        search: certMergedSearch, minChars: 2, limit: 8,
+        onPick: (title, item) => {
+          const iss = card.querySelector(".cert-issuer");
+          if (item && item.issuer && iss && !iss.value.trim()) iss.value = item.issuer;
+        },
+      });
+    });
+  }
+  // Expiry is opt-in per cert, mirroring the profile's checkbox behaviour.
+  document.querySelectorAll(".in-confirm-card[data-cert]").forEach(card => {
+    const box = card.querySelector(".cert-has-exp");
+    const wrap = card.querySelector(".cert-exp-wrap");
+    const exp = card.querySelector(".cert-exp");
+    box.onchange = () => {
+      wrap.hidden = !box.checked;
+      if (!box.checked) exp.value = ""; else exp.focus();
+    };
+  });
+  // Field-of-study typeahead per education row.
   if (typeof jobMountTypeahead === "function" && typeof eduCatalogSearch === "function") {
     document.querySelectorAll(".in-confirm-edu .edu-field").forEach(inp => {
       jobMountTypeahead(inp, { search: eduCatalogSearch, minChars: 2, limit: 8 });
@@ -758,12 +796,31 @@ async function confirmAddToProfile() {
 
   $("conf-cancel").onclick = () => closeModal();
   $("conf-accept").onclick = async () => {
-    // Validate education rows first: institution is required. Capture the
-    // values BEFORE any await/closeModal so a DOM wipe can't lose them.
-    // Same payload shape as profile.js addEducation so the row is identical.
-    const eduRows = [...document.querySelectorAll(".in-confirm-edu")];
+    // Capture + validate ALL values BEFORE any await/closeModal, so a DOM
+    // wipe can't lose them. Certs: name required (mirrors profile). Edu:
+    // institution required (endpoint contract).
+    const certPayloads = [];
+    for (const card of document.querySelectorAll(".in-confirm-card[data-cert]")) {
+      const name   = card.querySelector(".cert-name").value.trim();
+      const issuer = card.querySelector(".cert-issuer").value.trim();
+      const issue  = card.querySelector(".cert-issue").value;
+      const expOn  = card.querySelector(".cert-has-exp").checked;
+      const expiry = expOn ? card.querySelector(".cert-exp").value : "";
+      if (!name) {
+        toast("Each certification needs a name, or remove it first.", "err");
+        card.querySelector(".cert-name").focus();
+        return;
+      }
+      if (expOn && !expiry) {
+        toast("Enter an expiration date, or untick “This certification expires.”", "err");
+        card.querySelector(".cert-exp").focus();
+        return;
+      }
+      certPayloads.push({ name, issuer, issue_date: issue, expiry_date: expiry });
+    }
+
     const eduPayloads = [];
-    for (const row of eduRows) {
+    for (const row of document.querySelectorAll(".in-confirm-edu")) {
       const inst  = row.querySelector(".edu-inst").value.trim();
       const deg   = row.querySelector(".edu-deg").value.trim();
       const field = row.querySelector(".edu-field").value.trim();
@@ -772,7 +829,7 @@ async function confirmAddToProfile() {
       if (!inst) {
         toast("Add an institution for each education entry, or remove it first.", "err");
         row.querySelector(".edu-inst").focus();
-        return;   // keep the dialog open so the user can fix it
+        return;
       }
       eduPayloads.push({ institution: inst, degree: deg, field, start_year: sy, end_year: ey });
     }
@@ -791,10 +848,10 @@ async function confirmAddToProfile() {
     // Sequential writes: avoids bursting the write rate-limiter and keeps
     // per-item outcomes attributable. Track which staged items resolved so
     // we only clear those, leaving genuine failures staged for retry.
-    const okSkills = [], okCerts = [], okEdu = [];
-    for (const s of add.skills)        { if (await writeOne("/profile/skills/add.php", { name: s.name })) okSkills.push(s); }
-    for (const c of add.certifications) { if (await writeOne("/profile/certs/add.php",  { name: c.name })) okCerts.push(c); }
-    for (const p of eduPayloads)       { if (await writeOne("/profile/education/add.php", p)) okEdu.push(p.field); }
+    const okSkills = [], okCertIdx = [], okEduIdx = [];
+    for (const s of add.skills) { if (await writeOne("/profile/skills/add.php", { name: s.name })) okSkills.push(s); }
+    for (let i = 0; i < certPayloads.length; i++) { if (await writeOne("/profile/certs/add.php", certPayloads[i])) okCertIdx.push(i); }
+    for (let i = 0; i < eduPayloads.length; i++)  { if (await writeOne("/profile/education/add.php", eduPayloads[i])) okEduIdx.push(i); }
 
     closeModal();
 
@@ -802,12 +859,11 @@ async function confirmAddToProfile() {
     if (skipped) toast(`${skipped} already on your profile — skipped.`, "ok");
     if (failed)  toast(`${failed} couldn't be added — left staged so you can retry.`, "err");
 
-    // Clear only the resolved items (added or already-present). Genuine
-    // failures stay staged. Compare by identity/name so we don't drop an
-    // item the user re-added while the writes were in flight.
+    // Clear only the resolved items; genuine failures stay staged. Cert/edu
+    // clear by staged index so we drop exactly the ones that resolved.
     add.skills         = add.skills.filter(s => !okSkills.includes(s));
-    add.certifications = add.certifications.filter(c => !okCerts.includes(c));
-    add.education      = add.education.filter(e => !okEdu.includes(e.field));
+    add.certifications = add.certifications.filter((_, i) => !okCertIdx.includes(i));
+    add.education      = add.education.filter((_, i) => !okEduIdx.includes(i));
     paintStaged();
     runWhatIf();
   };
