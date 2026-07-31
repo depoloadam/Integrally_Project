@@ -560,7 +560,7 @@ async function renderScoreImprove(encoded) {
   const bridge = el(`
     <div class="in-improve-bridge" id="imp-bridge" style="display:none">
       <div class="in-improve-bridge-text">Like what you see? These are staged only — add them to your profile to make them count.</div>
-      <button class="in-btn primary" id="imp-apply" style="flex:none;padding:9px 16px">Add these to my profile →</button>
+      <button class="in-btn primary" id="imp-apply" style="flex:none;padding:9px 16px">Add &amp; Rescore →</button>
     </div>`);
   wrap.appendChild(bridge);
   bridge.querySelector("#imp-apply").onclick = () => confirmAddToProfile();
@@ -760,7 +760,7 @@ async function confirmAddToProfile() {
     ${deltaLine}
     <div class="in-modal-actions">
       <button class="in-btn ghost" id="conf-cancel">Not now</button>
-      <button class="in-btn primary" id="conf-accept">Add to my profile</button>
+      <button class="in-btn primary" id="conf-accept">Add &amp; Rescore</button>
     </div>`, { wide: true });
 
   // Cert-name typeahead + issuer autofill, exactly as the profile does.
@@ -853,11 +853,33 @@ async function confirmAddToProfile() {
     for (let i = 0; i < certPayloads.length; i++) { if (await writeOne("/profile/certs/add.php", certPayloads[i])) okCertIdx.push(i); }
     for (let i = 0; i < eduPayloads.length; i++)  { if (await writeOne("/profile/education/add.php", eduPayloads[i])) okEduIdx.push(i); }
 
+    // Rescore ONLY the target this coaching page is open for, so its stored
+    // score (what the profile and Scores page read) reflects the additions
+    // instead of a stale snapshot. Other targets are intentionally left
+    // alone — the user re-scores those separately. Re-scoring an EXISTING
+    // target only appends history and is always allowed. In the rare case
+    // the target isn't a saved entry yet (e.g. a shared coaching link),
+    // this would create a new entry and can hit the plan's entry cap —
+    // which we surface with the app's standard Plus upgrade nudge.
+    let rescored = false, capHit = false;
+    if (added > 0) {
+      btn.textContent = "Rescoring…";
+      const rs = await api("/score/score-me.php", "POST", {
+        target_type: IMPROVE_STATE.targetType,
+        target_value: IMPROVE_STATE.targetValue,
+      });
+      rescored = rs.ok;
+      capHit = !rs.ok && rs.data?.code === "entry_cap";
+    }
+
     closeModal();
 
     if (added)   toast(`${added} item${added > 1 ? "s" : ""} added to your profile.`, "ok");
     if (skipped) toast(`${skipped} already on your profile — skipped.`, "ok");
     if (failed)  toast(`${failed} couldn't be added — left staged so you can retry.`, "err");
+    if (rescored) toast("Your score for this target has been updated.", "ok");
+    else if (capHit && typeof showEntryCapModal === "function") showEntryCapModal();
+    else if (added > 0) toast("Added, but the score couldn't be refreshed — use Re-score on the target.", "err");
 
     // Clear only the resolved items; genuine failures stay staged. Cert/edu
     // clear by staged index so we drop exactly the ones that resolved.
