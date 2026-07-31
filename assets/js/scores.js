@@ -238,23 +238,7 @@ function buildTargetStanding(p) {
   const encoded = encodeURIComponent(p.target_type + "|" + p.target_value);
   node.querySelector(".in-scores-improve").onclick = () => { location.hash = "score-improve/" + encoded; };
   node.querySelector(".in-scores-hist").onclick = () => { location.hash = "score-history/" + encoded; };
-  // Full breakdown needs the stored score id, which the insights payload
-  // doesn't carry. Resolve it from history (filtered to this target) and
-  // route to the real breakdown page. Falls back to history if lookup
-  // fails, so the button never dead-ends.
-  node.querySelector(".in-scores-full").onclick = async () => {
-    try {
-      const res = await api("/score/history.php?target_type=" + encodeURIComponent(p.target_type)
-        + "&target_value=" + encodeURIComponent(p.target_value));
-      const rows = res.data?.data || [];
-      if (rows.length && rows[0].id != null) {
-        // history is newest-first; the latest score is the one shown here.
-        location.hash = "score/" + rows[0].id;
-        return;
-      }
-    } catch (e) { /* fall through */ }
-    location.hash = "score-history/" + encoded;
-  };
+  node.querySelector(".in-scores-full").onclick = () => { location.hash = "score-history/" + encoded; };
   return node;
 }
 
@@ -605,6 +589,30 @@ async function renderScoreImprove(encoded) {
   [["imp-skill", "skills"], ["imp-cert", "certifications"], ["imp-field", "education"]].forEach(([id, kind]) => {
     $(id).addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); addItem(kind, id); } });
   });
+
+  // Autocomplete: reuse the profile's single typeahead engine
+  // (jobMountTypeahead) so these stagers suggest real catalog/DB entries.
+  // - Skills: there is no static skill catalog, so suggest existing master
+  //   skills from the DB via skills/search.php (async source; the engine
+  //   awaits it). Mapped to the engine's {title, category} shape.
+  // - Certs: certCatalogSearch (static catalog).
+  // - Field of study: eduCatalogSearch (static catalog).
+  // Free text is still allowed everywhere; suggestions are a convenience,
+  // not a gate.
+  const skillSearch = async (q, limit) => {
+    const res = await api("/profile/skills/search.php?q=" + encodeURIComponent(q));
+    if (!res.ok || !Array.isArray(res.data?.data)) return [];
+    return res.data.data.slice(0, limit).map(s => ({ title: s.name, category: "" }));
+  };
+  if (typeof jobMountTypeahead === "function") {
+    jobMountTypeahead($("imp-skill"), { search: skillSearch, minChars: 2, limit: 8 });
+    if (typeof certCatalogSearch === "function") {
+      jobMountTypeahead($("imp-cert"), { search: certCatalogSearch, minChars: 2, limit: 8 });
+    }
+    if (typeof eduCatalogSearch === "function") {
+      jobMountTypeahead($("imp-field"), { search: eduCatalogSearch, minChars: 2, limit: 8 });
+    }
+  }
 
   paintStaged();
 }

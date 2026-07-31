@@ -285,13 +285,23 @@ function jobMountTypeahead(input, opts) {
 
   let active = -1;
   let items = [];
+  let renderSeq = 0;   // guards against out-of-order async search responses
 
   const close = () => { menu.style.display = "none"; active = -1; };
 
-  const render = () => {
+  const render = async () => {
     const q = input.value;
     if (q.trim().length < minChars) { close(); return; }
-    items = search(q, limit);
+    // search() may return an array (static catalogs: jobs/certs/education)
+    // or a Promise<array> (a DB-backed source like the skills table via
+    // skills/search.php). await handles both: awaiting a plain array just
+    // yields the array. Sequence-guard so a slow response for an older
+    // keystroke can't overwrite the menu for a newer one.
+    const seq = ++renderSeq;
+    const result = await search(q, limit);
+    if (seq !== renderSeq) return;           // a newer keystroke superseded us
+    if (input.value !== q) return;           // input changed while awaiting
+    items = Array.isArray(result) ? result : [];
     if (!items.length) { close(); return; }
     menu.innerHTML = items.map((it, i) => `
       <div class="job-ta-item${i === active ? " active" : ""}" data-i="${i}">
@@ -315,13 +325,22 @@ function jobMountTypeahead(input, opts) {
     close();
   };
 
+  // Re-paint just the active-row highlight without re-running search.
+  // Arrow keys change selection only; issuing a fresh DB query per
+  // keypress would be wasteful and could flicker.
+  const paintActive = () => {
+    [...menu.querySelectorAll(".job-ta-item")].forEach((row, i) => {
+      row.classList.toggle("active", i === active);
+    });
+  };
+
   input.addEventListener("input", render);
   input.addEventListener("focus", render);
   input.addEventListener("blur", () => setTimeout(close, 120));
   input.addEventListener("keydown", (e) => {
     if (menu.style.display === "none") return;
-    if (e.key === "ArrowDown") { e.preventDefault(); active = Math.min(active + 1, items.length - 1); render(); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); active = Math.max(active - 1, 0); render(); }
+    if (e.key === "ArrowDown") { e.preventDefault(); active = Math.min(active + 1, items.length - 1); paintActive(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); active = Math.max(active - 1, 0); paintActive(); }
     else if (e.key === "Enter" && active >= 0) { e.preventDefault(); pick(active); }
     else if (e.key === "Escape") { close(); }
   });
