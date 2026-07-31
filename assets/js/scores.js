@@ -563,11 +563,7 @@ async function renderScoreImprove(encoded) {
       <button class="in-btn primary" id="imp-apply" style="flex:none;padding:9px 16px">Add these to my profile →</button>
     </div>`);
   wrap.appendChild(bridge);
-  bridge.querySelector("#imp-apply").onclick = () => {
-    // Hand off to the profile; the real edit flow is where saving happens.
-    // We don't silently write — the user finishes the add there.
-    location.hash = "profile";
-  };
+  bridge.querySelector("#imp-apply").onclick = () => confirmAddToProfile();
 
   // ---- wire the stagers ---------------------------------------------
   const recompute = improveDebounce(runWhatIf, 250);
@@ -684,6 +680,122 @@ function paintStaged() {
   if (bridge) bridge.style.display = any ? "" : "none";
 }
 
+// Confirmation dialog for "Add these to my profile". Shows exactly what
+// will be written and the projected score change, then — only on the
+// user's explicit Accept — writes each staged item through the real,
+// duplicate-guarded profile endpoints. Nothing is written until Accept.
+//
+// Skills and certs are complete as staged, so they write one-click. A
+// staged "field of study" is NOT a complete education row: the profile's
+// education endpoint (like the Add Education form) requires an institution.
+// So each staged field gets a small inline sub-form here — institution
+// (required) + degree (optional) — and we write the SAME payload shape the
+// profile form does, so the resulting row renders and scores identically.
+async function confirmAddToProfile() {
+  if (!IMPROVE_STATE) return;
+  const add = IMPROVE_STATE.additions;
+  const total = add.skills.length + add.certifications.length + add.education.length;
+  if (!total) { toast("Nothing staged to add yet.", "err"); return; }
+
+  const listBlock = (label, plural, items) =>
+    items.length
+      ? `<div class="in-confirm-group"><div class="in-confirm-group-h">${label}${items.length > 1 ? plural : ""}</div><ul>${items.map(n => `<li>${esc(n)}</li>`).join("")}</ul></div>`
+      : "";
+
+  const skillsBlock = listBlock("Skill", "s", add.skills.map(s => s.name));
+  const certsBlock  = listBlock("Certification", "s", add.certifications.map(c => c.name));
+
+  // Education needs the extra fields — render an inline row per staged field.
+  const eduBlock = add.education.length
+    ? `<div class="in-confirm-group">
+         <div class="in-confirm-group-h">Field${add.education.length > 1 ? "s" : ""} of study</div>
+         <div class="in-confirm-note" style="margin:2px 0 8px">Add where you studied ${add.education.length > 1 ? "these" : "this"} so it can be saved as an education entry. Institution is required; degree is optional.</div>
+         ${add.education.map((e, i) => `
+           <div class="in-confirm-edu" data-edu="${i}">
+             <div class="in-confirm-edu-field">${esc(e.field || "")}</div>
+             <input class="edu-inst" placeholder="Institution (e.g. Ohio State University)" autocomplete="off">
+             <input class="edu-deg" placeholder="Degree — optional (e.g. BS, MBA)" autocomplete="off">
+           </div>`).join("")}
+       </div>`
+    : "";
+
+  const lr = IMPROVE_STATE.lastResult;
+  const deltaLine = (lr && typeof lr.delta === "number")
+    ? (lr.delta > 0
+        ? `<div class="in-confirm-delta up">Projected score: <strong>${lr.base} → ${lr.proj}</strong> <span class="in-improve-up">▲ +${lr.delta}</span></div>`
+        : (lr.delta < 0
+            ? `<div class="in-confirm-delta">Projected score: <strong>${lr.base} → ${lr.proj}</strong> <span class="in-improve-down">▼ ${lr.delta}</span></div>`
+            : `<div class="in-confirm-delta">Projected score: <strong>no change</strong> (${lr.base})</div>`))
+    : "";
+
+  openModal(`
+    <h3>Add these to your profile?</h3>
+    <div class="in-confirm-note">These will be written to your profile and will count toward your real score.</div>
+    ${skillsBlock}${certsBlock}${eduBlock}
+    ${deltaLine}
+    <div class="in-modal-actions">
+      <button class="in-btn ghost" id="conf-cancel">Not now</button>
+      <button class="in-btn primary" id="conf-accept">Add to my profile</button>
+    </div>`);
+
+  // Same field-of-study typeahead the profile uses, if available.
+  // (Institution/degree are free text on the profile too, so no typeahead.)
+
+  $("conf-cancel").onclick = () => closeModal();
+  $("conf-accept").onclick = async () => {
+    // Validate education rows first: institution is required. Capture the
+    // values BEFORE any await/closeModal so a DOM wipe can't lose them.
+    const eduRows = [...document.querySelectorAll(".in-confirm-edu")];
+    const eduPayloads = [];
+    for (const row of eduRows) {
+      const idx  = Number(row.dataset.edu);
+      const inst = row.querySelector(".edu-inst").value.trim();
+      const deg  = row.querySelector(".edu-deg").value.trim();
+      const field = (add.education[idx] && add.education[idx].field) || "";
+      if (!inst) {
+        toast("Add an institution for each field of study, or remove it first.", "err");
+        row.querySelector(".edu-inst").focus();
+        return;   // keep the dialog open so the user can fix it
+      }
+      eduPayloads.push({ institution: inst, degree: deg || undefined, field });
+    }
+
+    const btn = $("conf-accept");
+    btn.disabled = true; btn.textContent = "Adding…";
+
+    let added = 0, skipped = 0, failed = 0;
+    const writeOne = async (path, body) => {
+      const res = await api(path, "POST", body);
+      if (res.ok) { added++; return true; }
+      if (res.data?.code === "already_exists") { skipped++; return true; }
+      failed++; return false;
+    };
+
+    // Sequential writes: avoids bursting the write rate-limiter and keeps
+    // per-item outcomes attributable. Track which staged items resolved so
+    // we only clear those, leaving genuine failures staged for retry.
+    const okSkills = [], okCerts = [], okEdu = [];
+    for (const s of add.skills)        { if (await writeOne("/profile/skills/add.php", { name: s.name })) okSkills.push(s); }
+    for (const c of add.certifications) { if (await writeOne("/profile/certs/add.php",  { name: c.name })) okCerts.push(c); }
+    for (const p of eduPayloads)       { if (await writeOne("/profile/education/add.php", p)) okEdu.push(p.field); }
+
+    closeModal();
+
+    if (added)   toast(`${added} item${added > 1 ? "s" : ""} added to your profile.`, "ok");
+    if (skipped) toast(`${skipped} already on your profile — skipped.`, "ok");
+    if (failed)  toast(`${failed} couldn't be added — left staged so you can retry.`, "err");
+
+    // Clear only the resolved items (added or already-present). Genuine
+    // failures stay staged. Compare by identity/name so we don't drop an
+    // item the user re-added while the writes were in flight.
+    add.skills         = add.skills.filter(s => !okSkills.includes(s));
+    add.certifications = add.certifications.filter(c => !okCerts.includes(c));
+    add.education      = add.education.filter(e => !okEdu.includes(e.field));
+    paintStaged();
+    runWhatIf();
+  };
+}
+
 // Call the what-if endpoint with the current staged additions and update
 // the dial + factor bars.
 async function runWhatIf() {
@@ -715,6 +827,7 @@ async function runWhatIf() {
   const base = Math.round(data.baseline.score);
   const proj = Math.round(data.projected.score);
   const delta = Math.round(data.delta);
+  IMPROVE_STATE.lastResult = { base, proj, delta };  // for the confirm dialog
   if (scoreEl) { scoreEl.textContent = proj; scoreEl.classList.toggle("up", delta > 0); }
   if (projEl) {
     projEl.innerHTML = delta > 0

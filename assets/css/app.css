@@ -2386,6 +2386,66 @@ html.in-reduce-motion *::after {
 .railcard { background:var(--in-card); border:1px solid var(--in-line); border-radius:14px; padding:16px 16px 12px; margin-bottom:16px; }
 .railcard h3 { margin:0 0 10px; font-size:12.5px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--in-ink-soft); }
 /* =====================================================================
+   Feed rail — PLUS+ promo card (.pluscard)
+   ---------------------------------------------------------------------
+   RESTORED. Added in e81e043 ("plus promo on feed page"), then lost when
+   the large app.css rework in e8e1ba6 ("integrally score improve")
+   overwrote this region and dropped the block — leaving buildPlusPromo()
+   in feed.js emitting .pluscard markup with no styles (rendered unstyled).
+   Recovered verbatim from e81e043; all referenced gold/ink/line vars and
+   color-mix() are still present in this file, so it renders as designed.
+   ===================================================================== */
+.pluscard {
+  position:relative; overflow:hidden;
+  padding:14px 16px 15px;
+  border-color:color-mix(in srgb, var(--in-gold) 40%, var(--in-line));
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--in-gold-lt) 22%, var(--in-card)),
+      var(--in-card) 62%);
+}
+/* Soft corner glow — decorative, sits behind the content. */
+.pluscard-glow {
+  position:absolute; top:-40px; right:-40px; width:120px; height:120px;
+  border-radius:50%; pointer-events:none;
+  background:radial-gradient(circle, color-mix(in srgb, var(--in-gold) 34%, transparent), transparent 70%);
+}
+.pluscard > *:not(.pluscard-glow) { position:relative; }
+.pluscard-tag {
+  display:inline-block; font-size:11px; font-weight:800; letter-spacing:1px;
+  color:var(--in-gold-ink); background:linear-gradient(135deg, var(--in-gold-lt), var(--in-gold));
+  padding:2px 9px; border-radius:999px; margin-bottom:9px;
+}
+.pluscard-tag span { font-weight:800; }
+.pluscard-head { font-size:14.5px; font-weight:700; color:var(--in-ink); line-height:1.25; margin-bottom:4px; }
+.pluscard-sub { font-size:12.5px; color:var(--in-ink-soft); line-height:1.45; margin-bottom:12px; }
+.pluscard-cta {
+  width:100%; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer;
+  color:var(--in-gold-ink); border:none; border-radius:9px; padding:9px 12px;
+  background:linear-gradient(135deg, var(--in-gold-lt), var(--in-gold));
+  transition:filter .12s, transform .04s;
+}
+.pluscard-cta:hover { filter:brightness(1.05); }
+.pluscard-cta:active { transform:translateY(1px); }
+.pluscard-cta:focus-visible { outline:2px solid var(--in-gold-d); outline-offset:2px; }
+/* ---------------------------------------------------------------------
+   "Add these to your profile?" confirmation dialog (Scores coaching page)
+   Renders inside the shared #modal via openModal(). Groups the staged
+   items, collects institution/degree for staged fields, and shows the
+   projected score delta before the user commits real writes.
+   ------------------------------------------------------------------- */
+.in-confirm-note { font-size:13px; color:var(--in-ink-soft); line-height:1.45; margin:2px 0 12px; }
+.in-confirm-group { margin:0 0 12px; }
+.in-confirm-group-h { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--in-ink-soft); margin-bottom:5px; }
+.in-confirm-group ul { margin:0; padding:0 0 0 18px; }
+.in-confirm-group li { font-size:13.5px; color:var(--in-ink); line-height:1.6; }
+.in-confirm-edu { border:1px solid var(--in-line); border-radius:10px; padding:10px 12px; margin-bottom:8px; }
+.in-confirm-edu-field { font-size:13.5px; font-weight:700; color:var(--in-ink); margin-bottom:7px; }
+.in-confirm-edu input { width:100%; box-sizing:border-box; font-family:inherit; font-size:13px; padding:7px 10px; margin-bottom:6px; border:1px solid var(--in-line); border-radius:7px; background:var(--in-card); color:var(--in-ink); }
+.in-confirm-edu input:last-child { margin-bottom:0; }
+.in-confirm-delta { font-size:13.5px; color:var(--in-ink); background:var(--in-bg-soft, color-mix(in srgb, var(--in-ink) 4%, var(--in-card))); border-radius:8px; padding:9px 12px; margin:4px 0 4px; }
+.in-confirm-delta strong { font-weight:700; }
+/* =====================================================================
    Feed rail — "Your scores" card
    ---------------------------------------------------------------------
    RESTORED. This block was lost when the hover-card drop overwrote
