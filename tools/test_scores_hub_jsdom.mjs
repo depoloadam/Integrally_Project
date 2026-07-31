@@ -157,6 +157,28 @@ daStanding.querySelector(".in-scores-hist").dispatchEvent(new window.MouseEvent(
 ok(window.location.hash.includes("score-history/"), "history button routes to score-history");
 ok(decodeURIComponent(window.location.hash).includes("job_title|Data Analyst"), "history route carries the target");
 
+// Full breakdown resolves the score id from history and routes to the
+// real breakdown page (regression: it used to point at history, landing
+// users on the wrong page).
+{
+  const savedApi = window.api;
+  window.api = async (path) => {
+    // history filtered by target -> newest-first rows with ids
+    if (path.includes("history.php")) {
+      return { ok: true, status: 200, data: { success: true, data: [{ id: 4242, target_type: "job_title", target_value: "Data Analyst" }] } };
+    }
+    return { ok: false, data: null };
+  };
+  // The module bound `api` at eval time; point that binding at our mock.
+  window.eval(`api = window.api;`);
+  window.location.hash = "";
+  daStanding.querySelector(".in-scores-full").dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  await new Promise(r => setTimeout(r, 20));
+  ok(window.location.hash === "#score/4242", "full breakdown routes to the real breakdown page by id");
+  ok(!/score-history/.test(window.location.hash), "full breakdown does NOT land on history");
+  window.api = savedApi;
+}
+
 // ---- Region 3: where you stand -------------------------------------
 console.log("\nwhere you stand");
 const stand = S.buildAverages(payload, payload.personal);

@@ -238,7 +238,23 @@ function buildTargetStanding(p) {
   const encoded = encodeURIComponent(p.target_type + "|" + p.target_value);
   node.querySelector(".in-scores-improve").onclick = () => { location.hash = "score-improve/" + encoded; };
   node.querySelector(".in-scores-hist").onclick = () => { location.hash = "score-history/" + encoded; };
-  node.querySelector(".in-scores-full").onclick = () => { location.hash = "score-history/" + encoded; };
+  // Full breakdown needs the stored score id, which the insights payload
+  // doesn't carry. Resolve it from history (filtered to this target) and
+  // route to the real breakdown page. Falls back to history if lookup
+  // fails, so the button never dead-ends.
+  node.querySelector(".in-scores-full").onclick = async () => {
+    try {
+      const res = await api("/score/history.php?target_type=" + encodeURIComponent(p.target_type)
+        + "&target_value=" + encodeURIComponent(p.target_value));
+      const rows = res.data?.data || [];
+      if (rows.length && rows[0].id != null) {
+        // history is newest-first; the latest score is the one shown here.
+        location.hash = "score/" + rows[0].id;
+        return;
+      }
+    } catch (e) { /* fall through */ }
+    location.hash = "score-history/" + encoded;
+  };
   return node;
 }
 
