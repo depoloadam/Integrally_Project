@@ -3153,6 +3153,7 @@ const SCORE_FACTOR_LABEL = {
   skills_match:        "Skills match",
   education:           "Education",
   certifications:      "Certifications",
+  ai_skills:           "AI skills",
 };
 // What each factor rewards, in plain language.
 const SCORE_FACTOR_BLURB = {
@@ -3161,6 +3162,7 @@ const SCORE_FACTOR_BLURB = {
   skills_match:        "Listed skills weighted by how closely they relate to this job.",
   education:           "Having a degree, plus extra when the field of study relates to this job.",
   certifications:      "Certifications you hold, weighted by relevance to this job.",
+  ai_skills:           "Your AI Skillset, weighted by relevance (AI-inclusive scoring only).",
 };
 function scoreFactorLabel(key) {
   return SCORE_FACTOR_LABEL[key] || String(key || "factor").replace(/_/g, " ");
@@ -3190,15 +3192,17 @@ async function renderScoreBreakdown(scoreId) {
     view.innerHTML = `<div class="in-card2"><div class="in-empty" style="text-align:center">Score not found.</div><div style="text-align:center;margin-top:14px"><button class="in-btn ghost" style="flex:none;padding:9px 18px" onclick="location.hash='scores'">← Back to scores</button></div></div>`;
     return;
   }
-  const val = Math.max(0, Math.min(100, Math.round(s.score_value)));
+  const hasAi = s.ai_score !== null && s.ai_score !== undefined;
+  const val = Math.max(0, Math.min(100, Math.round(detailScoreOf(s))));
   const date = new Date(s.created_at).toLocaleString();
+  const bdData = detailBreakdownOf(s);
   let factors = "";
-  if (Array.isArray(s.breakdown) && s.breakdown.length) {
+  if (Array.isArray(bdData) && bdData.length) {
     // Deliberately no "x of y" denominators or proportion bars: the useful
     // answer is WHICH of your data earned points ("Computer Science"
     // relates to the role), not what fraction of a hidden ceiling you hit.
     // The engine's `detail` string already names that data, so it leads.
-    factors = s.breakdown.map(f => {
+    factors = bdData.map(f => {
       const key = f.factor || "";
       const pts = f.points != null ? Number(f.points) : null;
       const blurb = SCORE_FACTOR_BLURB[key] || "";
@@ -3218,9 +3222,10 @@ async function renderScoreBreakdown(scoreId) {
   view.appendChild(el(`
     <div style="margin:0 auto">
       <div class="in-back"><button class="in-back-btn" onclick="location.hash='scores'">← Back to scores</button></div>
+      <div id="bd-toggle-slot"></div>
       <div class="in-card2 bd-hero">
         <div class="in-score-badge" style="width:64px;height:64px;font-size:24px;border-radius:14px">${val}</div>
-        <div><div class="bd-target">${esc(s.target_value)}</div><div class="bd-sub">${esc(s.target_type.replace("_"," "))} · scored ${esc(date)}</div></div>
+        <div><div class="bd-target">${esc(s.target_value)}</div><div class="bd-sub">${esc(s.target_type.replace("_"," "))} · scored ${esc(date)}${DETAIL_VIEW === "ai" && hasAi ? " · AI-inclusive" : ""}</div></div>
       </div>
       <div class="in-card2 bd-hero-bar">
         <div class="score-bar" style="margin:0"><div class="score-bar-track"></div><div class="score-bar-marker" style="left:${val}%"><div class="score-bar-arrow"></div></div></div>
@@ -3242,6 +3247,12 @@ async function renderScoreBreakdown(scoreId) {
   // self-scoped when no uuid is passed), so it's safe to compare.
   loadScoreComparison(s, view.querySelector(".bd-compare-slot"), s.id);
 
+  // Standard / AI-inclusive toggle — only when this score has an AI breakdown.
+  if (hasAi) {
+    const slot = $("bd-toggle-slot");
+    if (slot) slot.appendChild(detailViewToggle(() => renderScoreBreakdown(scoreId)));
+  }
+
   $("bd-history").onclick = () => {
     location.hash = "score-history/" + encodeURIComponent(s.target_type + "|" + s.target_value);
   };
@@ -3256,6 +3267,39 @@ async function renderScoreBreakdown(scoreId) {
 
 // ===================================================================
 // VIEW: SCORE HISTORY (progress over time for ONE target)
+// Detail-page (history / breakdown) score view. Separate from the hub's
+// SCORE_VIEW (different file/state); these full pages carry their own
+// toggle, shown only when the record actually has AI scores. Per-row
+// fallback to Standard when a given row has no AI score (e.g. it was
+// scored before the user added AI skills).
+let DETAIL_VIEW = "standard";   // "standard" | "ai"
+function detailScoreOf(r) {
+  if (DETAIL_VIEW === "ai" && r && r.ai_score !== null && r.ai_score !== undefined) return r.ai_score;
+  return r ? r.score_value : 0;
+}
+function detailBreakdownOf(r) {
+  if (DETAIL_VIEW === "ai" && r && Array.isArray(r.ai_breakdown)) return r.ai_breakdown;
+  return r ? r.breakdown : null;
+}
+function rowsHaveAi(rows) {
+  return Array.isArray(rows) && rows.some(r => r && r.ai_score !== null && r.ai_score !== undefined);
+}
+// Small segmented toggle for the detail pages. onSwitch re-renders.
+function detailViewToggle(onSwitch) {
+  const t = el(`
+    <div class="in-scoreview" style="margin:0 0 16px">
+      <span class="in-scoreview-label">Scoring</span>
+      <div class="in-scoreview-seg" role="tablist">
+        <button class="in-scoreview-btn${DETAIL_VIEW === "standard" ? " active" : ""}" data-view="standard" role="tab">Standard</button>
+        <button class="in-scoreview-btn${DETAIL_VIEW === "ai" ? " active" : ""}" data-view="ai" role="tab">AI-inclusive</button>
+      </div>
+    </div>`);
+  t.querySelectorAll("[data-view]").forEach(b => {
+    b.onclick = () => { if (b.dataset.view !== DETAIL_VIEW) { DETAIL_VIEW = b.dataset.view; onSwitch(); } };
+  });
+  return t;
+}
+
 // Hash: #score-history/<encoded "type|value">
 // ===================================================================
 async function renderScoreHistory(encoded) {
@@ -3290,7 +3334,7 @@ async function renderScoreHistory(encoded) {
     return;
   }
 
-  const values = rows.map(r => Math.max(0, Math.min(100, r.score_value)));
+  const values = rows.map(r => Math.max(0, Math.min(100, detailScoreOf(r))));
   const latest = values[values.length - 1];
   const first  = values[0];
   const best    = Math.max(...values);
@@ -3299,12 +3343,15 @@ async function renderScoreHistory(encoded) {
     : (delta > 0 ? `+${delta}` : String(delta));
   const deltaCls = delta > 0 ? "up" : (delta < 0 ? "down" : "flat");
 
+  const showToggle = rowsHaveAi(rows);
+
   view.innerHTML = "";
-  view.appendChild(el(`
-    <div style="margin:0 auto">
-      ${back}
+  const container = el(`<div style="margin:0 auto"></div>`);
+  container.appendChild(el(back));
+  if (showToggle) container.appendChild(detailViewToggle(() => renderScoreHistory(encoded)));
+  container.appendChild(el(`
       <div class="in-card2 sh-hero">
-        <div class="sh-eyebrow">${typeLabel} · score history</div>
+        <div class="sh-eyebrow">${typeLabel} · score history${DETAIL_VIEW === "ai" && showToggle ? " · AI-inclusive" : ""}</div>
         <div class="sh-title">${esc(targetValue)}</div>
         <div class="sh-stats">
           <div class="sh-stat"><div class="sh-stat-v">${Math.round(latest)}</div><div class="sh-stat-l">Latest</div></div>
@@ -3316,22 +3363,24 @@ async function renderScoreHistory(encoded) {
       <div class="in-card2">
         <h2>Progress over time</h2>
         <div class="sh-chart-wrap">${scoreHistoryChart(rows)}</div>
-      </div>
+      </div>`));
+  view.appendChild(container);
+  container.appendChild(el(`
       <div class="in-card2">
         <h2>All scores</h2>
         <div class="sh-list">
           ${rows.slice().reverse().map(r => {
-            const v = Math.round(Math.max(0, Math.min(100, r.score_value)));
+            const v = Math.round(Math.max(0, Math.min(100, detailScoreOf(r))));
             const d = new Date(r.created_at).toLocaleString();
+            const aiTag = (DETAIL_VIEW === "ai" && r.ai_score !== null && r.ai_score !== undefined) ? " · AI" : "";
             return `<div class="sh-row" data-id="${r.id}">
               <div class="sh-row-badge">${v}</div>
-              <div class="sh-row-meta"><div class="sh-row-date">${esc(d)}</div><div class="sh-row-algo">${esc(r.algo_version || "n/a")}</div></div>
+              <div class="sh-row-meta"><div class="sh-row-date">${esc(d)}</div><div class="sh-row-algo">${esc(r.algo_version || "n/a")}${aiTag}</div></div>
               <button class="in-btn ghost sh-row-view" style="flex:none;padding:6px 12px">Breakdown →</button>
             </div>`;
           }).join("")}
         </div>
-      </div>
-    </div>`));
+      </div>`));
 
   view.querySelectorAll(".sh-row-view").forEach(btn => {
     btn.onclick = () => { location.hash = "score/" + btn.closest(".sh-row").dataset.id; };
@@ -3396,7 +3445,7 @@ function scoreHistoryChart(rows) {
     grid += `<text x="${padL - 8}" y="${(y + 3.5).toFixed(1)}" class="sh-axis" text-anchor="end">${g}</text>`;
   });
 
-  const pts = rows.map((r, i) => [xFor(i), yFor(r.score_value)]);
+  const pts = rows.map((r, i) => [xFor(i), yFor(detailScoreOf(r))]);
   const linePath = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
   // Area under the line for a subtle fill.
   const areaPath = n > 1
@@ -3405,7 +3454,7 @@ function scoreHistoryChart(rows) {
 
   const dots = pts.map((p, i) => {
     const r = rows[i];
-    const v = Math.round(Math.max(0, Math.min(100, r.score_value)));
+    const v = Math.round(Math.max(0, Math.min(100, detailScoreOf(r))));
     const cx = p[0].toFixed(1), cy = p[1].toFixed(1);
     const label = `${v} · ${new Date(r.created_at).toLocaleDateString()}`;
     // A large transparent hit-circle makes the point easy to click/hover;
