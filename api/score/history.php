@@ -68,4 +68,19 @@ $rows = array_map(function ($r) {
     return $r;
 }, $stmt->fetchAll());
 
-Response::success($rows);
+// The profile owner's CURRENT AI Skillset state. Per the product rule,
+// AI-inclusivity disappears everywhere the moment the section is turned
+// off — even though old rows still carry a stored ai_score. The detail
+// pages gate their AI toggle on this, not merely on stored data. For a
+// public profile ($uuid set) this is the profile OWNER's flag, so a
+// viewer only ever sees the owner's AI scores when the owner opted in.
+$aiEnabled = false;
+$aiFlag = $pdo->prepare(
+    "SELECT setting_value FROM user_settings
+     WHERE user_id = ? AND setting_key = 'ai_box_enabled' LIMIT 1"
+);
+$aiFlag->execute([$userId]);
+$aiRow = $aiFlag->fetch();
+if ($aiRow && $aiRow['setting_value'] === '1') $aiEnabled = true;
+
+Response::success(['rows' => $rows, 'ai_enabled' => $aiEnabled]);

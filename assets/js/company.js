@@ -432,6 +432,17 @@ const JA_SORTS = [
   ["status", "Status (active first)"],
 ];
 let JA_STATE = { jobUuid: null, sort: "score" };
+// Company applicant score view. Default Standard (AI is NOT the default on
+// the company side). In AI view, an applicant with no AI score shows no
+// score at all (no Standard fallback) — companies compare like-for-like.
+let JA_VIEW = "standard";   // "standard" | "ai"
+function jaScoreOf(a) {
+  if (JA_VIEW === "ai") return (a && a.ai_score !== null && a.ai_score !== undefined) ? a.ai_score : null;
+  return (a && a.score_value !== null && a.score_value !== undefined) ? a.score_value : null;
+}
+function jaAppsHaveAi(apps) {
+  return Array.isArray(apps) && apps.some(a => a && a.ai_score !== null && a.ai_score !== undefined);
+}
 
 async function renderJobApplicants(jobUuid) {
   // New job = reset the sort; re-entering the same list keeps it.
@@ -471,6 +482,7 @@ async function renderJobApplicants(jobUuid) {
           <span class="ja-sort-lbl">Sort</span>
           <select id="ja-sort-sel" class="ja-sort-sel">${sortOpts}</select>
         </label>
+        <div id="ja-view-slot"></div>
       </div>
       <div id="ja-graph-slot"></div>
       <div id="ja-list"></div>
@@ -478,6 +490,25 @@ async function renderJobApplicants(jobUuid) {
   wrap.appendChild(card);
   view.appendChild(wrap);
   $("ja-back").onclick = () => renderCompanyDashboard();
+
+  // Standard / AI-inclusive toggle — only when at least one applicant has
+  // an AI score. Default is Standard (AI is not the company-side default).
+  const appsForToggle = d.applicants || [];
+  if (jaAppsHaveAi(appsForToggle)) {
+    const vslot = card.querySelector("#ja-view-slot");
+    const tog = el(`
+      <div class="in-scoreview" style="margin:0">
+        <span class="in-scoreview-label">Scoring</span>
+        <div class="in-scoreview-seg" role="tablist">
+          <button class="in-scoreview-btn${JA_VIEW === "standard" ? " active" : ""}" data-view="standard">Standard</button>
+          <button class="in-scoreview-btn${JA_VIEW === "ai" ? " active" : ""}" data-view="ai">AI-inclusive</button>
+        </div>
+      </div>`);
+    tog.querySelectorAll("[data-view]").forEach(b => {
+      b.onclick = () => { if (b.dataset.view !== JA_VIEW) { JA_VIEW = b.dataset.view; renderJobApplicants(jobUuid); } };
+    });
+    vslot.appendChild(tog);
+  }
 
   // Changing the sort re-fetches from the server (authoritative order +
   // pagination-ready), not a client re-sort of a partial list.
@@ -501,9 +532,10 @@ async function renderJobApplicants(jobUuid) {
     const cand = a.candidate || {};
     const name = cand.full_name || cand.username || "Candidate";
     const av = cand.avatar ? `<img src="${esc(cand.avatar)}" alt="">` : esc(name.charAt(0).toUpperCase());
-    const score = a.score_value != null
-      ? `<div class="ja-score" title="Score at apply time">${Math.round(a.score_value)}</div>`
-      : `<div class="ja-score none" title="No score">—</div>`;
+    const sv = jaScoreOf(a);
+    const score = sv != null
+      ? `<div class="ja-score" title="${JA_VIEW === "ai" ? "AI-inclusive score at apply time" : "Score at apply time"}">${Math.round(sv)}</div>`
+      : `<div class="ja-score none" title="${JA_VIEW === "ai" ? "No AI score (applicant's AI Skillset was off)" : "No score"}">—</div>`;
     // Rank is the FIXED score rank from the server — it stays put no matter
     // how the list is sorted for display. Scoreless applicants show no rank.
     const rankCell = a.score_rank != null
@@ -546,7 +578,7 @@ let highlightGraphMark = function () {};
 function buildApplicantGraph(mount, apps, job, jobUuid) {
   if (!mount) return;
   // Only applicants with a score can be placed on a score axis.
-  const scored = apps.filter(a => a.score_value != null);
+  const scored = apps.filter(a => jaScoreOf(a) != null);
 
   const shell = el(`
     <div class="ja-graph ${JA_GRAPH.open ? "open" : ""}">
@@ -627,7 +659,7 @@ function buildApplicantHistogram(scored) {
   const buckets = new Array(10).fill(0);
   const members = new Array(10).fill(null).map(() => []);
   scored.forEach(a => {
-    const b = Math.min(9, Math.floor(Math.max(0, Math.min(100, a.score_value)) / 10));
+    const b = Math.min(9, Math.floor(Math.max(0, Math.min(100, jaScoreOf(a))) / 10));
     buckets[b]++; members[b].push(a);
   });
   const maxB = Math.max(...buckets, 1);
@@ -657,11 +689,11 @@ function buildApplicantBeeswarm(scored) {
   const wrap = el(`<div class="ja-swarm"></div>`);
   const lane = el(`<div class="ja-swarm-lane"></div>`);
   // Sort by score so the dodge packs neatly; track occupancy per x-bin.
-  const sorted = scored.slice().sort((a, b) => b.score_value - a.score_value);
+  const sorted = scored.slice().sort((a, b) => jaScoreOf(b) - jaScoreOf(a));
   const rows = [];              // vertical lanes: last x used in each
   const DOT = 30, GAP = 4;      // px
   sorted.forEach(a => {
-    const x = Math.max(0, Math.min(100, a.score_value));
+    const x = Math.max(0, Math.min(100, jaScoreOf(a)));
     // Find the first vertical lane where this dot won't overlap the last.
     let laneIdx = 0;
     for (; laneIdx < rows.length; laneIdx++) {
@@ -674,7 +706,7 @@ function buildApplicantBeeswarm(scored) {
     const dot = el(`
       <div class="ja-swarm-dot" data-app-uuid="${esc(a.uuid)}"
            style="left:${x}%; top:${laneIdx * (DOT + GAP)}px"
-           title="${esc(name)} · ${Math.round(a.score_value)}">
+           title="${esc(name)} · ${Math.round(jaScoreOf(a))}">
         <div class="connect-ava" style="width:${DOT}px;height:${DOT}px">${av}</div>
       </div>`);
     dot.addEventListener("mouseenter", () => graphMarkToRow(a.uuid, true));

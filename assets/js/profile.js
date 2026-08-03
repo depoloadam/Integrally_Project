@@ -272,22 +272,32 @@ async function renderProfile() {
 
   // scores panel
   const onboardingDone = (st.onboarding_complete === "1");
-  const scoreRows = (scores.data?.data || []);
+  const scorePayload = scores.data?.data || {};
+  const scoreRows = Array.isArray(scorePayload.rows) ? scorePayload.rows : [];
+  const scoreAiEnabled = !!scorePayload.ai_enabled;
+  // AI-inclusive becomes the DEFAULT view when the owner has AI enabled.
+  PROFILE_SCORE_VIEW = scoreAiEnabled ? "ai" : "standard";
   const scoreCard = el(`<div class="in-card2"><h2>Scores<button class="add" id="score-privacy-btn" title="Score privacy settings" aria-label="Score privacy settings">⚙</button></h2><div id="score-body"></div></div>`);
   rightCol.appendChild(scoreCard);
   $("score-privacy-btn").onclick = () => { location.hash = "settings/scores"; };
   const sb = $("score-body");
-  if (!scoreRows.length) {
-    sb.appendChild(el(`<div class="in-empty">${onboardingDone
-      ? "No scores yet. Use “Score Me!” below to measure yourself against a role or skill."
-      : "Scoring unlocks once your profile setup is complete."}</div>`));
-  } else {
-    scoreRows.forEach(s => sb.appendChild(renderScoreRow(s, true)));
-  }
-  if (onboardingDone) {
-    sb.appendChild(el(`<div style="margin-top:14px"><button class="in-btn primary" style="flex:none;padding:10px 16px" id="score-me">Score Me!</button></div>`));
-    $("score-me").onclick = scoreMe;
-  } else {
+  const paintScores = () => {
+    sb.innerHTML = "";
+    if (scoreAiEnabled && scoreRowsHaveAi(scoreRows)) sb.appendChild(profileScoreToggle(paintScores));
+    if (!scoreRows.length) {
+      sb.appendChild(el(`<div class="in-empty">${onboardingDone
+        ? "No scores yet. Use “Score Me!” below to measure yourself against a role or skill."
+        : "Scoring unlocks once your profile setup is complete."}</div>`));
+    } else {
+      scoreRows.forEach(s => sb.appendChild(renderScoreRow(s, true)));
+    }
+    if (onboardingDone) {
+      sb.appendChild(el(`<div style="margin-top:14px"><button class="in-btn primary" style="flex:none;padding:10px 16px" id="score-me">Score Me!</button></div>`));
+      $("score-me").onclick = scoreMe;
+    }
+  };
+  paintScores();
+  if (!onboardingDone) {
     const locked = el(`
       <div class="score-locked">
         <span class="lock">🔒</span>
@@ -439,14 +449,44 @@ async function renderPersonalFeed(col, uuid) {
 // ---- score row (badge, gradient bar, mini-breakdown, full link) ------
 // `showOwnerControls` — pass true only when rendering on the OWNER's own
 // profile, to show the per-score hide/unhide toggle.
+// Profile-level score view (own + public). Defaults to "ai" when the
+// profile owner has AI enabled; per-row fallback to Standard.
+let PROFILE_SCORE_VIEW = "standard";
+function profileScoreOf(s) {
+  if (PROFILE_SCORE_VIEW === "ai" && s && s.ai_score !== null && s.ai_score !== undefined) return s.ai_score;
+  return s ? s.score_value : 0;
+}
+function profileBreakdownOf(s) {
+  if (PROFILE_SCORE_VIEW === "ai" && s && Array.isArray(s.ai_breakdown)) return s.ai_breakdown;
+  return s ? s.breakdown : null;
+}
+function scoreRowsHaveAi(rows) {
+  return Array.isArray(rows) && rows.some(s => s && s.ai_score !== null && s.ai_score !== undefined);
+}
+function profileScoreToggle(onSwitch) {
+  const t = el(`
+    <div class="in-scoreview" style="margin:0 0 12px">
+      <span class="in-scoreview-label">Scoring</span>
+      <div class="in-scoreview-seg" role="tablist">
+        <button class="in-scoreview-btn${PROFILE_SCORE_VIEW === "standard" ? " active" : ""}" data-view="standard" role="tab">Standard</button>
+        <button class="in-scoreview-btn${PROFILE_SCORE_VIEW === "ai" ? " active" : ""}" data-view="ai" role="tab">AI-inclusive</button>
+      </div>
+    </div>`);
+  t.querySelectorAll("[data-view]").forEach(b => {
+    b.onclick = () => { if (b.dataset.view !== PROFILE_SCORE_VIEW) { PROFILE_SCORE_VIEW = b.dataset.view; onSwitch(); } };
+  });
+  return t;
+}
+
 function renderScoreRow(s, showOwnerControls) {
-  const val = Math.max(0, Math.min(100, Math.round(s.score_value)));
+  const val = Math.max(0, Math.min(100, Math.round(profileScoreOf(s))));
   const date = new Date(s.created_at).toLocaleDateString();
   const typeLabel = esc(s.target_type.replace("_", " "));
   const isHidden = !!s.hidden;
   let miniRows = "";
-  if (Array.isArray(s.breakdown) && s.breakdown.length) {
-    miniRows = s.breakdown.map(f => `
+  const bd = profileBreakdownOf(s);
+  if (Array.isArray(bd) && bd.length) {
+    miniRows = bd.map(f => `
       <div class="mini-row">
         <span class="mini-factor">${esc(scoreFactorLabel(f.factor))}</span>
         <span class="mini-detail">${esc(f.detail || "")}</span>
@@ -573,7 +613,7 @@ async function openScoreRemoveDialog(s, typeLabel, onDone) {
   // scores stack behind the visible one, and what would resurface.
   const params = new URLSearchParams({ target_type: s.target_type, target_value: s.target_value });
   const r = await api("/score/history.php?" + params.toString());
-  const hist = (r.ok && r.data?.success && Array.isArray(r.data.data)) ? r.data.data : [];
+  const hist = (r.ok && r.data?.success && Array.isArray(r.data.data?.rows)) ? r.data.data.rows : [];
   const total = hist.length;
 
   // The "next in line" is the newest score that ISN'T the one being
@@ -2428,12 +2468,23 @@ async function renderPublicProfile(uuid) {
   // bio — same distinct box as the owner view, read-only here.
   rightCol.appendChild(renderBioBox(attrs, false));
 
-  const scoreRows = (scores.data?.data || []);
+  const scorePayload = scores.data?.data || {};
+  const scoreRows = Array.isArray(scorePayload.rows) ? scorePayload.rows : [];
+  const scoreAiEnabled = !!scorePayload.ai_enabled;   // profile OWNER's flag
+  // Default to AI view when the owner has AI enabled (public viewers see
+  // the owner's AI scores only because the owner opted in; hidden rows are
+  // already filtered server-side and by the owner's hide toggle).
+  PROFILE_SCORE_VIEW = scoreAiEnabled ? "ai" : "standard";
   const scoreCard = el(`<div class="in-card2"><h2>Scores</h2><div></div></div>`);
   rightCol.appendChild(scoreCard);
   const ssb = scoreCard.querySelector("div");
-  if (!scoreRows.length) ssb.appendChild(el(`<div class="in-empty">No scores to show.</div>`));
-  else scoreRows.forEach(s => ssb.appendChild(renderScoreRow(s, false)));
+  const paintPubScores = () => {
+    ssb.innerHTML = "";
+    if (scoreAiEnabled && scoreRowsHaveAi(scoreRows)) ssb.appendChild(profileScoreToggle(paintPubScores));
+    if (!scoreRows.length) ssb.appendChild(el(`<div class="in-empty">No scores to show.</div>`));
+    else scoreRows.forEach(s => ssb.appendChild(renderScoreRow(s, false)));
+  };
+  paintPubScores();
 
   roSection(rightCol, "Experience", jobs.data?.data, j => `<div class="meta"><div class="t">${esc(j.title)}</div><div class="s">${esc(j.company_name || "")}${j.start_date ? " · " + j.start_date + (j.end_date ? " – " + j.end_date : " – Present") : ""}</div></div>`);
   roSection(rightCol, "Education", edu.data?.data, e => `<div class="meta"><div class="t">${esc(e.degree || e.institution)}</div><div class="s">${esc([e.institution, e.field].filter(Boolean).join(" · "))}${e.end_year ? " · " + e.end_year : ""}</div></div>`);
@@ -3186,13 +3237,21 @@ async function renderScoreBreakdown(scoreId) {
   const view = $("view");
   view.innerHTML = `<div class="in-loading">Loading breakdown…</div>`;
   const res = await api("/score/history.php");
-  const all = res.data?.data || [];
+  const payload = res.data?.data || {};
+  const all = Array.isArray(payload.rows) ? payload.rows : [];
+  const aiEnabled = !!payload.ai_enabled;
   const s = all.find(x => String(x.id) === String(scoreId));
   if (!s) {
     view.innerHTML = `<div class="in-card2"><div class="in-empty" style="text-align:center">Score not found.</div><div style="text-align:center;margin-top:14px"><button class="in-btn ghost" style="flex:none;padding:9px 18px" onclick="location.hash='scores'">← Back to scores</button></div></div>`;
     return;
   }
-  const hasAi = s.ai_score !== null && s.ai_score !== undefined;
+  // AI toggle only when the section is CURRENTLY enabled AND this row has
+  // AI data. Disabling the AI Skillset removes AI-inclusivity everywhere,
+  // even for rows that still carry a stored ai_score.
+  // Default to AI when enabled (item #3), until the user manually switches.
+  if (!aiEnabled) DETAIL_VIEW = "standard";
+  else if (!DETAIL_VIEW_TOUCHED) DETAIL_VIEW = "ai";
+  const hasAi = aiEnabled && s.ai_score !== null && s.ai_score !== undefined;
   const val = Math.max(0, Math.min(100, Math.round(detailScoreOf(s))));
   const date = new Date(s.created_at).toLocaleString();
   const bdData = detailBreakdownOf(s);
@@ -3273,6 +3332,7 @@ async function renderScoreBreakdown(scoreId) {
 // fallback to Standard when a given row has no AI score (e.g. it was
 // scored before the user added AI skills).
 let DETAIL_VIEW = "standard";   // "standard" | "ai"
+let DETAIL_VIEW_TOUCHED = false; // set once the user manually switches
 function detailScoreOf(r) {
   if (DETAIL_VIEW === "ai" && r && r.ai_score !== null && r.ai_score !== undefined) return r.ai_score;
   return r ? r.score_value : 0;
@@ -3295,7 +3355,7 @@ function detailViewToggle(onSwitch) {
       </div>
     </div>`);
   t.querySelectorAll("[data-view]").forEach(b => {
-    b.onclick = () => { if (b.dataset.view !== DETAIL_VIEW) { DETAIL_VIEW = b.dataset.view; onSwitch(); } };
+    b.onclick = () => { if (b.dataset.view !== DETAIL_VIEW) { DETAIL_VIEW = b.dataset.view; DETAIL_VIEW_TOUCHED = true; onSwitch(); } };
   });
   return t;
 }
@@ -3321,8 +3381,15 @@ async function renderScoreHistory(encoded) {
 
   const params = new URLSearchParams({ target_type: targetType, target_value: targetValue });
   const res = await api("/score/history.php?" + params.toString());
+  const payload = res.data?.data || {};
+  const aiEnabled = !!payload.ai_enabled;
+  // AI-inclusivity disappears when the AI Skillset is off, even if rows
+  // still carry a stored ai_score.
+  // Default to AI when enabled (item #3), until the user manually switches.
+  if (!aiEnabled) DETAIL_VIEW = "standard";
+  else if (!DETAIL_VIEW_TOUCHED) DETAIL_VIEW = "ai";
   // history.php returns newest-first; we want oldest-first for the chart.
-  const rows = (res.data?.data || []).slice().reverse();
+  const rows = (Array.isArray(payload.rows) ? payload.rows : []).slice().reverse();
 
   const typeLabel = esc(targetType.replace("_", " "));
   const back = `<div class="in-back"><button class="in-back-btn" onclick="location.hash='scores'">← Back to scores</button></div>`;
@@ -3343,7 +3410,7 @@ async function renderScoreHistory(encoded) {
     : (delta > 0 ? `+${delta}` : String(delta));
   const deltaCls = delta > 0 ? "up" : (delta < 0 ? "down" : "flat");
 
-  const showToggle = rowsHaveAi(rows);
+  const showToggle = aiEnabled && rowsHaveAi(rows);
 
   view.innerHTML = "";
   const container = el(`<div style="margin:0 auto"></div>`);

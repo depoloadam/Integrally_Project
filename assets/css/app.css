@@ -2464,6 +2464,49 @@ html.in-reduce-motion *::after {
 .in-scoreview-btn.active { background:color-mix(in srgb, var(--in-gold) 18%, var(--in-card)); color:var(--in-ink); font-weight:700; }
 .in-scoreview-hint { font-size:12px; color:var(--in-ink-soft); }
 /* =====================================================================
+   Company applicant graph (ja-graph / ja-hist / ja-swarm)
+   ---------------------------------------------------------------------
+   The graph markup shipped in commit 13cc801 ("application graphs") with
+   NO accompanying CSS, so it rendered unstyled. These styles were added
+   to tie it in: a collapsible panel above the applicant list with a
+   distribution (histogram) and spread (beeswarm) view.
+   ===================================================================== */
+.ja-graph { border:1px solid var(--in-line); border-radius:12px; margin:0 0 16px; background:var(--in-card); overflow:hidden; }
+.ja-graph-toggle { display:flex; align-items:center; gap:10px; width:100%; padding:12px 14px; background:none; border:none; cursor:pointer; font-family:inherit; text-align:left; color:var(--in-ink); }
+.ja-graph-toggle:hover { background:color-mix(in srgb, var(--in-ink) 3%, var(--in-card)); }
+.ja-graph-caret { display:inline-block; font-size:11px; color:var(--in-ink-soft); transition:transform .15s; }
+.ja-graph.open .ja-graph-caret { transform:rotate(90deg); }
+.ja-graph-toggle-lbl { font-size:14px; font-weight:700; }
+.ja-graph-toggle-hint { font-size:12px; color:var(--in-ink-soft); }
+.ja-graph-body { padding:4px 16px 16px; border-top:1px solid var(--in-line); }
+.ja-graph-bar { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; flex-wrap:wrap; margin:12px 0 14px; }
+.ja-graph-scope { font-size:12.5px; color:var(--in-ink-soft); line-height:1.5; flex:1; min-width:220px; }
+.ja-graph-modes { display:inline-flex; border:1px solid var(--in-line); border-radius:999px; padding:2px; background:var(--in-card); flex:none; }
+.ja-graph-mode { font-family:inherit; font-size:12.5px; font-weight:600; cursor:pointer; border:none; background:none; color:var(--in-ink-soft); padding:5px 14px; border-radius:999px; transition:background .12s, color .12s; }
+.ja-graph-mode.active { background:color-mix(in srgb, var(--in-gold) 18%, var(--in-card)); color:var(--in-ink); font-weight:700; }
+.ja-graph-canvas { min-height:140px; }
+.ja-graph-note { font-size:12px; color:var(--in-ink-soft); margin-top:10px; font-style:italic; }
+
+/* Distribution histogram */
+.ja-hist { display:flex; flex-direction:column; gap:6px; }
+.ja-hist-bars { display:flex; align-items:flex-end; gap:6px; height:160px; padding-top:8px; }
+.ja-hist-col { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; cursor:default; }
+.ja-hist-count { font-size:11px; font-weight:700; color:var(--in-ink-soft); margin-bottom:4px; min-height:14px; }
+.ja-hist-bar { width:100%; border-radius:5px 5px 0 0; background:linear-gradient(180deg, color-mix(in srgb, var(--in-gold) 55%, var(--in-card)), var(--in-gold)); transition:filter .12s; }
+.ja-hist-col:hover .ja-hist-bar { filter:brightness(1.08); }
+.ja-hist-axis { display:flex; justify-content:space-between; font-size:11px; color:var(--in-ink-soft); border-top:1px solid var(--in-line); padding-top:5px; }
+
+/* Beeswarm spread */
+.ja-swarm { display:flex; flex-direction:column; gap:6px; }
+.ja-swarm-lane { position:relative; margin:8px 0; min-height:38px; }
+.ja-swarm-dot { position:absolute; transform:translateX(-50%); cursor:pointer; transition:transform .1s; }
+.ja-swarm-dot:hover { transform:translateX(-50%) scale(1.12); z-index:3; }
+.ja-swarm-dot .connect-ava { border:2px solid var(--in-card); box-shadow:0 1px 4px rgba(0,0,0,.18); }
+.ja-swarm-dot.hot .connect-ava { border-color:var(--in-gold); box-shadow:0 0 0 2px var(--in-gold); }
+.ja-swarm-axis { display:flex; justify-content:space-between; font-size:11px; color:var(--in-ink-soft); border-top:1px solid var(--in-line); padding-top:5px; }
+/* Row highlight when its graph mark is hovered. */
+.ja-row.hot, .ja-row.graph-hot { background:color-mix(in srgb, var(--in-gold) 10%, var(--in-card)); }
+/* =====================================================================
    Feed rail — "Your scores" card
    ---------------------------------------------------------------------
    RESTORED. This block was lost when the hover-card drop overwrote

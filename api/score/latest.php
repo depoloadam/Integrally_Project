@@ -49,11 +49,22 @@ if (!$isOwner) {
     }
 }
 
-// Latest score per (target_type, target_value): take the max created_at
-// per target, then join back to get that row's full data.
-// ai_score is included; if the column isn't migrated yet the query falls
-// back to the Standard-only column set (see the catch below).
-$selectAi = 's.ai_score,';
+// The profile OWNER's current AI Skillset state. Per the product rule,
+// AI scores are available (to the owner AND to public viewers) only when
+// the owner has AI enabled — turning it off withdraws AI-inclusivity for
+// all parties. $userId is the owner here (self or the ?uuid profile), so
+// this is the owner's flag in both cases.
+$ownerAiEnabled = false;
+$aiFlag = $pdo->prepare(
+    "SELECT setting_value FROM user_settings
+     WHERE user_id = ? AND setting_key = 'ai_box_enabled' LIMIT 1"
+);
+$aiFlag->execute([$userId]);
+$aiFlagRow = $aiFlag->fetch();
+if ($aiFlagRow && $aiFlagRow['setting_value'] === '1') $ownerAiEnabled = true;
+
+// Only carry ai_score through when the owner has AI enabled.
+$selectAi = $ownerAiEnabled ? 's.ai_score, s.ai_breakdown,' : '';
 $buildSql = function (string $aiCol) {
     return '
     SELECT s.id, s.target_type, s.target_value, s.score_value,
@@ -78,6 +89,7 @@ try {
     $rows = $stmt->fetchAll();
 } catch (\PDOException $e) {
     if (strpos($e->getMessage(), 'ai_score') !== false || $e->getCode() === '42S22') {
+        $ownerAiEnabled = false;
         $stmt = $pdo->prepare($buildSql(''));   // pre-migration fallback
         $stmt->execute([$userId, $userId]);
         $rows = $stmt->fetchAll();
@@ -105,10 +117,14 @@ foreach ($rows as $r) {
         'target_value' => $r['target_value'],
         'score_value'  => (float) $r['score_value'],
         'ai_score'     => isset($r['ai_score']) && $r['ai_score'] !== null ? (float) $r['ai_score'] : null,
+        'ai_breakdown' => isset($r['ai_breakdown']) && $r['ai_breakdown'] ? json_decode($r['ai_breakdown'], true) : null,
         'algo_version' => $r['algo_version'],
         'created_at'   => $r['created_at'],
         'hidden'       => $isHidden,
     ];
 }
 
-Response::success($out);
+Response::success([
+    'rows'       => $out,
+    'ai_enabled' => $ownerAiEnabled,
+]);

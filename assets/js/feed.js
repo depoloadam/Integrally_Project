@@ -312,7 +312,7 @@ async function buildScoreRail(mount) {
   try {
     const r = await api("/score/latest.php");
     if (!r.ok) { drop(); return; }
-    scores = r.data?.data || [];
+    scores = r.data?.data?.rows || [];
   } catch (_) { drop(); return; }
 
   const card = el(`<div class="railcard scorecard">

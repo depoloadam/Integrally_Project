@@ -47,9 +47,15 @@ $sort  = in_array($_GET['sort'] ?? '', $SORTS, true) ? $_GET['sort'] : 'score';
 // marks are the candidate's personal off-platform tracking records and
 // are never surfaced to the company. Fetched score-first so score_rank is
 // stable regardless of the display sort.
+// Probe for the AI column once (migration_application_ai_score.sql).
+$hasAi = false;
+try { $pdo->query('SELECT ai_score FROM job_applications LIMIT 1'); $hasAi = true; }
+catch (\PDOException $e) { $hasAi = false; }
+$aiSel = $hasAi ? 'a.ai_score,' : '';
+
 $stmt = $pdo->prepare(
     "SELECT a.uuid, a.status, a.created_at, a.withdrawn_at,
-            a.score_value, a.resume_file, a.resume_name,
+            a.score_value, $aiSel a.resume_file, a.resume_name,
             u.uuid AS user_uuid, u.username, u.first_name, u.last_name,
             u.profile_pic
      FROM job_applications a
@@ -81,6 +87,7 @@ foreach ($stmt->fetchAll() as $r) {
         'status_label' => Applications::statusLabel($derived),
         'applied_at'   => $r['created_at'],
         'score_value'  => $r['score_value'] !== null ? (float) $r['score_value'] : null,
+        'ai_score'     => (isset($r['ai_score']) && $r['ai_score'] !== null) ? (float) $r['ai_score'] : null,
         'score_rank'   => $scoreRank,
         'has_resume'   => !empty($r['resume_file']),
         'candidate' => [

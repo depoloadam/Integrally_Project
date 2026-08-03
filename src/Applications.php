@@ -191,10 +191,25 @@ class Applications
         $profile = ScoreEngine::gatherProfile($pdo, $userId);
         $result  = ScoreEngine::compute($profile, 'job_title', $jobTitle);
 
+        // AI-inclusive snapshot — only when THIS applicant currently has
+        // their AI Skillset enabled. If it's off, there is no AI score for
+        // them (per the product rule), so the company's AI view shows no
+        // score rather than a Standard-equivalent fallback.
+        $aiValue = null;
+        $aiBreakdown = null;
+        $ai = $profile['ai_skillset'] ?? ['enabled' => false];
+        if (!empty($ai['enabled'])) {
+            $aiResult    = ScoreEngine::computeAiInclusive($profile, 'job_title', $jobTitle);
+            $aiValue     = (float) $aiResult['score'];
+            $aiBreakdown = $aiResult['breakdown'];
+        }
+
         return [
-            'value'     => (float) $result['score'],
-            'breakdown' => $result['breakdown'],
-            'algo'      => ScoreEngine::VERSION,
+            'value'        => (float) $result['score'],
+            'breakdown'    => $result['breakdown'],
+            'ai_value'     => $aiValue,
+            'ai_breakdown' => $aiBreakdown,
+            'algo'         => ScoreEngine::VERSION,
         ];
     }
 }

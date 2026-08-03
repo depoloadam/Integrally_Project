@@ -195,20 +195,44 @@ if ($form['collect_score']) {
 
 // ---- Insert ----------------------------------------------------------
 $uuid = Auth::uuid();
-$stmt = $pdo->prepare(
-    "INSERT INTO job_applications
-       (uuid, job_id, user_id, apply_channel, answers, resume_file, resume_name,
-        score_value, score_breakdown, score_algo)
-     VALUES (?, ?, ?, 'native', ?, ?, ?, ?, ?, ?)"
-);
-$stmt->execute([
-    $uuid, (int) $job['id'], $userId,
-    $answers ? json_encode($answers) : null,
-    $snapFile, $snapName,
-    $score['value'] ?? null,
-    isset($score['breakdown']) ? json_encode($score['breakdown']) : null,
-    $score['algo'] ?? null,
-]);
+try {
+    $stmt = $pdo->prepare(
+        "INSERT INTO job_applications
+           (uuid, job_id, user_id, apply_channel, answers, resume_file, resume_name,
+            score_value, score_breakdown, score_algo, ai_score, ai_breakdown)
+         VALUES (?, ?, ?, 'native', ?, ?, ?, ?, ?, ?, ?, ?)"
+    );
+    $stmt->execute([
+        $uuid, (int) $job['id'], $userId,
+        $answers ? json_encode($answers) : null,
+        $snapFile, $snapName,
+        $score['value'] ?? null,
+        isset($score['breakdown']) ? json_encode($score['breakdown']) : null,
+        $score['algo'] ?? null,
+        $score['ai_value'] ?? null,
+        isset($score['ai_breakdown']) && $score['ai_breakdown'] !== null ? json_encode($score['ai_breakdown']) : null,
+    ]);
+} catch (\PDOException $e) {
+    // AI columns not migrated yet — fall back to the Standard-only insert.
+    if (strpos($e->getMessage(), 'ai_score') !== false || $e->getCode() === '42S22') {
+        $stmt = $pdo->prepare(
+            "INSERT INTO job_applications
+               (uuid, job_id, user_id, apply_channel, answers, resume_file, resume_name,
+                score_value, score_breakdown, score_algo)
+             VALUES (?, ?, ?, 'native', ?, ?, ?, ?, ?, ?)"
+        );
+        $stmt->execute([
+            $uuid, (int) $job['id'], $userId,
+            $answers ? json_encode($answers) : null,
+            $snapFile, $snapName,
+            $score['value'] ?? null,
+            isset($score['breakdown']) ? json_encode($score['breakdown']) : null,
+            $score['algo'] ?? null,
+        ]);
+    } else {
+        throw $e;
+    }
+}
 
 Response::success([
     'uuid'          => $uuid,
