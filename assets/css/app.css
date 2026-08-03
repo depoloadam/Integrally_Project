@@ -2471,7 +2471,15 @@ html.in-reduce-motion *::after {
    to tie it in: a collapsible panel above the applicant list with a
    distribution (histogram) and spread (beeswarm) view.
    ===================================================================== */
-.ja-graph { border:1px solid var(--in-line); border-radius:12px; margin:0 0 16px; background:var(--in-card); overflow:hidden; }
+.ja-graph { border:1px solid var(--in-line); border-radius:12px; margin:18px 0 16px; background:var(--in-card); overflow:hidden; }
+/* Applicant page header row: title on the left, sort + scoring toggle on
+   the right, with breathing room before the graph/list below. */
+.ja-head { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:6px; }
+.ja-head-titles { min-width:0; }
+.ja-sort { display:inline-flex; align-items:center; gap:8px; }
+.ja-sort-lbl { font-size:12px; font-weight:600; color:var(--in-ink-soft); }
+.ja-sort-sel { font-family:inherit; font-size:13px; padding:6px 10px; border:1px solid var(--in-line); border-radius:8px; background:var(--in-card); color:var(--in-ink); }
+#ja-view-slot { display:flex; align-items:center; }
 .ja-graph-toggle { display:flex; align-items:center; gap:10px; width:100%; padding:12px 14px; background:none; border:none; cursor:pointer; font-family:inherit; text-align:left; color:var(--in-ink); }
 .ja-graph-toggle:hover { background:color-mix(in srgb, var(--in-ink) 3%, var(--in-card)); }
 .ja-graph-caret { display:inline-block; font-size:11px; color:var(--in-ink-soft); transition:transform .15s; }
