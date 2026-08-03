@@ -73,7 +73,6 @@ $CEILINGS = [
     'skills_match'        => ScoreEngine::W_SKILLS,
     'education'           => ScoreEngine::W_EDU_PRESENCE + ScoreEngine::W_EDU_RELEVANCE,
     'certifications'      => ScoreEngine::W_CERTS,
-    'profile_strength'    => ScoreEngine::W_PROFILE_STRENGTH,
 ];
 
 // ---------------------------------------------------------------------

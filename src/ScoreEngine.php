@@ -21,19 +21,21 @@ require_once __DIR__ . '/CertCatalog.php';
 
 class ScoreEngine
 {
-    const VERSION = 'skills-basecredit-v2.4';
+    const VERSION = 'no-completeness-split1-v2.5';
 
     // ------------------------------------------------------------------
     // Tunable weights (must sum to 100). Adjust ratios here — the logic
     // below scales automatically.
     // ------------------------------------------------------------------
-    const W_EXPERIENCE_RELEVANT = 32;  // years in the job's category (adjacent = half credit)
-    const W_EXPERIENCE_GENERAL  = 8;   // any work history at all (small floor)
-    const W_SKILLS              = 20;  // relevant skills (with experience backfill floor)
-    const W_EDU_PRESENCE        = 6;   // has degree(s)
-    const W_EDU_RELEVANCE       = 9;   // degree field related to the job's category
-    const W_CERTS               = 10;  // certifications, relevance-weighted
-    const W_PROFILE_STRENGTH    = 15;  // general completeness
+    const W_EXPERIENCE_RELEVANT = 37;  // years in the job's category (adjacent = half credit)
+    const W_EXPERIENCE_GENERAL  = 9;   // any work history at all (small floor)
+    const W_SKILLS              = 22;  // relevant skills (with experience backfill floor)
+    const W_EDU_PRESENCE        = 7;   // has degree(s)
+    const W_EDU_RELEVANCE       = 11;  // degree field related to the job's category
+    const W_CERTS               = 14;  // certifications, relevance-weighted
+    // Profile-completeness factor removed (v2.5); its 15 points were
+    // redistributed above (experience/certs/education/skills). Weights
+    // still sum to 100: 37 + 9 + 22 + 7 + 11 + 14 = 100.
 
     // Relevant years that earn full experience points.
     const FULL_RELEVANT_YEARS = 8.0;
@@ -260,27 +262,14 @@ class ScoreEngine
             'points' => round($certPts, 1),
         ];
 
-        // ---- 5) General profile strength ------------------------------
-        // Interests removed from the product UI (v2.2): their 2 points
-        // were redistributed to education (3->4) and certifications
-        // (2->3) so the 15-point ceiling stays reachable. gatherProfile
-        // still returns interests for any other consumer; they simply
-        // no longer score.
-        $sc = count($profile['skills']);
-        $strength  = $sc >= 3 ? 4 : ($sc >= 1 ? 2 : 0);
-        $strength += $eduCount >= 1 ? 4 : 0;
-        $strength += count($profile['certifications']) >= 1 ? 3 : 0;
-        $jc = count($profile['jobs']);
-        $strength += $jc >= 2 ? 4 : ($jc >= 1 ? 2 : 0);
-        $strength  = min(self::W_PROFILE_STRENGTH, $strength);
-        $factors[] = [
-            'factor' => 'profile_strength',
-            'detail' => 'Overall profile completeness',
-            'points' => round((float) $strength, 1),
-        ];
-
         // ---- Total -----------------------------------------------------
-        $score = $experiencePts + $skillPts + ($eduPresencePts + $eduRelPts) + $certPts + $strength;
+        // Profile-completeness/strength factor removed (v2.5): general
+        // completeness didn't reflect true expertise. Its 15 weight points
+        // were redistributed into the factors that do — experience, certs,
+        // education, and skills (see the W_* constants) — keeping the sum
+        // at 100. gatherProfile still returns interests/etc. for other
+        // consumers; they simply no longer score here.
+        $score = $experiencePts + $skillPts + ($eduPresencePts + $eduRelPts) + $certPts;
         $score = max(0.0, min(100.0, $score));
 
         return [

@@ -3153,7 +3153,6 @@ const SCORE_FACTOR_LABEL = {
   skills_match:        "Skills match",
   education:           "Education",
   certifications:      "Certifications",
-  profile_strength:    "Profile completeness",
 };
 // What each factor rewards, in plain language.
 const SCORE_FACTOR_BLURB = {
@@ -3162,7 +3161,6 @@ const SCORE_FACTOR_BLURB = {
   skills_match:        "Listed skills weighted by how closely they relate to this job.",
   education:           "Having a degree, plus extra when the field of study relates to this job.",
   certifications:      "Certifications you hold, weighted by relevance to this job.",
-  profile_strength:    "How complete your profile is overall.",
 };
 function scoreFactorLabel(key) {
   return SCORE_FACTOR_LABEL[key] || String(key || "factor").replace(/_/g, " ");
