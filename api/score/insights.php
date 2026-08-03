@@ -76,8 +76,20 @@ const VALID_TYPES = ['job_title', 'skill', 'field'];
 // scores table, so re-scoring never double-counts. Expressed as a
 // reusable subquery string.
 // ---------------------------------------------------------------------
-$latestPerUserTarget = '
-    SELECT s.user_id, s.target_type, s.target_value, s.score_value, s.created_at
+// Probe once whether the ai_score column exists (migration_ai_score.sql).
+// Everything AI-related below keys off this so an un-migrated DB just
+// behaves as if no AI scores exist.
+$hasAiColumn = false;
+try {
+    $pdo->query('SELECT ai_score FROM scores LIMIT 1');
+    $hasAiColumn = true;
+} catch (\PDOException $e) {
+    $hasAiColumn = false;
+}
+
+$aiSel = $hasAiColumn ? 's.ai_score,' : '';
+$latestPerUserTarget = "
+    SELECT s.user_id, s.target_type, s.target_value, s.score_value, $aiSel s.created_at
     FROM scores s
     JOIN (
         SELECT user_id, target_type, target_value, MAX(created_at) AS latest
@@ -86,16 +98,33 @@ $latestPerUserTarget = '
     ) m ON m.user_id = s.user_id
        AND m.target_type = s.target_type
        AND m.target_value = s.target_value
-       AND m.latest = s.created_at';
+       AND m.latest = s.created_at";
 
 // =====================================================================
 // 1. PERSONAL — the viewer's latest score per target, with community
 //    average + pool size + percentile attached per target.
 // =====================================================================
 
-// 1a. Viewer's own latest per target.
+// Viewer's AI Skillset state. Per product rule: when a user's AI Skillset
+// is turned OFF, their AI score is unavailable to everyone (no toggle, no
+// value) — so we only ever expose ai_score when this is enabled AND the
+// column exists.
+$aiEnabled = false;
+if ($hasAiColumn) {
+    $aiFlag = $pdo->prepare(
+        "SELECT setting_value FROM user_settings
+         WHERE user_id = ? AND setting_key = 'ai_box_enabled' LIMIT 1"
+    );
+    $aiFlag->execute([$userId]);
+    $aiFlagRow = $aiFlag->fetch();
+    if ($aiFlagRow && $aiFlagRow['setting_value'] === '1') $aiEnabled = true;
+}
+
+// 1a. Viewer's own latest per target. ai_score is carried through the
+//     shared subquery; we only surface it in the payload when enabled.
 $mine = $pdo->prepare("
-    SELECT lt.target_type, lt.target_value, lt.score_value, lt.created_at
+    SELECT lt.target_type, lt.target_value, lt.score_value, "
+    . ($aiEnabled ? 'lt.ai_score,' : '') . " lt.created_at
     FROM ($latestPerUserTarget) lt
     WHERE lt.user_id = ?
     ORDER BY lt.score_value DESC");
@@ -188,6 +217,8 @@ foreach ($mineRows as $r) {
         'target_type'  => $r['target_type'],
         'target_value' => $r['target_value'],
         'score_value'  => $myVal,
+        'ai_score'     => ($aiEnabled && isset($r['ai_score']) && $r['ai_score'] !== null)
+                            ? (float) $r['ai_score'] : null,
         'created_at'   => $r['created_at'],
         'hidden'       => isset($hiddenSet[$k]),
         'community_avg' => $avg,
@@ -264,6 +295,7 @@ foreach ($trendStmt->fetchAll() as $r) {
 
 Response::success([
     'generated_at'  => date('c'),
+    'ai_enabled'    => $aiEnabled,
     'personal'      => $personal,
     'personal_mean' => $personalMean,
     'averages'      => [

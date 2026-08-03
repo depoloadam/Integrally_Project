@@ -25,6 +25,17 @@
 
 let SCORES_STATE = { activeTarget: null };   // "type|value" of open tab
 let SCORES_CACHE = null;                     // last insights payload
+let SCORE_VIEW = "standard";                 // "standard" | "ai" (display only)
+
+// Which score to display for a target, honoring the active view. Falls
+// back to Standard whenever an AI score isn't present (e.g. AI Skillset
+// off, or a target scored before AI skills were added).
+function scoreOf(p) {
+  if (SCORE_VIEW === "ai" && p && p.ai_score !== null && p.ai_score !== undefined) {
+    return p.ai_score;
+  }
+  return p ? p.score_value : 0;
+}
 
 async function renderScores() {
   document.querySelectorAll("[data-nav]").forEach(x => x.classList.toggle("active", x.dataset.nav === "scores"));
@@ -61,8 +72,15 @@ async function renderScores() {
 
   const personal = Array.isArray(data.personal) ? data.personal : [];
 
+  // If AI Skillset is off (or no AI scores exist), force the Standard view
+  // so a stale "ai" selection from a prior render can't hide scores.
+  if (!data.ai_enabled) SCORE_VIEW = "standard";
+
   // ---- Region 1: summary -------------------------------------------
   wrap.appendChild(buildSummary(data, personal));
+
+  // ---- Score view toggle (only when the viewer's AI Skillset is on) --
+  if (data.ai_enabled) wrap.appendChild(buildScoreViewToggle());
 
   // ---- Region 2: your scores (tabbed) ------------------------------
   wrap.appendChild(buildPersonalPanel(personal));
@@ -74,15 +92,38 @@ async function renderScores() {
   wrap.appendChild(buildTrending(data));
 }
 
-// ---------------------------------------------------------------------
-// Region 1 — summary hero. Three plain facts, no invented metrics: how
+// Segmented Standard / AI-inclusive toggle. Only rendered when the
+// viewer's AI Skillset is enabled. Switching re-renders the hub so every
+// region (hero, tabs, standing) reflects the chosen view via scoreOf().
+function buildScoreViewToggle() {
+  const wrap = el(`
+    <div class="in-scoreview">
+      <span class="in-scoreview-label">Scoring</span>
+      <div class="in-scoreview-seg" role="tablist">
+        <button class="in-scoreview-btn${SCORE_VIEW === "standard" ? " active" : ""}" data-view="standard" role="tab">Standard</button>
+        <button class="in-scoreview-btn${SCORE_VIEW === "ai" ? " active" : ""}" data-view="ai" role="tab">AI-inclusive</button>
+      </div>
+      <span class="in-scoreview-hint">${SCORE_VIEW === "ai"
+        ? "Includes your AI Skillset."
+        : "Your standard score."}</span>
+    </div>`);
+  wrap.querySelectorAll("[data-view]").forEach(btn => {
+    btn.onclick = () => {
+      const v = btn.dataset.view;
+      if (v === SCORE_VIEW) return;
+      SCORE_VIEW = v;
+      renderScores();   // re-render everything through the new view
+    };
+  });
+  return wrap;
+}
 // many targets you've scored, your mean across them, and your strongest.
 // ---------------------------------------------------------------------
 function buildSummary(data, personal) {
   const mean = data.personal_mean;
   const count = personal.length;
   const strongest = personal.reduce((best, p) =>
-    (!best || p.score_value > best.score_value) ? p : best, null);
+    (!best || scoreOf(p) > scoreOf(best)) ? p : best, null);
 
   const card = el(`<div class="in-card2 in-scores-hero"></div>`);
 
@@ -111,7 +152,7 @@ function buildSummary(data, personal) {
         <div class="in-scores-stat-lbl">your average score</div>
       </div>
       <div class="in-scores-stat in-scores-stat-strong">
-        <div class="in-score-badge in-scores-hero-badge">${Math.round(strongest.score_value)}</div>
+        <div class="in-score-badge in-scores-hero-badge">${Math.round(scoreOf(strongest))}</div>
         <div class="in-scores-stat-strongmeta">
           <div class="in-scores-stat-lbl">strongest</div>
           <div class="in-scores-stat-strongval">${esc(strongest.target_value)}</div>
@@ -152,7 +193,7 @@ function buildPersonalPanel(personal) {
     const k = keyOf(p);
     const b = el(`
       <button class="in-scores-tab" role="tab" data-target="${esc(k)}">
-        <span class="in-scores-tab-badge">${Math.round(p.score_value)}</span>
+        <span class="in-scores-tab-badge">${Math.round(scoreOf(p))}</span>
         <span class="in-scores-tab-name">${esc(p.target_value)}</span>
       </button>`);
     tabs.appendChild(b);
@@ -182,7 +223,7 @@ function buildPersonalPanel(personal) {
 // One target's standing: big badge, the red->green rail with your marker
 // AND a community-average marker, the comparison line, and detail links.
 function buildTargetStanding(p) {
-  const val = Math.max(0, Math.min(100, Math.round(p.score_value)));
+  const val = Math.max(0, Math.min(100, Math.round(scoreOf(p))));
   const typeLabel = esc(p.target_type.replace("_", " "));
   const date = new Date(p.created_at).toLocaleDateString();
   const avg = p.community_avg;
@@ -315,7 +356,7 @@ function buildAverages(data, personal) {
 // One target's standing: rank, your score vs average, and a distribution
 // histogram with your bucket highlighted.
 function buildStandingRow(p) {
-  const val = Math.round(p.score_value);
+  const val = Math.round(scoreOf(p));
   const avg = p.community_avg != null ? Math.round(p.community_avg) : null;
   const gap = p.gap_to_avg != null ? Math.round(p.gap_to_avg) : null;
   const gapClass = gap == null ? "" : (gap > 0 ? "up" : (gap < 0 ? "down" : "even"));

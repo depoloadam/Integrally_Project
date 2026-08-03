@@ -2456,6 +2456,13 @@ html.in-reduce-motion *::after {
 .in-confirm-delta { font-size:14px; color:var(--in-ink); background:color-mix(in srgb, var(--in-ink) 4%, var(--in-card)); border-radius:9px; padding:11px 14px; margin:6px 0 2px; }
 .in-confirm-delta.up { background:color-mix(in srgb, var(--in-gold) 12%, var(--in-card)); border:1px solid color-mix(in srgb, var(--in-gold) 30%, var(--in-line)); }
 .in-confirm-delta strong { font-weight:700; }
+/* Standard / AI-inclusive score-view toggle (Scores hub) */
+.in-scoreview { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:2px 0 14px; }
+.in-scoreview-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.7px; color:var(--in-ink-soft); }
+.in-scoreview-seg { display:inline-flex; border:1px solid var(--in-line); border-radius:999px; padding:2px; background:var(--in-card); }
+.in-scoreview-btn { font-family:inherit; font-size:12.5px; font-weight:600; cursor:pointer; border:none; background:none; color:var(--in-ink-soft); padding:5px 14px; border-radius:999px; transition:background .12s, color .12s; }
+.in-scoreview-btn.active { background:color-mix(in srgb, var(--in-gold) 18%, var(--in-card)); color:var(--in-ink); font-weight:700; }
+.in-scoreview-hint { font-size:12px; color:var(--in-ink-soft); }
 /* =====================================================================
    Feed rail — "Your scores" card
    ---------------------------------------------------------------------
