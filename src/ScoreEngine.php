@@ -37,6 +37,28 @@ class ScoreEngine
     // redistributed above (experience/certs/education/skills). Weights
     // still sum to 100: 37 + 9 + 22 + 7 + 11 + 14 = 100.
 
+    // ------------------------------------------------------------------
+    // AI-INCLUSIVE algorithm (second algorithm). Its own weight table:
+    // the Standard weights carved proportionally (x0.88) to make room for
+    // a dedicated AI-skills factor worth AI_W_AI_SKILLS. Sum is 100:
+    // 33 + 8 + 19 + 6 + 10 + 12 + 12 = 100. Stored alongside the Standard
+    // score (scores.ai_score); surfaced via the Standard/AI toggle.
+    // ------------------------------------------------------------------
+    const AI_W_EXPERIENCE_RELEVANT = 33;
+    const AI_W_EXPERIENCE_GENERAL  = 8;
+    const AI_W_SKILLS              = 19;
+    const AI_W_EDU_PRESENCE        = 6;
+    const AI_W_EDU_RELEVANCE       = 10;
+    const AI_W_CERTS               = 12;
+    const AI_W_AI_SKILLS           = 12;  // dedicated AI-skillset factor
+    // AI skills live in a sparser space than the general skill catalog, so
+    // relevance is judged more generously: a higher base floor and a lower
+    // "relevant" threshold than the Standard skill path.
+    const AI_SKILL_BASE_RELEVANCE  = 0.30;
+    const AI_SKILL_RELEVANT_THRESHOLD = 0.25;
+    // AI-skill "mass" (relevance summed) that earns the full AI-skills points.
+    const FULL_AI_SKILL_MASS       = 2.5;
+
     // Relevant years that earn full experience points.
     const FULL_RELEVANT_YEARS = 8.0;
     // Total years that earn the full general-experience floor.
@@ -57,15 +79,62 @@ class ScoreEngine
     const SKILL_BASE_RELEVANCE = 0.15;
 
     /**
-     * Compute a score for a user against a target.
-     *
-     * @param array  $profile     Gathered user data (see gatherProfile()).
-     * @param string $targetType  'job_title' | 'skill' | 'field'
-     * @param string $targetValue The thing being scored against.
+     * Standard algorithm — the default score. Unchanged composition:
+     * experience + skills + education + certs, weights summing to 100.
      *
      * @return array { score: float (0-100), breakdown: array }
      */
     public static function compute(array $profile, string $targetType, string $targetValue): array
+    {
+        return self::computeWeighted($profile, $targetType, $targetValue, [
+            'exp_rel'  => self::W_EXPERIENCE_RELEVANT,
+            'exp_gen'  => self::W_EXPERIENCE_GENERAL,
+            'skills'   => self::W_SKILLS,
+            'edu_pres' => self::W_EDU_PRESENCE,
+            'edu_rel'  => self::W_EDU_RELEVANCE,
+            'certs'    => self::W_CERTS,
+            'ai'       => 0,
+        ], false);
+    }
+
+    /**
+     * AI-inclusive algorithm — the second algorithm. Same factors as
+     * Standard but carved proportionally to add a dedicated AI-skills
+     * factor scored from the user's AI skillset (user_settings.ai_skills).
+     * When the user has no AI skillset enabled/listed, the AI factor
+     * contributes 0 and the score is simply the reweighted remainder.
+     *
+     * @return array { score: float (0-100), breakdown: array }
+     */
+    public static function computeAiInclusive(array $profile, string $targetType, string $targetValue): array
+    {
+        return self::computeWeighted($profile, $targetType, $targetValue, [
+            'exp_rel'  => self::AI_W_EXPERIENCE_RELEVANT,
+            'exp_gen'  => self::AI_W_EXPERIENCE_GENERAL,
+            'skills'   => self::AI_W_SKILLS,
+            'edu_pres' => self::AI_W_EDU_PRESENCE,
+            'edu_rel'  => self::AI_W_EDU_RELEVANCE,
+            'certs'    => self::AI_W_CERTS,
+            'ai'       => self::AI_W_AI_SKILLS,
+        ], true);
+    }
+
+    /**
+     * Shared scoring core, driven by a weight table $W so the Standard and
+     * AI-inclusive algorithms share one code path (no logic drift). When
+     * $withAi is true an extra AI-skills factor (weight $W['ai']) is scored
+     * from $profile['ai_skillset'].
+     *
+     * @param array  $profile     Gathered user data (see gatherProfile()).
+     * @param string $targetType  'job_title' | 'skill' | 'field'
+     * @param string $targetValue The thing being scored against.
+     * @param array  $W           Weight table (keys: exp_rel, exp_gen,
+     *                             skills, edu_pres, edu_rel, certs, ai).
+     * @param bool   $withAi       Include the AI-skills factor.
+     *
+     * @return array { score: float (0-100), breakdown: array }
+     */
+    private static function computeWeighted(array $profile, string $targetType, string $targetValue, array $W, bool $withAi): array
     {
         $factors = [];
         $target  = trim($targetValue);
@@ -102,8 +171,8 @@ class ScoreEngine
             $relevantYears += $years * $credit;
         }
 
-        $relPts = self::W_EXPERIENCE_RELEVANT * min(1.0, $relevantYears / self::FULL_RELEVANT_YEARS);
-        $genPts = self::W_EXPERIENCE_GENERAL  * min(1.0, $totalYears / self::FULL_GENERAL_YEARS);
+        $relPts = $W['exp_rel'] * min(1.0, $relevantYears / self::FULL_RELEVANT_YEARS);
+        $genPts = $W['exp_gen'] * min(1.0, $totalYears / self::FULL_GENERAL_YEARS);
         $factors[] = [
             'factor' => 'relevant_experience',
             'detail' => sprintf(
@@ -157,13 +226,13 @@ class ScoreEngine
             $skillMass += $rel * $prof;
             if ($rel >= self::RELEVANT_THRESHOLD) $relevantSkillNames[] = $name;
         }
-        $skillMatchPts = self::W_SKILLS * min(1.0, $skillMass / self::FULL_SKILL_MASS);
+        $skillMatchPts = $W['skills'] * min(1.0, $skillMass / self::FULL_SKILL_MASS);
 
         // Experience implies skills: deep relevant experience sets a floor
         // under the skill factor so a sparse-but-experienced profile can't
         // be leapfrogged by a keyword-stuffed empty one.
-        $expFraction = $experiencePts / (self::W_EXPERIENCE_RELEVANT + self::W_EXPERIENCE_GENERAL);
-        $backfill    = self::W_SKILLS * self::SKILL_BACKFILL_FRACTION * $expFraction;
+        $expFraction = $experiencePts / ($W['exp_rel'] + $W['exp_gen']);
+        $backfill    = $W['skills'] * self::SKILL_BACKFILL_FRACTION * $expFraction;
         $skillPts    = max($skillMatchPts, $backfill);
 
         $totalSkills = 0;
@@ -184,8 +253,8 @@ class ScoreEngine
 
         // ---- 3) Education (presence + field relevance) ----------------
         $eduCount = count($profile['education']);
-        $eduPresencePts = $eduCount >= 2 ? self::W_EDU_PRESENCE
-                        : ($eduCount === 1 ? self::W_EDU_PRESENCE * 0.67 : 0);
+        $eduPresencePts = $eduCount >= 2 ? $W['edu_pres']
+                        : ($eduCount === 1 ? $W['edu_pres'] * 0.67 : 0);
         $bestEduRel = 0.0;
         $bestEduField = null;
         foreach ($profile['education'] as $e) {
@@ -213,7 +282,7 @@ class ScoreEngine
 
             if ($rel > $bestEduRel) { $bestEduRel = $rel; $bestEduField = $e['field'] ?: $e['degree']; }
         }
-        $eduRelPts = self::W_EDU_RELEVANCE * $bestEduRel;
+        $eduRelPts = $W['edu_rel'] * $bestEduRel;
         $factors[] = [
             'factor' => 'education',
             'detail' => $eduCount
@@ -253,7 +322,7 @@ class ScoreEngine
             $certPts += 1 + 3 * $rel;
             if ($rel >= self::RELEVANT_THRESHOLD) $relCertCount++;
         }
-        $certPts = min(self::W_CERTS, $certPts);
+        $certPts = min($W['certs'], $certPts);
         $factors[] = [
             'factor' => 'certifications',
             'detail' => count($profile['certifications'])
@@ -262,6 +331,43 @@ class ScoreEngine
             'points' => round($certPts, 1),
         ];
 
+        // ---- 5) AI skills (AI-inclusive algorithm only) ---------------
+        // Scored from the user's AI skillset (user_settings.ai_skills),
+        // using a more generous relevance model than the Standard skill
+        // path (higher base floor, lower threshold) because the AI skill
+        // space is sparser. Contributes 0 when the skillset is disabled or
+        // empty. The Standard algorithm never reaches this block.
+        $aiSkillPts = 0.0;
+        $aiActive = false;
+        if ($withAi) {
+            $ai = $profile['ai_skillset'] ?? ['enabled' => false, 'skills' => []];
+            $aiMass = 0.0; $aiRelevant = [];
+            if (!empty($ai['enabled']) && !empty($ai['skills'])) {
+                $aiActive = true;
+                foreach ($ai['skills'] as $name) {
+                    $name = is_string($name) ? trim($name) : '';
+                    if ($name === '') continue;
+                    $rel = JobCatalog::titleSimilarity($name, $target);
+                    if ($catId !== null) {
+                        $rel = max($rel, JobCatalog::tokenRelevance($name, $catId));
+                    }
+                    $rel = max($rel, self::AI_SKILL_BASE_RELEVANCE);
+                    $aiMass += $rel;
+                    if ($rel >= self::AI_SKILL_RELEVANT_THRESHOLD) $aiRelevant[] = $name;
+                }
+            }
+            $aiSkillPts = $W['ai'] * min(1.0, $aiMass / self::FULL_AI_SKILL_MASS);
+            $factors[] = [
+                'factor' => 'ai_skills',
+                'detail' => count($aiRelevant)
+                    ? count($aiRelevant) . ' AI skill(s): ' . implode(', ', array_slice($aiRelevant, 0, 5))
+                    : (!empty($ai['enabled'])
+                        ? 'No AI skills listed'
+                        : 'AI skillset not enabled'),
+                'points' => round($aiSkillPts, 1),
+            ];
+        }
+
         // ---- Total -----------------------------------------------------
         // Profile-completeness/strength factor removed (v2.5): general
         // completeness didn't reflect true expertise. Its 15 weight points
@@ -269,7 +375,23 @@ class ScoreEngine
         // education, and skills (see the W_* constants) — keeping the sum
         // at 100. gatherProfile still returns interests/etc. for other
         // consumers; they simply no longer score here.
-        $score = $experiencePts + $skillPts + ($eduPresencePts + $eduRelPts) + $certPts;
+        $nonAi = $experiencePts + $skillPts + ($eduPresencePts + $eduRelPts) + $certPts;
+        if (!$withAi) {
+            $score = $nonAi;
+        } else {
+            // AI-inclusive (option (b), additive). The non-AI factors are
+            // carved to (100 - AI weight); renormalize them back to a full
+            // 100 base so the AI-inclusive score is directly comparable to
+            // Standard. The AI factor then adds a bonus scaled INTO the
+            // remaining headroom (how far below 100 the base sits), so AI
+            // skills can only ever RAISE the score, never dilute it — a
+            // partial AI factor can't underperform having no AI skills.
+            $denom = 100 - $W['ai'];
+            $base  = $denom > 0 ? $nonAi * (100.0 / $denom) : $nonAi;
+            $aiFrac = $W['ai'] > 0 ? min(1.0, $aiSkillPts / $W['ai']) : 0.0;
+            $headroom = max(0.0, 100.0 - $base);
+            $score = $base + $headroom * $aiFrac;
+        }
         $score = max(0.0, min(100.0, $score));
 
         return [
@@ -329,12 +451,33 @@ class ScoreEngine
         );
         $interests->execute([$userId]);
 
+        // AI skillset — stored in user_settings as 'ai_box_enabled' ("1"/"0")
+        // and 'ai_skills' (JSON string array). Loaded here so the AI-inclusive
+        // algorithm can score them; the Standard algorithm ignores this key.
+        // Mirrors api/profile/get.php's read exactly.
+        $aiStmt = $pdo->prepare(
+            "SELECT setting_key, setting_value FROM user_settings
+             WHERE user_id = ? AND setting_key IN ('ai_box_enabled', 'ai_skills')"
+        );
+        $aiStmt->execute([$userId]);
+        $aiEnabled = false;
+        $aiSkills  = [];
+        foreach ($aiStmt->fetchAll() as $row) {
+            if ($row['setting_key'] === 'ai_box_enabled') {
+                $aiEnabled = ($row['setting_value'] === '1');
+            } elseif ($row['setting_key'] === 'ai_skills') {
+                $decoded = json_decode((string) $row['setting_value'], true);
+                if (is_array($decoded)) $aiSkills = array_values(array_filter($decoded, 'is_string'));
+            }
+        }
+
         return [
             'skills'         => $skills->fetchAll(),
             'jobs'           => $jobs->fetchAll(),
             'education'      => $edu->fetchAll(),
             'certifications' => $certs->fetchAll(),
             'interests'      => $interests->fetchAll(),
+            'ai_skillset'    => ['enabled' => $aiEnabled, 'skills' => $aiSkills],
         ];
     }
 }

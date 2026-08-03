@@ -51,8 +51,13 @@ if (!$isOwner) {
 
 // Latest score per (target_type, target_value): take the max created_at
 // per target, then join back to get that row's full data.
-$sql = '
+// ai_score is included; if the column isn't migrated yet the query falls
+// back to the Standard-only column set (see the catch below).
+$selectAi = 's.ai_score,';
+$buildSql = function (string $aiCol) {
+    return '
     SELECT s.id, s.target_type, s.target_value, s.score_value,
+           ' . $aiCol . '
            s.algo_version, s.created_at
     FROM scores s
     JOIN (
@@ -65,10 +70,21 @@ $sql = '
        AND m.latest = s.created_at
     WHERE s.user_id = ?
     ORDER BY s.created_at DESC';
+};
 
-$stmt = $pdo->prepare($sql);
-$stmt->execute([$userId, $userId]);
-$rows = $stmt->fetchAll();
+try {
+    $stmt = $pdo->prepare($buildSql($selectAi));
+    $stmt->execute([$userId, $userId]);
+    $rows = $stmt->fetchAll();
+} catch (\PDOException $e) {
+    if (strpos($e->getMessage(), 'ai_score') !== false || $e->getCode() === '42S22') {
+        $stmt = $pdo->prepare($buildSql(''));   // pre-migration fallback
+        $stmt->execute([$userId, $userId]);
+        $rows = $stmt->fetchAll();
+    } else {
+        throw $e;
+    }
+}
 
 // Pull the set of hidden targets for this user.
 $hiddenStmt = $pdo->prepare('SELECT target_type, target_value FROM hidden_scores WHERE user_id = ?');
@@ -88,6 +104,7 @@ foreach ($rows as $r) {
         'target_type'  => $r['target_type'],
         'target_value' => $r['target_value'],
         'score_value'  => (float) $r['score_value'],
+        'ai_score'     => isset($r['ai_score']) && $r['ai_score'] !== null ? (float) $r['ai_score'] : null,
         'algo_version' => $r['algo_version'],
         'created_at'   => $r['created_at'],
         'hidden'       => $isHidden,

@@ -89,32 +89,58 @@ if (!$isExistingEntry) {
 // --- Gather the user's profile data for scoring ----------------------
 $profile = gatherProfile($pdo, $userId);
 
-// --- Compute (PLACEHOLDER algorithm) ---------------------------------
-$result = ScoreEngine::compute($profile, $targetType, $targetValue);
+// --- Compute BOTH algorithms from the same profile snapshot ----------
+$result   = ScoreEngine::compute($profile, $targetType, $targetValue);
+$aiResult = ScoreEngine::computeAiInclusive($profile, $targetType, $targetValue);
 
-// --- Store as a NEW row (history preserved) --------------------------
-$stmt = $pdo->prepare(
-    'INSERT INTO scores
-       (user_id, target_type, target_value, score_value, breakdown, algo_version)
-     VALUES (?, ?, ?, ?, ?, ?)'
-);
-$stmt->execute([
-    $userId,
-    $targetType,
-    $targetValue,
-    $result['score'],
-    json_encode($result['breakdown']),
-    ScoreEngine::VERSION,
-]);
+// --- Store as a NEW row (history preserved). ai_score/ai_breakdown are
+//     nullable (migration_ai_score.sql); fall back to a Standard-only
+//     insert if the migration hasn't been applied yet, so scoring never
+//     hard-fails on an un-migrated environment.
+try {
+    $stmt = $pdo->prepare(
+        'INSERT INTO scores
+           (user_id, target_type, target_value, score_value, breakdown, ai_score, ai_breakdown, algo_version)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    );
+    $stmt->execute([
+        $userId,
+        $targetType,
+        $targetValue,
+        $result['score'],
+        json_encode($result['breakdown']),
+        $aiResult['score'],
+        json_encode($aiResult['breakdown']),
+        ScoreEngine::VERSION,
+    ]);
+} catch (\PDOException $e) {
+    // Unknown column => migration not yet applied. Degrade gracefully to
+    // the Standard-only columns rather than failing the request.
+    if (strpos($e->getMessage(), 'ai_score') !== false || $e->getCode() === '42S22') {
+        $stmt = $pdo->prepare(
+            'INSERT INTO scores
+               (user_id, target_type, target_value, score_value, breakdown, algo_version)
+             VALUES (?, ?, ?, ?, ?, ?)'
+        );
+        $stmt->execute([
+            $userId, $targetType, $targetValue,
+            $result['score'], json_encode($result['breakdown']), ScoreEngine::VERSION,
+        ]);
+    } else {
+        throw $e;
+    }
+}
 
 Response::success([
-    'id'           => (int) $pdo->lastInsertId(),
-    'target_type'  => $targetType,
-    'target_value' => $targetValue,
-    'score'        => $result['score'],
-    'breakdown'    => $result['breakdown'],
-    'algo_version' => ScoreEngine::VERSION,
-    'computed_at'  => date('c'),
+    'id'            => (int) $pdo->lastInsertId(),
+    'target_type'   => $targetType,
+    'target_value'  => $targetValue,
+    'score'         => $result['score'],
+    'breakdown'     => $result['breakdown'],
+    'ai_score'      => $aiResult['score'],
+    'ai_breakdown'  => $aiResult['breakdown'],
+    'algo_version'  => ScoreEngine::VERSION,
+    'computed_at'   => date('c'),
 ], 201);
 
 
