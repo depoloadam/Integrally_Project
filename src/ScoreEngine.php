@@ -21,7 +21,7 @@ require_once __DIR__ . '/CertCatalog.php';
 
 class ScoreEngine
 {
-    const VERSION = 'cert-catalog-v2.3';
+    const VERSION = 'skills-basecredit-v2.4';
 
     // ------------------------------------------------------------------
     // Tunable weights (must sum to 100). Adjust ratios here — the logic
@@ -46,6 +46,13 @@ class ScoreEngine
     const SKILL_BACKFILL_FRACTION = 0.5;
     // Text-relevance threshold for counting a cert as "relevant".
     const RELEVANT_THRESHOLD = 0.34;
+    // Base relevance credited to ANY listed skill, so the skills factor is
+    // never a flat zero when the catalog can't recognise a skill's tokens
+    // (or the target doesn't resolve to a category). Deliberately below
+    // RELEVANT_THRESHOLD: it contributes to the mass but is never labelled a
+    // "relevant" skill, and the mass cap (FULL_SKILL_MASS) keeps a pile of
+    // floor-only skills from reaching full points.
+    const SKILL_BASE_RELEVANCE = 0.15;
 
     /**
      * Compute a score for a user against a target.
@@ -113,6 +120,23 @@ class ScoreEngine
         $experiencePts = $relPts + $genPts;
 
         // ---- 2) Skills (relevance x proficiency, experience backfill) -
+        // Relevance signal, per skill (0..1):
+        //   a) token-overlap with the target string (weak; a skill name
+        //      rarely shares words with a job title), and
+        //   b) when the target resolves to a category, the skill's tokens
+        //      mapped through TOKEN_MAP onto that category (the main signal).
+        // Both can legitimately return 0 for a real skill: the target may
+        // not resolve to a category at all (a), or the skill's tokens may
+        // simply be absent from the curated TOKEN_MAP (b). Previously those
+        // skills were dropped entirely (`$rel <= 0` -> continue), so a
+        // profile of relevant-looking skills could sit at a flat 0/20 no
+        // matter what was added. To avoid that dead zone we give every
+        // listed skill a small BASE floor — deliberately below
+        // RELEVANT_THRESHOLD so it never counts as a "relevant" skill and
+        // can't lift a keyword-stuffed profile to the top (the mass is still
+        // capped at FULL_SKILL_MASS). Genuine category matches score far
+        // higher and continue to dominate. This is a conservative stopgap;
+        // the skills model is expected to be revisited with the AI signal.
         $skillMass = 0.0;
         $relevantSkillNames = [];
         foreach ($profile['skills'] as $s) {
@@ -122,7 +146,9 @@ class ScoreEngine
             if ($catId !== null) {
                 $rel = max($rel, JobCatalog::tokenRelevance($name, $catId));
             }
-            if ($rel <= 0) continue;
+            // Base floor for any listed skill, so the factor is never a flat
+            // zero just because the catalog didn't recognise the tokens.
+            $rel = max($rel, self::SKILL_BASE_RELEVANCE);
             $prof   = isset($s['proficiency']) && $s['proficiency'] !== null
                 ? max(1, min(5, (int) $s['proficiency'])) / 5.0
                 : 0.6;   // unrated skills count at 60%
@@ -138,9 +164,13 @@ class ScoreEngine
         $backfill    = self::W_SKILLS * self::SKILL_BACKFILL_FRACTION * $expFraction;
         $skillPts    = max($skillMatchPts, $backfill);
 
+        $totalSkills = 0;
+        foreach ($profile['skills'] as $s) { if (($s['name'] ?? '') !== '') $totalSkills++; }
         $skillDetail = count($relevantSkillNames)
             ? count($relevantSkillNames) . ' relevant skill(s): ' . implode(', ', array_slice($relevantSkillNames, 0, 5))
-            : 'No directly relevant skills listed';
+            : ($totalSkills > 0
+                ? $totalSkills . ' skill(s) listed — base credit applied (none matched the target closely enough for full credit)'
+                : 'No skills listed');
         if ($backfill > $skillMatchPts && $backfill > 0) {
             $skillDetail .= ' — credited from relevant experience';
         }
