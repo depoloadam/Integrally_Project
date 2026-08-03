@@ -142,7 +142,7 @@ foreach ($hiddenStmt->fetchAll() as $h) {
 // 1c. Community average + pool size for each of the viewer's targets.
 //     One grouped query over all latest scores, filtered to the targets
 //     the viewer actually has, keyed for O(1) lookup.
-$community = [];   // key "type|value" => ['avg'=>float,'n'=>int,'scores'=>float[]]
+$community = [];   // key "type|value" => ['sum'=>float,'n'=>int,'scores'=>float[]]
 if ($mineRows) {
     $allStats = $pdo->query("
         SELECT target_type, target_value, score_value
@@ -156,6 +156,67 @@ if ($mineRows) {
     }
 }
 
+// 1c-AI. Parallel AI community pool. Per the product rules, the AI pool
+//        contains ONLY users whose AI Skillset is CURRENTLY enabled
+//        (joined live to user_settings, not merely whoever once stored an
+//        ai_score) AND whose latest row actually has an ai_score. So AI
+//        scores are only ever compared against other AI scores, and a user
+//        who has since turned AI off drops out of the pool entirely.
+$aiCommunity = [];
+if ($mineRows && $hasAiColumn) {
+    $aiStatsSql = "
+        SELECT lt3.target_type, lt3.target_value, lt3.ai_score
+        FROM ($latestPerUserTarget) lt3
+        JOIN user_settings us
+          ON us.user_id = lt3.user_id
+         AND us.setting_key = 'ai_box_enabled'
+         AND us.setting_value = '1'
+        WHERE lt3.ai_score IS NOT NULL";
+    foreach ($pdo->query($aiStatsSql)->fetchAll() as $r) {
+        $k = $r['target_type'] . '|' . $r['target_value'];
+        if (!isset($aiCommunity[$k])) $aiCommunity[$k] = ['sum' => 0.0, 'n' => 0, 'scores' => []];
+        $aiCommunity[$k]['sum'] += (float) $r['ai_score'];
+        $aiCommunity[$k]['n']   += 1;
+        $aiCommunity[$k]['scores'][] = (float) $r['ai_score'];
+    }
+}
+
+// Per-target standing stats for a value within its pool. Extracted so the
+// Standard and AI pools compute identically (no logic drift). Returns the
+// full bundle the UI needs; nulls when the pool is empty.
+$standingStats = function (?array $pool, ?float $myVal): array {
+    $out = [
+        'community_avg' => null, 'pool_size' => 0, 'percentile' => null,
+        'top_percent' => null, 'rank' => null, 'gap_to_avg' => null,
+        'pool_min' => null, 'pool_max' => null, 'histogram' => null,
+    ];
+    if ($pool === null || $myVal === null || empty($pool['scores'])) return $out;
+    $scores = $pool['scores'];
+    $out['pool_size'] = $pool['n'];
+    $out['community_avg'] = $pool['n'] > 0 ? round($pool['sum'] / $pool['n'], 1) : null;
+    if ($out['community_avg'] !== null) $out['gap_to_avg'] = round($myVal - $out['community_avg'], 1);
+    $out['pool_min'] = round(min($scores), 1);
+    $out['pool_max'] = round(max($scores), 1);
+
+    $above = 0; foreach ($scores as $v) if ($v > $myVal) $above++;
+    $out['rank'] = $above + 1;
+
+    $hist = array_fill(0, 10, 0);
+    foreach ($scores as $v) { $b = (int) floor(max(0, min(100, $v)) / 10); if ($b > 9) $b = 9; $hist[$b]++; }
+    $out['histogram'] = $hist;
+
+    $others = $scores;
+    $selfIdx = array_search($myVal, $others, true);
+    if ($selfIdx !== false) array_splice($others, $selfIdx, 1);
+    $otherCount = count($others);
+    if ($otherCount > 0) {
+        $atOrBelow = 0; foreach ($others as $v) if ($v <= $myVal) $atOrBelow++;
+        $out['percentile'] = (int) round(($atOrBelow / $otherCount) * 100);
+        $out['top_percent'] = 100 - $out['percentile'];
+    }
+    return $out;
+};
+
 $personal = [];
 $personalSum = 0.0;
 $personalN = 0;
@@ -165,71 +226,44 @@ foreach ($mineRows as $r) {
     $personalSum += $myVal;
     $personalN++;
 
-    $avg = null;
-    $poolSize = 0;
-    $percentile = null;
-    $topPercent = null;
-    $rank = null;              // 1-based position, 1 = highest
-    $gapToAvg = null;          // my score minus community average (signed)
-    $poolMin = null;
-    $poolMax = null;
-    $histogram = null;         // 10 buckets of 0-9,10-19,…,90-100
-    if (isset($community[$k])) {
-        $allScores = $community[$k]['scores'];   // includes the viewer
-        $poolSize = $community[$k]['n'];
-        $avg = $poolSize > 0 ? round($community[$k]['sum'] / $poolSize, 1) : null;
-        if ($avg !== null) $gapToAvg = round($myVal - $avg, 1);
-        $poolMin = round(min($allScores), 1);
-        $poolMax = round(max($allScores), 1);
+    // Standard standing (Standard pool).
+    $std = $standingStats($community[$k] ?? null, $myVal);
 
-        // Rank: 1 + how many DISTINCT-position scores are strictly above
-        // mine. Ties share the better rank (standard competition ranking).
-        $above = 0;
-        foreach ($allScores as $v) if ($v > $myVal) $above++;
-        $rank = $above + 1;
-
-        // Distribution histogram — 10 buckets across 0-100. The score of
-        // 100 lands in the top bucket. Lets the UI draw where the pack
-        // sits and where the viewer falls within it.
-        $histogram = array_fill(0, 10, 0);
-        foreach ($allScores as $v) {
-            $b = (int) floor(max(0, min(100, $v)) / 10);
-            if ($b > 9) $b = 9;
-            $histogram[$b]++;
-        }
-
-        // Percentile against OTHERS (exclude one instance of the viewer's
-        // own score from the pool). Mirrors compare.php's definition:
-        // "% of other people you meet or beat".
-        $others = $allScores;
-        $selfIdx = array_search($myVal, $others, true);
-        if ($selfIdx !== false) array_splice($others, $selfIdx, 1);
-        $otherCount = count($others);
-        if ($otherCount > 0) {
-            $atOrBelow = 0;
-            foreach ($others as $v) if ($v <= $myVal) $atOrBelow++;
-            $percentile = (int) round(($atOrBelow / $otherCount) * 100);
-            $topPercent = 100 - $percentile;
-        }
-    }
+    // AI standing (AI pool) — only when the viewer has an AI score for
+    // this target AND their skillset is enabled. Otherwise no AI standing.
+    $myAi = ($aiEnabled && isset($r['ai_score']) && $r['ai_score'] !== null)
+        ? (float) $r['ai_score'] : null;
+    $aiStd = ($myAi !== null)
+        ? $standingStats($aiCommunity[$k] ?? null, $myAi)
+        : null;
 
     $personal[] = [
         'target_type'  => $r['target_type'],
         'target_value' => $r['target_value'],
         'score_value'  => $myVal,
-        'ai_score'     => ($aiEnabled && isset($r['ai_score']) && $r['ai_score'] !== null)
-                            ? (float) $r['ai_score'] : null,
+        'ai_score'     => $myAi,
         'created_at'   => $r['created_at'],
         'hidden'       => isset($hiddenSet[$k]),
-        'community_avg' => $avg,
-        'pool_size'    => $poolSize,
-        'percentile'   => $percentile,
-        'top_percent'  => $topPercent,
-        'rank'         => $rank,
-        'gap_to_avg'   => $gapToAvg,
-        'pool_min'     => $poolMin,
-        'pool_max'     => $poolMax,
-        'histogram'    => $histogram,
+        // Standard standing (Standard pool).
+        'community_avg' => $std['community_avg'],
+        'pool_size'    => $std['pool_size'],
+        'percentile'   => $std['percentile'],
+        'top_percent'  => $std['top_percent'],
+        'rank'         => $std['rank'],
+        'gap_to_avg'   => $std['gap_to_avg'],
+        'pool_min'     => $std['pool_min'],
+        'pool_max'     => $std['pool_max'],
+        'histogram'    => $std['histogram'],
+        // AI standing (AI pool) — null when the viewer has no AI score here.
+        'ai_community_avg' => $aiStd['community_avg'] ?? null,
+        'ai_pool_size'    => $aiStd['pool_size'] ?? 0,
+        'ai_percentile'   => $aiStd['percentile'] ?? null,
+        'ai_top_percent'  => $aiStd['top_percent'] ?? null,
+        'ai_rank'         => $aiStd['rank'] ?? null,
+        'ai_gap_to_avg'   => $aiStd['gap_to_avg'] ?? null,
+        'ai_pool_min'     => $aiStd['pool_min'] ?? null,
+        'ai_pool_max'     => $aiStd['pool_max'] ?? null,
+        'ai_histogram'    => $aiStd['histogram'] ?? null,
     ];
 }
 $personalMean = $personalN > 0 ? round($personalSum / $personalN, 1) : null;

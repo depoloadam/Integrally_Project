@@ -27,6 +27,27 @@ let SCORES_STATE = { activeTarget: null };   // "type|value" of open tab
 let SCORES_CACHE = null;                     // last insights payload
 let SCORE_VIEW = "standard";                 // "standard" | "ai" (display only)
 
+// Standing bundle for the active view. In AI view, when the target has an
+// AI standing (viewer is in the AI pool for it), return the AI-pool stats;
+// otherwise fall back to Standard. Keeps every standing read view-aware
+// through one accessor so the two pools never get mixed on screen.
+function st(p) {
+  if (SCORE_VIEW === "ai" && p && p.ai_score !== null && p.ai_score !== undefined && p.ai_pool_size) {
+    return {
+      community_avg: p.ai_community_avg, pool_size: p.ai_pool_size,
+      percentile: p.ai_percentile, top_percent: p.ai_top_percent,
+      rank: p.ai_rank, gap_to_avg: p.ai_gap_to_avg,
+      pool_min: p.ai_pool_min, pool_max: p.ai_pool_max, histogram: p.ai_histogram,
+    };
+  }
+  return {
+    community_avg: p.community_avg, pool_size: p.pool_size,
+    percentile: p.percentile, top_percent: p.top_percent,
+    rank: p.rank, gap_to_avg: p.gap_to_avg,
+    pool_min: p.pool_min, pool_max: p.pool_max, histogram: p.histogram,
+  };
+}
+
 // Which score to display for a target, honoring the active view. Falls
 // back to Standard whenever an AI score isn't present (e.g. AI Skillset
 // off, or a target scored before AI skills were added).
@@ -223,12 +244,13 @@ function buildPersonalPanel(personal) {
 // One target's standing: big badge, the red->green rail with your marker
 // AND a community-average marker, the comparison line, and detail links.
 function buildTargetStanding(p) {
+  const s = st(p);
   const val = Math.max(0, Math.min(100, Math.round(scoreOf(p))));
   const typeLabel = esc(p.target_type.replace("_", " "));
   const date = new Date(p.created_at).toLocaleDateString();
-  const avg = p.community_avg;
-  const pool = p.pool_size || 0;
-  const top = p.top_percent;
+  const avg = s.community_avg;
+  const pool = s.pool_size || 0;
+  const top = s.top_percent;
 
   // Comparison sentence — plain language, honest about thin pools.
   let compareLine;
@@ -299,8 +321,10 @@ function buildAverages(data, personal) {
 
   // Only targets with a real comparison pool (more than just you) can show
   // a standing. Separate them from solo ones so we don't imply a ranking
-  // that doesn't exist.
-  const ranked = personal.filter(p => (p.pool_size || 0) > 1 && p.rank != null);
+  // that doesn't exist. Standing is read through st() so AI view uses the
+  // AI pool; attach it once per target for the filters/reduces below.
+  const withStanding = personal.map(p => ({ p, s: st(p) }));
+  const ranked = withStanding.filter(x => (x.s.pool_size || 0) > 1 && x.s.rank != null);
 
   if (!ranked.length) {
     card.appendChild(el(`
@@ -314,30 +338,30 @@ function buildAverages(data, personal) {
 
   // --- "Biggest gap to close": the target where you're furthest BELOW the
   // pool average. Only surfaces if you're actually behind on something. ---
-  const behind = ranked.filter(p => p.gap_to_avg != null && p.gap_to_avg < 0);
+  const behind = ranked.filter(x => x.s.gap_to_avg != null && x.s.gap_to_avg < 0);
   if (behind.length) {
-    const worst = behind.reduce((w, p) => (p.gap_to_avg < w.gap_to_avg ? p : w), behind[0]);
-    const gap = Math.abs(Math.round(worst.gap_to_avg));
+    const worst = behind.reduce((w, x) => (x.s.gap_to_avg < w.s.gap_to_avg ? x : w), behind[0]);
+    const gap = Math.abs(Math.round(worst.s.gap_to_avg));
     card.appendChild(el(`
       <div class="in-scores-gap">
         <div class="in-scores-gap-tag">Biggest gap to close</div>
         <div class="in-scores-gap-body">
-          Your <strong>${esc(worst.target_value)}</strong> score is <strong>${gap}</strong> below the average of the ${worst.pool_size} people scored against it.
+          Your <strong>${esc(worst.p.target_value)}</strong> score is <strong>${gap}</strong> below the average of the ${worst.s.pool_size} people scored against it.
           Closing this gap is where you'll move the most.
         </div>
         <button class="in-btn ghost in-scores-gap-btn" style="flex:none;padding:7px 13px">Improve this score →</button>
       </div>`));
     card.querySelector(".in-scores-gap-btn").onclick = () => {
-      location.hash = "score-improve/" + encodeURIComponent(worst.target_type + "|" + worst.target_value);
+      location.hash = "score-improve/" + encodeURIComponent(worst.p.target_type + "|" + worst.p.target_value);
     };
   } else {
     // Nothing below average — lead with the strongest standing instead.
-    const best = ranked.reduce((b, p) => (p.rank < b.rank ? p : b), ranked[0]);
+    const best = ranked.reduce((b, x) => (x.s.rank < b.s.rank ? x : b), ranked[0]);
     card.appendChild(el(`
       <div class="in-scores-gap in-scores-gap-positive">
         <div class="in-scores-gap-tag">Your standing</div>
         <div class="in-scores-gap-body">
-          You're at or above average on every target with a pool. Strongest: <strong>${esc(best.target_value)}</strong>, ranked <strong>#${best.rank}</strong> of ${best.pool_size}.
+          You're at or above average on every target with a pool. Strongest: <strong>${esc(best.p.target_value)}</strong>, ranked <strong>#${best.s.rank}</strong> of ${best.s.pool_size}.
         </div>
       </div>`));
   }
@@ -345,8 +369,8 @@ function buildAverages(data, personal) {
   // --- Per-target standing: one row per pooled target, richest-first by
   // how far above/below average you are (biggest gaps surface). ---
   const rows = el(`<div class="in-scores-stand-rows"></div>`);
-  const ordered = ranked.slice().sort((a, b) => (a.gap_to_avg ?? 0) - (b.gap_to_avg ?? 0));
-  ordered.forEach(p => rows.appendChild(buildStandingRow(p)));
+  const ordered = ranked.slice().sort((a, b) => (a.s.gap_to_avg ?? 0) - (b.s.gap_to_avg ?? 0));
+  ordered.forEach(x => rows.appendChild(buildStandingRow(x.p)));
   card.appendChild(rows);
 
   appendPlatformFootnote(card, bt, overall, TYPE_LABEL);
@@ -356,16 +380,17 @@ function buildAverages(data, personal) {
 // One target's standing: rank, your score vs average, and a distribution
 // histogram with your bucket highlighted.
 function buildStandingRow(p) {
+  const s = st(p);
   const val = Math.round(scoreOf(p));
-  const avg = p.community_avg != null ? Math.round(p.community_avg) : null;
-  const gap = p.gap_to_avg != null ? Math.round(p.gap_to_avg) : null;
+  const avg = s.community_avg != null ? Math.round(s.community_avg) : null;
+  const gap = s.gap_to_avg != null ? Math.round(s.gap_to_avg) : null;
   const gapClass = gap == null ? "" : (gap > 0 ? "up" : (gap < 0 ? "down" : "even"));
   const gapText = gap == null ? "" : (gap > 0 ? `+${gap} vs avg` : (gap < 0 ? `${gap} vs avg` : "at average"));
   const typeLabel = esc(p.target_type.replace("_", " "));
 
   // Distribution histogram. Scale bar heights to the fullest bucket; mark
   // the bucket the viewer's own score falls in.
-  const hist = Array.isArray(p.histogram) ? p.histogram : [];
+  const hist = Array.isArray(s.histogram) ? s.histogram : [];
   const maxBucket = hist.length ? Math.max(...hist, 1) : 1;
   const myBucket = Math.min(9, Math.floor(Math.max(0, Math.min(100, val)) / 10));
   const bars = hist.map((count, i) => {
@@ -378,13 +403,13 @@ function buildStandingRow(p) {
     <div class="in-scores-stand">
       <div class="in-scores-stand-top">
         <div class="in-scores-stand-name">${esc(p.target_value)}<span class="in-scores-stand-type">${typeLabel}</span></div>
-        <div class="in-scores-stand-rank">#${p.rank}<span>of ${p.pool_size}</span></div>
+        <div class="in-scores-stand-rank">#${s.rank}<span>of ${s.pool_size}</span></div>
       </div>
       <div class="in-scores-stand-nums">
         <span class="in-scores-stand-you">You ${val}</span>
         ${avg != null ? `<span class="in-scores-stand-avg">Avg ${avg}</span>` : ""}
         ${gapText ? `<span class="in-scores-gap-pill ${gapClass}">${gapText}</span>` : ""}
-        ${(p.pool_min != null && p.pool_max != null) ? `<span class="in-scores-stand-range">Range ${Math.round(p.pool_min)}–${Math.round(p.pool_max)}</span>` : ""}
+        ${(s.pool_min != null && s.pool_max != null) ? `<span class="in-scores-stand-range">Range ${Math.round(s.pool_min)}–${Math.round(s.pool_max)}</span>` : ""}
       </div>
       <div class="in-scores-hist" aria-hidden="true">${bars}</div>
       <button class="in-linkbtn in-scores-stand-improve">Improve this score →</button>

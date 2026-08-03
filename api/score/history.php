@@ -30,9 +30,16 @@ if ($uuid === '') {
     $userId = (int) $r['id'];
 }
 
-$sql    = 'SELECT id, target_type, target_value, score_value, breakdown,
+// Include AI columns when present (migration_ai_score.sql); otherwise fall
+// back to the Standard-only column set so history works pre-migration.
+$hasAi = false;
+try { $pdo->query('SELECT ai_score FROM scores LIMIT 1'); $hasAi = true; }
+catch (\PDOException $e) { $hasAi = false; }
+
+$aiCols = $hasAi ? 'ai_score, ai_breakdown,' : '';
+$sql    = "SELECT id, target_type, target_value, score_value, breakdown, $aiCols
                   algo_version, created_at
-           FROM scores WHERE user_id = ?';
+           FROM scores WHERE user_id = ?";
 $params = [$userId];
 
 // Optional filters to view one target's progress over time.
@@ -49,11 +56,15 @@ $sql .= ' ORDER BY created_at DESC LIMIT 100';
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 
-// Decode the stored JSON breakdown back into structured data.
+// Decode the stored JSON breakdown(s) back into structured data.
 $rows = array_map(function ($r) {
     $r['id']          = (int) $r['id'];
     $r['score_value'] = (float) $r['score_value'];
     $r['breakdown']   = $r['breakdown'] ? json_decode($r['breakdown'], true) : null;
+    if (array_key_exists('ai_score', $r)) {
+        $r['ai_score']     = $r['ai_score'] !== null ? (float) $r['ai_score'] : null;
+        $r['ai_breakdown'] = !empty($r['ai_breakdown']) ? json_decode($r['ai_breakdown'], true) : null;
+    }
     return $r;
 }, $stmt->fetchAll());
 
